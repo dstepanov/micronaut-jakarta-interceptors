@@ -1,0 +1,21 @@
+plugins {
+    id "io.micronaut.build.internal.jakarta-interceptors-test-suite"
+    id 'groovy'
+}
+
+dependencies {
+    // the Groovy compiler picks up the TypeElementVisitor of the processor from the compile classpath
+    testImplementation mn.micronaut.inject.groovy
+    testImplementation projects.micronautJakartaInterceptorsProcessor
+
+    testImplementation platform(libs.micronaut.core)
+    testImplementation projects.micronautJakartaInterceptors
+    testImplementation mn.micronaut.core
+    testImplementation mn.micronaut.inject
+    testImplementation mn.micronaut.aop
+    testRuntimeOnly mn.micronaut.context
+
+    testImplementation platform(libs.junit.bom)
+    testImplementation libs.junit.jupiter
+    testRuntimeOnly libs.junit.jupiter.engine
+}

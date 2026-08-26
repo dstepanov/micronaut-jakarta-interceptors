@@ -1,0 +1,35 @@
+Micronaut Jakarta Interceptors is an implementation of the
+https://jakarta.ee/specifications/interceptors/2.2/jakarta-interceptors-spec-2.2[Jakarta Interceptors 2.2]
+specification built on the compile-time aspect oriented programming of Micronaut.
+
+An interceptor class of the specification is a plain class whose interceptor methods are found by their
+annotations, and which interposes on the beans it is bound to. An implementation for a container that discovers
+everything at deployment time scans the classes, finds the interceptor methods and invokes them reflectively. This
+module does none of that: an annotation processor finds the interceptor methods while they are compiled, records
+them, and resolves the interception of every element then and there, so that at runtime an interceptor method is a
+direct invocation of the executable method Micronaut generated for it.
+
+The whole of the specification's programming model is supported:
+
+* `@AroundInvoke` methods interposing on business methods;
+* `@AroundTimeout` methods interposing on the methods the Micronaut scheduler invokes;
+* `@AroundConstruct` methods interposing on the construction of a bean;
+* `@PostConstruct` and `@PreDestroy` methods interposing on the lifecycle callbacks of a bean;
+* `@Interceptors`, naming interceptor classes directly, with `@ExcludeClassInterceptors`;
+* `@InterceptorBinding`, binding interceptors by annotation, including binding by the member values of that
+annotation and excluding a member from the binding with `@Nonbinding`;
+* `@Priority`, ordering the interceptors bound by an annotation;
+* the whole of `jakarta.interceptor.InvocationContext`, its context data shared by the chain, its replaceable
+parameters and the `getInterceptorBindings()` of version 2.1 and later.
+
+The interception is Micronaut's own: an interceptor class takes part in the ordinary Micronaut interceptor chain
+of the bean, so it composes with the advice of any other Micronaut module applied to the same bean.
+
+There is no Technology Compatibility Kit for Jakarta Interceptors to run against, and the suites that cover
+interceptors, the Jakarta Contexts and Dependency Injection ones, drive a CDI container rather than this. The specification is instead
+followed assertion by assertion: all 166 of them are recorded under <<conformance,Conformance>>, with the test that
+covers each. Everything that applies to a module of this kind is covered, apart from eight deliberate
+differences.
+
+NOTE: The public API is marked `@Experimental`: it can change between minor versions until the first stable
+release.

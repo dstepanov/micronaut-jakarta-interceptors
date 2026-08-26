@@ -1,0 +1,107 @@
+plugins {
+    id "io.micronaut.build.internal.jakarta-interceptors-test-suite"
+}
+
+// The interceptor scenarios of the Jakarta Contexts and Dependency Injection technology compatibility kit, run
+// against this implementation.
+//
+// There is no technology compatibility kit for Jakarta Interceptors. The one of Jakarta Contexts and Dependency
+// Injection carries the scenarios of the Interceptors specification, in `org.jboss.cdi.tck.interceptors.tests`, but
+// its test classes drive a Contexts and Dependency Injection container through Arquillian and cannot run here.
+// What can run are the scenarios themselves: the beans, the interceptor classes and the binding annotations the
+// specification's own authors wrote. They are fetched here, compiled with the annotation processor of this module
+// and exercised by the tests of this project.
+//
+// Nothing is vendored: the sources are resolved from Maven Central at build time. They are Apache 2.0 licensed,
+// as this project is.
+configurations {
+    tckSources {
+        canBeConsumed = false
+        transitive = false
+    }
+}
+
+dependencies {
+    tckSources(variantOf(libs.cdi.tck.core) { classifier('sources') })
+}
+
+// The scenarios that cannot be built here, and why. Each is a deliberate exclusion rather than a silent one.
+def unbuildableScenarios = [
+    // the specification allows a private interceptor method; this module rejects one, because it is invoked
+    // through the executable method Micronaut generates for it and a private method has none. Recorded as a
+    // difference under Conformance, sections 2.6 cb) and 2.7 jb)
+    '**/contract/aroundInvoke/PrivateInterceptor.java',
+    '**/contract/aroundInvoke/Bean3.java',
+    '**/contract/lifecycleCallback/PrivateLifecycleInterceptor.java',
+]
+
+def tckScenarios = tasks.register('tckScenarios', Sync) {
+    description = 'Unpacks the interceptor scenarios of the technology compatibility kit.'
+    from({ zipTree(configurations.tckSources.singleFile) }) {
+        include 'org/jboss/cdi/tck/interceptors/tests/**'
+        // the recorder the scenarios log their invocations with, which is what the assertions here read
+        include 'org/jboss/cdi/tck/util/ActionSequence.java'
+        include 'org/jboss/cdi/tck/util/TransformationUtils.java'
+        // the test classes drive a Contexts and Dependency Injection container: TestNG, Arquillian, a deployment
+        // archive and a BeanManager. The scenarios they deploy are what is kept
+        exclude '**/*Test.java'
+        // a broken scenario is meant to be rejected as it is deployed rather than run. It is not compiled with
+        // the rest; it is handed to the compiler by `brokenTckScenarios` below, which asserts that it is rejected
+        exclude '**/broken/**'
+        exclude unbuildableScenarios
+    }
+    into layout.buildDirectory.dir('generated/tck')
+    // a scenario that reaches for the container itself cannot be built here. A scenario that asserts with TestNG
+    // can: several of them check what they were handed from inside the interceptor, which is exactly the kind of
+    // thing this harness is here to run, so TestNG is on the classpath as a library rather than as a runner
+    eachFile { details ->
+        def text = details.file.text
+        // a bean manager is stood in for by the harness, so a scenario that only takes one still builds
+        if (text.contains('org.jboss.arquillian') || text.contains('org.jboss.shrinkwrap')
+            || text.contains('org.jboss.test.audit')) {
+            details.exclude()
+        }
+    }
+}
+
+// The deployments the kit expects a container to reject. They are kept as text rather than compiled with the
+// rest, and handed to the annotation processor one deployment at a time by `BrokenDeploymentTckTest`, which
+// asserts that compilation fails: what a container reports as it deploys, this module reports as it compiles.
+def brokenTckScenarios = tasks.register('brokenTckScenarios', Sync) {
+    description = 'Unpacks the interceptor deployments the technology compatibility kit expects to be rejected.'
+    from({ zipTree(configurations.tckSources.singleFile) }) {
+        include 'org/jboss/cdi/tck/interceptors/tests/bindings/broken/**'
+        exclude '**/*Test.java'
+    }
+    into layout.buildDirectory.dir('generated/tck-broken')
+}
+
+sourceSets.test.java.srcDir tckScenarios
+sourceSets.test.resources.srcDir brokenTckScenarios
+
+dependencies {
+    testAnnotationProcessor platform(libs.micronaut.core)
+    testAnnotationProcessor projects.micronautJakartaInterceptorsProcessor
+    testAnnotationProcessor projects.micronautCdiTckSupport
+    testAnnotationProcessor mn.micronaut.inject.java
+
+    testImplementation platform(libs.micronaut.core)
+    testImplementation projects.micronautJakartaInterceptors
+    testImplementation libs.jakarta.cdi.api
+    testImplementation mn.micronaut.core
+    testImplementation mn.micronaut.inject
+    testImplementation mn.micronaut.aop
+    testImplementation mn.micronaut.context
+
+    testImplementation libs.testng
+    // compiles a rejected deployment in memory. The processors are on the classpath of the tests as well as
+    // being applied to them: the compiler this starts loads a visitor the way any other compiler does, from the
+    // classpath it is run with
+    testImplementation mn.micronaut.inject.java.test
+    testImplementation projects.micronautJakartaInterceptorsProcessor
+    testImplementation projects.micronautCdiTckSupport
+
+    testImplementation platform(libs.junit.bom)
+    testImplementation libs.junit.jupiter
+    testRuntimeOnly libs.junit.jupiter.engine
+}

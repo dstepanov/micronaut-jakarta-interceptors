@@ -1,0 +1,50 @@
+The interception itself never reflects.
+
+An interceptor method is invoked through the `io.micronaut.inject.ExecutableMethod` Micronaut generates for it at
+compilation time, which dispatches through generated code. An interceptor method that has no executable method is
+an error at resolution rather than a fall back to reflection, so there is no path through
+`java.lang.reflect.Method` for an invocation to take. The interceptor chain of an element is read from the
+annotations the processor left on it, the interceptor instances come from the bean context, and the proxy of an
+intercepted bean is a generated subclass.
+
+Three accessors of `InvocationContext` do reach for the reflection of the platform, because the types the
+specification has them return leave no choice:
+
+* `getMethod()` returns a `java.lang.reflect.Method`;
+* `getConstructor()` returns a `java.lang.reflect.Constructor`;
+* `getInterceptorBindings()` returns instances of the binding annotations.
+
+All three are resolved only when an interceptor asks for them, and remembered afterwards. An application whose
+interceptors do not call them never reflects at all; the binding comparison the interception does is made against
+the annotation metadata Micronaut recorded at compilation time, and builds no annotation.
+
+In a GraalVM native image, an interceptor that calls `getMethod()` or `getConstructor()` needs the reachability
+metadata of the method or constructor it asks for. An interceptor that does not call them needs nothing.
+
+That is verified rather than asserted. The whole test suite of this repository runs inside a native image, through
+the `nativeTest` task, and the `test-suite-graalvm` module declares no reachability metadata at all. An
+interception that reached for the reflection of the platform would fail there rather than pass unnoticed on the
+JVM.
+
+The native run is also what says exactly how much metadata the three accessors cost, because it is the only place
+where their absence is an error. Of the whole suite, the tests needing metadata are the ones whose interceptors
+call those accessors, and nothing else:
+
+* `getInterceptorBindings()` needs a proxy of the binding annotation, together with
+api:core.annotation.AnnotationValueProvider[], which is how Micronaut builds an annotation instance;
+* `getConstructor()` needs the constructor of the target class.
+
+`test-suite-java` declares both, in `META-INF/native-image`, and the entries name the accessor that asks for them:
+
+[source,json]
+----
+[
+  {
+    "interfaces": ["com.acme.Logged", "io.micronaut.core.annotation.AnnotationValueProvider"]
+  }
+]
+----
+
+An application whose interceptors call neither accessor needs none of this. Nothing else of the interception - the
+chains, the bindings, the ordering, the invocation of the interceptor methods, the parameters, the lifecycle and
+the construction - asks for any metadata at all.

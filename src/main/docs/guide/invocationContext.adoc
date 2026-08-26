@@ -1,0 +1,45 @@
+`jakarta.interceptor.InvocationContext` is what an interceptor method is given. Its behaviour follows the
+specification:
+
+|===
+| Method | Behaviour
+
+| `getTarget()`
+| The intercepted instance. `null` inside an `@AroundConstruct` method until it has proceeded.
+
+| `getMethod()`
+| The intercepted method for an `@AroundInvoke` method, `null` for a lifecycle callback and for a constructor.
+
+| `getConstructor()`
+| The constructor of the target class inside an `@AroundConstruct` method, `null` otherwise.
+
+| `getTimer()`
+| The schedule of a method the scheduler invokes, as a api:interceptor.runtime.ScheduledTimer[]; `null` for
+anything else. See <<timeout,Timeout Methods>>.
+
+| `getParameters()`
+| The arguments of the invocation, as a copy. Fails with an `IllegalStateException` for a lifecycle callback.
+
+| `setParameters(Object[])`
+| Replaces the arguments the rest of the chain, and finally the intercepted element, is invoked with. The count and
+the types are checked.
+
+| `getContextData()`
+| A map shared by every interceptor of one invocation, and by any other Micronaut advice on the same invocation.
+
+| `proceed()`
+| Continues to the next interceptor of the chain and finally to the intercepted element.
+
+| `getInterceptorBindings()`
+| The binding annotations in effect on the intercepted element, as annotation instances.
+|===
+
+An interceptor that returns without proceeding keeps the rest of the chain, and the intercepted element, from
+running. For a lifecycle callback that is all it does: the bean is neither replaced nor discarded.
+
+An exception thrown by an interceptor method reaches the caller unchanged, checked exceptions included: the
+intercepted method is what the caller sees, and it declares them.
+
+`getParameters()` shows the arguments the intercepted element declares, and nothing else. A Kotlin suspending
+function is compiled with a continuation of its own after them; that argument belongs to the language and is
+neither shown nor asked for.

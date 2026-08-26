@@ -1,0 +1,114 @@
+An interceptor class declares one interceptor method for each kind of interception it interposes on. Every one of
+them accepts a single `jakarta.interceptor.InvocationContext`:
+
+|===
+| Annotation | Signature | Interposes on
+
+| `jakarta.interceptor.AroundInvoke`
+| `Object m(InvocationContext) throws Exception`
+| A business method of the intercepted bean
+
+| `jakarta.interceptor.AroundTimeout`
+| `Object m(InvocationContext) throws Exception`
+| A method of the intercepted bean that the scheduler invokes, see <<timeout,Timeout Methods>>
+
+| `jakarta.interceptor.AroundConstruct`
+| `void m(InvocationContext) throws Exception`
+| The construction of the intercepted bean
+
+| `jakarta.annotation.PostConstruct`
+| `void m(InvocationContext) throws Exception`
+| The post-construct callback of the intercepted bean
+
+| `jakarta.annotation.PreDestroy`
+| `void m(InvocationContext) throws Exception`
+| The pre-destroy callback of the intercepted bean
+|===
+
+A class may declare several of them, and one interceptor instance then serves them all. A superclass may declare
+its own: the specification invokes every interceptor method of the hierarchy for a kind, the most general
+superclass first, and this module does the same.
+
+The `InvocationContext` parameter is what tells a lifecycle interceptor method from the lifecycle callback of the
+interceptor class itself. A `@PostConstruct` method that takes no parameter is the interceptor's own callback,
+invoked when the interceptor is created; one that takes an `InvocationContext` interposes on the callback of the
+bean being intercepted.
+
+== Requirements
+
+The processor reports a declaration the specification does not allow while it is compiled:
+
+* an interceptor method must not be `private`: it is invoked through the executable method Micronaut generates for
+it, so it has to be at least package private;
+* an interceptor method must not be `static` or `final`;
+* a class must not declare two interceptor methods of the same kind;
+* an `@AroundInvoke` or `@AroundTimeout` method must return `Object`;
+* a class annotated `@Interceptor` must declare at least one interceptor method.
+
+== Injection
+
+An interceptor class is a bean, so its dependencies are injected as usual:
+
+[source,java]
+----
+@Interceptor
+@Audited
+public class AuditingInterceptor {
+
+    private final AuditLog log;
+
+    public AuditingInterceptor(AuditLog log) { // <1>
+        this.log = log;
+    }
+
+    @AroundInvoke
+    public Object audit(InvocationContext context) throws Exception {
+        log.record(context.getMethod().getName());
+        return context.proceed();
+    }
+}
+----
+
+<1> Constructor injection, like any other bean.
+
+An interceptor class may also be produced by a api:context.annotation.Factory[] method, when the application wants
+to configure the instance itself; that instance is then the one that intercepts, and its interceptor methods are
+still invoked through the executable methods generated for its class.
+
+An interceptor class without a scope of its own is a api:context.annotation.Prototype[]: an interceptor instance
+belongs to the object it intercepts, as the specification describes, and may hold state for the whole life of that
+object. Declaring a scope on the interceptor class overrides that; a `@Singleton` interceptor is shared by every
+object it intercepts.
+
+== Interceptor methods on the intercepted class
+
+A class may declare `@AroundInvoke` on itself. The method interposes on the business methods of that one class,
+and the specification invokes it after every interceptor class:
+
+[source,java]
+----
+@Singleton
+@Interceptors(TracingInterceptor.class)
+public class Service {
+
+    public String work() {
+        return "done";
+    }
+
+    @AroundInvoke // <1>
+    Object aroundItsOwnMethods(InvocationContext context) throws Exception {
+        return context.proceed();
+    }
+}
+----
+
+<1> Invoked after `TracingInterceptor` and before `work`. It is not itself a business method, so it is not
+intercepted.
+
+A class declaring nothing but `@AroundInvoke` is read as an interceptor class, not as a class interposing on
+itself: that is what an interceptor class named by `@Interceptors` looks like, and the two cannot be told apart
+otherwise. Declaring an interceptor method on a class interposes on that class only when the class is intercepted
+for some other reason as well — a binding annotation, or `@Interceptors`, as above.
+
+A class declaring `@AroundConstruct`, or a lifecycle interceptor method, is always an interceptor class:
+interposing on the construction or the lifecycle of another object is not something a class does to itself.

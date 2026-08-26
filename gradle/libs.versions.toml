@@ -1,0 +1,45 @@
+[versions]
+managed-jakarta-interceptor = "2.2.0"
+managed-jakarta-annotation = "3.0.0"
+
+micronaut = "5.1.12"
+
+junit = "5.14.4"
+jakarta-cdi = "4.1.0"
+cdi-tck = "5.0.0-M1"
+testng = "7.10.2"
+
+errorprone-gradle-plugin = "5.1.0"
+error_prone_core = "2.50.0"
+nullaway = "0.14.0"
+graalvm-buildtools = "0.11.5"
+
+[libraries]
+# core
+micronaut-core = { module = 'io.micronaut:micronaut-core-bom', version.ref = 'micronaut' }
+
+# managed dependencies
+managed-jakarta-interceptor-api = { module = 'jakarta.interceptor:jakarta.interceptor-api', version.ref = 'managed-jakarta-interceptor' }
+managed-jakarta-annotation-api = { module = 'jakarta.annotation:jakarta.annotation-api', version.ref = 'managed-jakarta-annotation' }
+
+# nullability
+nullaway = { module = "com.uber.nullaway:nullaway", version.ref = "nullaway" }
+error-prone-core = { module = "com.google.errorprone:error_prone_core", version.ref = "error_prone_core" }
+
+# gradle plugins
+gradle-errorprone = { module = "net.ltgt.errorprone:net.ltgt.errorprone.gradle.plugin", version.ref = "errorprone-gradle-plugin" }
+gradle-graalvm-native = { module = "org.graalvm.buildtools:native-gradle-plugin", version.ref = "graalvm-buildtools" }
+
+# the @Nonbinding annotation the Interceptors specification borrows from Jakarta Contexts and Dependency Injection
+jakarta-cdi-api = { module = 'jakarta.enterprise:jakarta.enterprise.cdi-api', version.ref = 'jakarta-cdi' }
+
+# the interceptor scenarios of the Jakarta Contexts and Dependency Injection technology compatibility kit
+cdi-tck-core = { module = 'jakarta.enterprise:cdi-tck-core-impl', version.ref = 'cdi-tck' }
+# the assertion helpers of the kit's own ActionSequence, which its scenarios record their invocations with
+testng = { module = 'org.testng:testng', version.ref = 'testng' }
+
+# testing
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junit" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }

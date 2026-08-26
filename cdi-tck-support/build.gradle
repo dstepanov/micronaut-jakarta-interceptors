@@ -1,0 +1,8 @@
+plugins {
+    id "io.micronaut.build.internal.jakarta-interceptors-base"
+    id 'java-library'
+}
+
+dependencies {
+    api mn.micronaut.core.processor
+}

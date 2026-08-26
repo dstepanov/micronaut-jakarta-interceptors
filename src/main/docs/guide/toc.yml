@@ -1,0 +1,28 @@
+introduction:
+  title: Introduction
+whyCompileTime:
+  title: Why Micronaut Jakarta Interceptors?
+releaseHistory: Release History
+quickStart:
+  title: Quick Start
+interceptorClasses:
+  title: Interceptor Classes
+bindings:
+  title: Interceptor Bindings
+namedInterceptors:
+  title: Naming Interceptors Directly
+lifecycle:
+  title: Lifecycle and Constructor Interception
+timeout:
+  title: Timeout Methods
+invocationContext:
+  title: The Invocation Context
+ordering:
+  title: Ordering
+reflection:
+  title: When Reflection Is Used
+limitations:
+  title: Limitations
+conformance:
+  title: Conformance
+repository: Repository

@@ -1,0 +1,15 @@
+plugins {
+    id "io.micronaut.build.internal.jakarta-interceptors-module"
+}
+
+dependencies {
+    api libs.managed.jakarta.interceptor.api
+    api libs.managed.jakarta.annotation.api
+    api mn.micronaut.core
+    api mn.micronaut.aop
+    api mn.micronaut.inject
+
+    testImplementation platform(libs.junit.bom)
+    testImplementation libs.junit.jupiter
+    testRuntimeOnly libs.junit.jupiter.engine
+}

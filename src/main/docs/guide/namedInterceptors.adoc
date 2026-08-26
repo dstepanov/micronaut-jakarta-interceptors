@@ -1,0 +1,40 @@
+`jakarta.interceptor.Interceptors` names interceptor classes directly, without a binding annotation:
+
+[source,java]
+----
+@Singleton
+@Interceptors({AlphaInterceptor.class, BetaInterceptor.class}) // <1>
+public class Service {
+
+    public String inherited() { // <2>
+        return "inherited";
+    }
+
+    @Interceptors(GammaInterceptor.class) // <3>
+    public String withOwn() {
+        return "withOwn";
+    }
+
+    @ExcludeClassInterceptors // <4>
+    public String excluded() {
+        return "excluded";
+    }
+}
+----
+
+<1> On the class, the interceptors apply to every business method, to the construction of the bean and to its
+lifecycle callbacks, in the order they are named.
+<2> Intercepted by `Alpha` then `Beta`.
+<3> Intercepted by `Alpha`, `Beta`, then `Gamma`: the interceptors of the method come after those of the class.
+<4> `jakarta.interceptor.ExcludeClassInterceptors` leaves out the interceptors the class names. It does not affect
+the interceptors bound by an annotation, which have no such exclusion.
+
+A class named by `@Interceptors` need not be annotated `@Interceptor` and need not declare a binding: it only has
+to declare an interceptor method. Such a class is made a bean by the processor, so it too may have its
+dependencies injected.
+
+The same class may be named more than once for one element; the specification invokes it once, at its first
+position.
+
+NOTE: `jakarta.interceptor.ExcludeDefaultInterceptors` is accepted and does nothing. Default interceptors are
+declared in a deployment descriptor, which has no counterpart here, so there are none to exclude.

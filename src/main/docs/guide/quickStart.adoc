@@ -1,0 +1,72 @@
+Add the annotation processor and the runtime to your build:
+
+dependency:micronaut-jakarta-interceptors-processor[scope="annotationProcessor", groupId="io.micronaut.interceptor"]
+
+dependency:micronaut-jakarta-interceptors[groupId="io.micronaut.interceptor"]
+
+Declare a binding annotation, meta-annotated with `jakarta.interceptor.InterceptorBinding`:
+
+[source,java]
+----
+import jakarta.interceptor.InterceptorBinding;
+import java.lang.annotation.*;
+
+@InterceptorBinding // <1>
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.TYPE, ElementType.METHOD})
+public @interface Logged {
+}
+----
+
+<1> The meta-annotation is what makes `@Logged` a binding: an interceptor declaring it intercepts the elements
+declaring it.
+
+Declare the interceptor class:
+
+[source,java]
+----
+import jakarta.interceptor.*;
+
+@Interceptor // <1>
+@Logged      // <2>
+public class LoggingInterceptor {
+
+    @AroundInvoke // <3>
+    public Object log(InvocationContext context) throws Exception {
+        System.out.println("entering " + context.getMethod().getName());
+        return context.proceed(); // <4>
+    }
+}
+----
+
+<1> `@Interceptor` marks the class and makes it a bean, so it may have its own dependencies injected.
+<2> The binding: this interceptor applies wherever `@Logged` is declared.
+<3> The interceptor method. It must accept a single `InvocationContext` and must not be `private`.
+<4> `proceed()` continues to the next interceptor and finally to the intercepted method.
+
+Declare the bean to intercept:
+
+[source,java]
+----
+import jakarta.inject.Singleton;
+
+@Singleton
+@Logged // <1>
+public class Greeter {
+
+    public String greet(String name) {
+        return "Hello " + name;
+    }
+}
+----
+
+<1> On the class, the binding applies to every business method. It may equally be declared on a single method.
+
+That is all. `greet` is intercepted:
+
+[source,java]
+----
+try (ApplicationContext context = ApplicationContext.run()) {
+    context.getBean(Greeter.class).greet("Denis"); // prints "entering greet"
+}
+----

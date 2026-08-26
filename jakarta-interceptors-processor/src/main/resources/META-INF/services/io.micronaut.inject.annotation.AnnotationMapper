@@ -1,0 +1,5 @@
+io.micronaut.interceptor.processor.mapper.InterceptorAnnotationMapper
+io.micronaut.interceptor.processor.mapper.NonbindingAnnotationMapper
+io.micronaut.interceptor.processor.mapper.AroundInvokeAnnotationMapper
+io.micronaut.interceptor.processor.mapper.AroundTimeoutAnnotationMapper
+io.micronaut.interceptor.processor.mapper.AroundConstructAnnotationMapper

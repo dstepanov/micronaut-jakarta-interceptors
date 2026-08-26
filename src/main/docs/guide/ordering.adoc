@@ -1,0 +1,32 @@
+The specification invokes, for one element:
+
+. the interceptor classes the *class* names with `@Interceptors`, in the order they are named;
+. the interceptor classes the *method* names with `@Interceptors`, in the order they are named;
+. the interceptor classes bound by a binding annotation, ordered by their `jakarta.annotation.Priority`;
+. the `@AroundInvoke` method the intercepted class declares on itself, if any;
+. the intercepted element.
+
+The first two are settled by the processor, which sees the class and its methods at once. The third is resolved
+from the bean context, since an interceptor class bound by an annotation may be compiled separately from the
+elements it intercepts.
+
+A lower priority runs first. `jakarta.interceptor.Interceptor.Priority` names the ranges the specification
+reserves:
+
+[source,java]
+----
+@Interceptor
+@Traced
+@Priority(Interceptor.Priority.APPLICATION - 10) // <1>
+public class FirstInterceptor {
+}
+----
+
+<1> Runs before an interceptor without a declared priority, which is ordered at
+`Interceptor.Priority.APPLICATION`.
+
+An interceptor class may be ordered with Micronaut's own api:core.annotation.Order[] instead, which is read when
+no `@Priority` is declared.
+
+Interception declared by other Micronaut modules on the same bean composes with this one; the whole chain is
+ordered by Micronaut, with the Jakarta interceptors of a bean at `Interceptor.Priority.APPLICATION` among them.

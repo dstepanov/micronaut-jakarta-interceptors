@@ -1,0 +1,10 @@
+Releases are published to Maven Central.
+
+Snapshots are published to the Sonatype snapshot repository:
+
+[source,groovy]
+----
+repositories {
+    maven { url "https://central.sonatype.com/repository/maven-snapshots/" }
+}
+----

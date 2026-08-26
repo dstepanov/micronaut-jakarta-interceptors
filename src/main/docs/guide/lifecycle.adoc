@@ -1,0 +1,56 @@
+== Constructor interception
+
+An `@AroundConstruct` interceptor method interposes on the construction of the bean it is bound to. It may replace
+the arguments the constructor is invoked with, and the instance only exists once it has proceeded:
+
+[source,java]
+----
+@Interceptor
+@Built
+public class ConstructInterceptor {
+
+    @AroundConstruct
+    public void construct(InvocationContext context) throws Exception {
+        assert context.getTarget() == null;           // <1>
+        context.setParameters(new Object[]{"replaced"}); // <2>
+        context.proceed();                            // <3>
+        System.out.println(context.getTarget());      // <4>
+    }
+}
+----
+
+<1> There is no instance before the constructor has run.
+<2> The arguments of the constructor may be replaced.
+<3> The constructor runs here.
+<4> The instance the constructor produced.
+
+An `@AroundConstruct` method that returns without proceeding leaves the bean unconstructed, which is an error.
+
+== Lifecycle callbacks
+
+A `@PostConstruct` or `@PreDestroy` interceptor method interposes on the matching callback of the bean:
+
+[source,java]
+----
+@Interceptor
+@Managed
+public class LifecycleInterceptor {
+
+    @PostConstruct
+    public void created(InvocationContext context) throws Exception { // <1>
+        context.proceed(); // <2>
+    }
+}
+----
+
+<1> The `InvocationContext` parameter is what makes this a lifecycle *interceptor* method rather than the
+interceptor's own callback.
+<2> Proceeds to the next interceptor and finally to the callback of the bean.
+
+`getMethod()` is `null` for a lifecycle callback and `getParameters()` fails, as the specification prescribes;
+`getTarget()` is the bean throughout.
+
+WARNING: The `@PreDestroy` method of the intercepted bean itself is currently not invoked when the bean has
+pre-destroy interception; the interceptors run, but the chain does not reach the callback. This is a defect of the
+Micronaut bean definition writer rather than of this module — the equivalent post-construct path is correct — and
+the test that covers it is disabled until it is fixed upstream.

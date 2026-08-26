@@ -1,0 +1,32 @@
+name: Java CI
+on:
+  push:
+    branches:
+      - master
+      - '[1-9]+.[0-9]+.x'
+  pull_request:
+    branches:
+      - master
+      - '[1-9]+.[0-9]+.x'
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java: ['17', '21']
+    env:
+      GRADLE_ENTERPRISE_ACCESS_KEY: ${{ secrets.GRADLE_ENTERPRISE_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ matrix.java }}
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: Build with Gradle
+        run: ./gradlew check --no-daemon --parallel --continue
+      - name: Build docs
+        if: matrix.java == '17'
+        run: ./gradlew docs --no-daemon

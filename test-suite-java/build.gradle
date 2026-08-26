@@ -1,0 +1,23 @@
+plugins {
+    id "io.micronaut.build.internal.jakarta-interceptors-native-test-suite"
+}
+
+dependencies {
+    testAnnotationProcessor platform(libs.micronaut.core)
+    testAnnotationProcessor projects.micronautJakartaInterceptorsProcessor
+    testAnnotationProcessor mn.micronaut.inject.java
+
+    testImplementation platform(libs.micronaut.core)
+    testImplementation projects.micronautJakartaInterceptors
+    testImplementation mn.micronaut.core
+    testImplementation mn.micronaut.inject
+    testImplementation mn.micronaut.aop
+    testImplementation mn.micronaut.context
+
+    testAnnotationProcessor libs.jakarta.cdi.api
+    testImplementation libs.jakarta.cdi.api
+
+    testImplementation platform(libs.junit.bom)
+    testImplementation libs.junit.jupiter
+    testRuntimeOnly libs.junit.jupiter.engine
+}

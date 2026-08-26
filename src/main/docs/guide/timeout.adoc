@@ -1,0 +1,66 @@
+`jakarta.interceptor.AroundTimeout` interposes on what the specification calls a timeout method: a method a timer
+service invokes rather than the application. The timer service of the specification belongs to Jakarta Enterprise
+Beans, which has no counterpart in Micronaut. What Micronaut does have is a scheduler, and a method it invokes is
+the same thing under another name, so a method annotated api:scheduling.annotation.Scheduled[] is the timeout
+method of this module.
+
+[source,java]
+----
+@Interceptor
+@Timed
+public class TimedInterceptor {
+
+    @AroundInvoke // <1>
+    public Object aroundInvoke(InvocationContext context) throws Exception {
+        return context.proceed();
+    }
+
+    @AroundTimeout // <2>
+    public Object aroundTimeout(InvocationContext context) throws Exception {
+        return context.proceed();
+    }
+}
+
+@Singleton
+@Timed
+public class ScheduledService {
+
+    @Scheduled(fixedDelay = "20ms") // <3>
+    public void onSchedule() {
+    }
+
+    public String business() { // <4>
+        return "business";
+    }
+}
+----
+
+<1> Interposes on the business methods.
+<2> Interposes on the scheduled methods.
+<3> A scheduled method: the `@AroundTimeout` method interposes on it.
+<4> A business method: the `@AroundInvoke` method interposes on it.
+
+== The timer
+
+`InvocationContext.getTimer()` returns the schedule the method was registered with, as a
+api:interceptor.runtime.ScheduledTimer[], which is the nearest thing to the timer object of the specification:
+
+[source,java]
+----
+@AroundTimeout
+public Object aroundTimeout(InvocationContext context) throws Exception {
+    ScheduledTimer timer = (ScheduledTimer) context.getTimer();
+    log.info("running the schedule {}", timer.fixedDelay());
+    return context.proceed();
+}
+----
+
+It is `null` for anything the scheduler does not invoke.
+
+== When no timeout method is declared
+
+The specification has an `@AroundInvoke` method interpose on business methods alone, so an interceptor without an
+`@AroundTimeout` method would interpose on nothing once a method was scheduled. That is a surprising way to lose
+interception, so this module falls back: an interceptor that declares no `@AroundTimeout` method interposes on a
+scheduled method with its `@AroundInvoke` method, exactly as it did before the method was scheduled. An interceptor
+that declares both keeps them apart, as the specification describes.

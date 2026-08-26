@@ -1,0 +1,21 @@
+The specification describes what an implementation has to do, not when it has to do it. An implementation is free
+to settle everything it can while the code is compiled, and this one does.
+
+*The interceptor methods are found once, at compilation time.* The processor reads every interceptor class,
+validates its interceptor methods against the specification and records their names on the class. Nothing is
+scanned when the application starts, and no method is looked up when one is invoked.
+
+*An interceptor method is invoked directly.* Micronaut generates an executable method for each of them, so the
+advice dispatches through generated code rather than through `java.lang.reflect.Method`. An interceptor method
+that has no executable method is a compilation error, never a silent fall back to reflection.
+
+*The order is settled where the whole class is visible.* The interceptor classes an element names with
+`@Interceptors` are ordered by the processor, which sees the class, its methods and their exclusions at once, so
+the order the specification prescribes is written onto the element rather than recomputed on every invocation.
+
+*The proxies are generated, not woven.* An intercepted bean gets the subclass Micronaut generates for any advised
+bean. There is no agent, no bytecode manipulation at startup and nothing to configure for a GraalVM native image.
+
+What is left to runtime is only what cannot be known earlier: which interceptor classes of the classpath match the
+binding annotations of an element, since an interceptor class and the beans it intercepts need not be compiled
+together. That is resolved from the bean context the first time an element is intercepted, and remembered.

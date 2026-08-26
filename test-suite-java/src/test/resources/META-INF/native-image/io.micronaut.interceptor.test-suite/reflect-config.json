@@ -1,0 +1,12 @@
+[
+  {
+    "comment": "InvocationContext.getConstructor() returns a java.lang.reflect.Constructor of the target class, which the specification leaves no way around. Only an interceptor that asks for the constructor needs this; an @AroundConstruct method that does not is free of it.",
+    "name": "io.micronaut.interceptor.test.construct.BuiltService",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": ["java.lang.String"]
+      }
+    ]
+  }
+]

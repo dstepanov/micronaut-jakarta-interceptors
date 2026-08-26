@@ -1,0 +1,140 @@
+== Not supported
+
+Everything below belongs to a container this module is not: a Jakarta Enterprise Beans container, a deployment
+descriptor, or a Contexts and Dependency Injection implementation. None of it has a counterpart here.
+
+=== Deployment descriptors
+
+There is no `ejb-jar.xml` and no `beans.xml`, so interceptors cannot be declared, ordered, overridden or disabled
+through one. Everything is declared in annotations.
+
+=== Default interceptors
+
+Default interceptors apply to a whole set of target classes and are declared in a deployment descriptor, so there
+are none. `jakarta.interceptor.ExcludeDefaultInterceptors` is accepted and does nothing: there is nothing for it to
+exclude. It is accepted rather than rejected so that code written for a Jakarta Enterprise Beans container still
+compiles.
+
+Nor is there a way to arrive at one by the back door. An interceptor class that declares no binding annotation
+intercepts nothing rather than everything, and a bean that declares no interception of its own is never
+intercepted, whichever interceptors the context holds. Interception is decided where it is declared, and a bean
+that declares none is not proxied at all, so there is nothing for a default interceptor to attach to. The nearest
+thing is a binding annotation that is `@Inherited`, declared on a base class, which then covers everything that
+extends it.
+
+=== The enterprise naming context
+
+An interceptor class does not share an enterprise naming context with the class it intercepts, because there is
+none. Its dependencies come from the bean context, by injection.
+
+=== Transaction and security context
+
+The specification has an interceptor method run in the transaction and security context of what it interposes on.
+Neither is part of this module: an interceptor runs in whatever context the invocation is already in, and nothing
+is established or propagated on its behalf.
+
+=== Web service endpoints
+
+`InvocationContext.getContextData()` is always the map this module shares between the interceptors of one
+invocation. It is never a `MessageContext`, since there is no web service endpoint to produce one.
+
+=== The extension points of other specifications
+
+An extension specification may define further sources of interceptor bindings, further ways of declaring an
+interceptor, and further rules for combining bindings. Nothing here reads such an extension: no meaning is given
+to `jakarta.enterprise.inject.Stereotype`, and no rule of another specification is applied.
+`jakarta.enterprise.util.Nonbinding` is the exception, and is understood, because the Interceptors specification
+names it itself.
+
+A Contexts and Dependency Injection stereotype nevertheless carries its bindings across, because a binding
+annotation declared on another annotation binds through it whatever that annotation is otherwise for. A class
+annotated with a stereotype that declares `@Monitored` declares `@Monitored`, and the interceptors bound to it
+intercept the class. The kit's own resolution scenarios rely on exactly that and are run here; see
+<<conformance,Conformance>>, sections 3.1.2 a) and 3.3 e). What is not read is the stereotype as such - a
+stereotype that names a scope, a name or an interceptor by any rule of that specification other than declaring the
+binding is read as the annotation it is and no more.
+
+=== When an interceptor instance is created
+
+The specification creates an interceptor instance for each interceptor class as the object it intercepts is
+created. This module creates one when the interceptor is first needed instead: the interceptors of a lifecycle
+callback exist by the time the object is constructed, and the interceptor of a business method exists once that
+method is first called. Each intercepted object still has interceptor instances of its own, for the whole of its
+life, which is what the state an interceptor holds depends on.
+
+=== Methods that return a future
+
+The interception the specification describes is synchronous. A method that returns a `CompletableFuture`, or any
+other value that completes later, is intercepted as it hands that value back, not as it completes: an interceptor
+that measures time around `proceed()` measures the call, not the work. This is what an interceptor of an ordinary
+Micronaut advice sees as well. Kotlin suspending functions are the exception, and are intercepted for the whole of
+their suspension.
+
+=== Interceptors registered after the first interception
+
+The interceptor classes bound by a binding annotation are looked for among the beans once, the first time an
+element bound that way is intercepted, and the chain of each element is remembered after it is resolved. An
+interceptor registered with the context after that, at runtime, is therefore not picked up. Interception is
+declared where it is compiled, and that is where interceptors are expected to come from.
+
+=== A note on interceptor instances
+
+An interceptor class becomes a bean, so an application may also produce it from a `@Factory` method to configure
+the instance itself; the instance the factory produced is then the one that intercepts. The definition this module
+declares for an interceptor class is a secondary one, which is what lets a factory take its place rather than the
+two being ambiguous.
+
+=== Interceptor classes named on a superclass
+
+`jakarta.interceptor.Interceptors` is not declared `@Inherited`, so a subclass does not pick up the interceptor
+classes its superclass names. Declare it on the class that is the bean, or use a binding annotation that is
+`@Inherited`, which is inherited as the specification describes.
+
+== What Micronaut requires
+
+An element is intercepted through the proxy Micronaut generates for its bean, so the ordinary rules of Micronaut
+aspect oriented programming apply:
+
+* the intercepted class must be a bean;
+* an intercepted method must not be `private`, `static` or `final`;
+* a call from one method of a bean to another goes through `this` and is not intercepted, unless the bean is
+proxied with `@Around(proxyTarget = true)`.
+
+Every one of these, and the whole of the specification besides, is recorded assertion by assertion under
+<<conformance,Conformance>>.
+
+== Interpreted differently
+
+`jakarta.interceptor.AroundTimeout` interposes on the methods of a timer service that does not exist here; a
+method the Micronaut scheduler invokes stands in for one. See <<timeout,Timeout Methods>>.
+
+A class declaring nothing but an `@AroundInvoke` method is read as an interceptor class rather than as a class
+interposing on its own business methods, unless the class is a bean of its own. See
+<<interceptorClasses,Interceptor Classes>>.
+
+An array-valued member of a binding annotation is supported and compared by its contents; the specification leaves
+such a member to an extension to define.
+
+A private interceptor method is rejected rather than invoked: it is called through the executable method Micronaut
+generates for it, and a private method has none.
+
+A checked exception thrown by a lifecycle callback interceptor method, which the specification does not allow it
+to throw, is reported wrapped in a runtime exception: what invoked the callback is the container, and it declares
+none.
+
+A class or method that is `final` is simply not intercepted, which is Micronaut's own rule; the specification asks
+for a definition error.
+
+== Languages
+
+Java, Groovy and Kotlin are supported, and each has a test suite of its own in this repository. The processor only
+reads and writes annotation metadata and generates nothing, which is what lets one implementation serve the
+three.
+
+A Kotlin suspending function is intercepted for the whole of its suspension, and the continuation the compiler adds
+after the arguments it declares is not shown to the interceptor.
+
+== Upstream defect
+
+The `@PreDestroy` method of an intercepted bean is not invoked when the bean has pre-destroy interception. See
+<<lifecycle,Lifecycle and Constructor Interception>>.

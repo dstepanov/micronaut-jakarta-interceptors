@@ -1,0 +1,87 @@
+A binding annotation is an annotation meta-annotated with `jakarta.interceptor.InterceptorBinding`. An interceptor
+class declaring it intercepts every element declaring it, and the two need not be compiled together.
+
+[source,java]
+----
+@InterceptorBinding
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.TYPE, ElementType.METHOD})
+public @interface Cached {
+}
+----
+
+Declared on a class, the binding applies to every business method of that class, to its construction and to its
+lifecycle callbacks. Declared on a method, it applies to that method alone. The two accumulate: a method is
+intercepted by the interceptors bound to it and by those bound to its class.
+
+== Binding by member values
+
+The members of a binding annotation are part of the binding, as the specification requires. An interceptor
+declaring `@Cached(region = "users")` intercepts only the elements declaring the same region:
+
+[source,java]
+----
+@InterceptorBinding
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.TYPE, ElementType.METHOD})
+public @interface Cached {
+
+    String region() default "default";
+
+    @Nonbinding // <1>
+    String comment() default "";
+}
+----
+
+<1> `jakarta.enterprise.util.Nonbinding` excludes a member from the binding, so two declarations may differ in it
+and still bind to each other.
+
+The value a member defaults to is filled in before the comparison, so `@Cached` and `@Cached(region = "default")`
+are the same binding.
+
+== Matching
+
+An interceptor applies to an element when *every* binding annotation the interceptor declares is also declared by
+the element. An interceptor declaring two bindings therefore only intercepts the elements declaring both, while an
+element declaring more bindings than an interceptor is still intercepted by it.
+
+== Bindings that come from elsewhere
+
+A binding annotation declared on *another* binding annotation binds transitively: an element declaring
+`@Critical`, itself annotated `@Monitored`, declares `@Monitored` too and is intercepted by the interceptors bound
+to it.
+
+A binding annotation that is `@Inherited` is inherited by the subclasses of the class declaring it, so a subclass
+of an intercepted class is intercepted without declaring anything of its own.
+
+A binding that arrives that way may arrive twice. Two annotations declared together may each carry the same
+binding with a different value, and the class then has no one answer to what that binding binds by; this is
+reported as an error while it compiles:
+
+[source,java]
+----
+@InterceptorBinding
+@Retention(RetentionPolicy.RUNTIME)
+@Monitored(level = "high")
+public @interface Critical {
+}
+
+@InterceptorBinding
+@Retention(RetentionPolicy.RUNTIME)
+@Monitored(level = "low")
+public @interface Routine {
+}
+
+@Critical // <1>
+@Routine
+@Singleton
+public class Ledger {
+}
+----
+
+<1> `@Monitored` reaches `Ledger` twice, as `high` and as `low`. The class is rejected rather than bound by
+whichever of the two was read last.
+
+Stating the binding on the class itself is the answer to it. A class declaring `@Monitored(level = "high")` is
+bound at that level whatever the annotations it declares carry, and nothing is reported: only two annotations
+that both merely pass a binding along, with the class silent about it, disagree.

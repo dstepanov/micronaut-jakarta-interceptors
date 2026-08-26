@@ -1,0 +1,4 @@
+plugins {
+    id "io.micronaut.build.internal.jakarta-interceptors-base"
+    id "io.micronaut.build.internal.parent"
+}

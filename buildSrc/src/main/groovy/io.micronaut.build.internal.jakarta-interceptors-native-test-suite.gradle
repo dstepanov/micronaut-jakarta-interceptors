@@ -1,0 +1,15 @@
+// A test suite whose tests also run inside a GraalVM native image: `nativeTest` compiles the tests and everything
+// they reach into a native binary and runs them there. It is what holds the interception to its promise of using
+// no reflection: nothing here declares any reachability metadata, so an interception that reached for reflection
+// would fail in the image rather than pass unnoticed on the JVM.
+plugins {
+    id 'io.micronaut.build.internal.jakarta-interceptors-test-suite'
+    id 'org.graalvm.buildtools.native'
+}
+
+graalvmNative {
+    toolchainDetection = false
+    binaries.configureEach {
+        buildArgs.add('--initialize-at-build-time=org.junit.platform.commons.logging.LoggerFactory$DelegatingLogger')
+    }
+}

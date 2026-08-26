@@ -1,0 +1,35 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+
+plugins {
+    id 'io.micronaut.build.shared.settings' version '8.0.1'
+}
+
+enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
+
+dependencyResolutionManagement {
+    repositories {
+        mavenCentral()
+    }
+}
+
+rootProject.name = 'jakarta-interceptors-parent'
+
+include 'jakarta-interceptors'
+include 'jakarta-interceptors-bom'
+include 'jakarta-interceptors-processor'
+include 'test-suite-groovy'
+include 'cdi-tck-interceptors'
+include 'cdi-tck-support'
+include 'test-suite-graalvm'
+include 'test-suite-java'
+include 'test-suite-kotlin'
+
+micronautBuild {
+    useStandardizedProjectNames.set(true)
+    importMicronautCatalog()
+}

@@ -1,0 +1,3 @@
+io.micronaut.interceptor.tck.DependentAnnotationMapper
+io.micronaut.interceptor.tck.ApplicationScopedAnnotationMapper
+io.micronaut.interceptor.tck.RequestScopedAnnotationMapper

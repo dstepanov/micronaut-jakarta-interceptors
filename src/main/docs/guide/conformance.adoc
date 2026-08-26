@@ -1,0 +1,1045 @@
+There is no Technology Compatibility Kit for Jakarta Interceptors. The specification page publishes none, and
+interceptors are instead covered by the Technology Compatibility Kit of Jakarta Contexts and Dependency Injection,
+in two forms:
+
+* `jakarta.tck:cdi-tck-ee-impl`, which is deployed to a Jakarta EE runtime through Arquillian;
+* `jakarta.tck.coreprofile:cdi-lite-tck-suite`, the CDI Lite suite of the Jakarta EE Core Profile, which needs no
+application server and runs standalone.
+
+Neither can be run against this module, and the reason is not the runtime they need: both are suites for the
+*Contexts and Dependency Injection* specification, and their test classes drive an implementation through
+`jakarta.enterprise.inject.spi.BeanContainer`, Arquillian deployments and the CDI rules of type discovery.
+Micronaut has a dependency injection container of its own and implements none of that.
+
+What can be run are the *scenarios* those tests deploy. The `org.jboss.cdi.tck.interceptors.tests` package of
+`jakarta.enterprise:cdi-tck-core-impl` carries the scenarios of the Interceptors specification - the beans, the
+interceptor classes and the binding annotations its own authors wrote - and they are ordinary Jakarta Interceptors
+code. The `cdi-tck-interceptors` module of this repository fetches those sources from Maven Central at build time,
+compiles them with the annotation processor of this module and drives them from Micronaut, asserting what the
+kit's own test classes assert. Nothing is vendored; the sources are Apache 2.0 licensed, as this project is.
+
+The harness marks the kit's test methods it cannot run, each with its reason, so that what is not covered is as
+visible in a test report as what is. What it cannot run needs a `jakarta.enterprise.inject.spi.BeanManager` to
+resolve or count interceptors, or declares a private interceptor method, which this module rejects. A bean manager
+is stood in for where a scenario only takes one as an argument, and the scopes and producer methods of Jakarta
+Contexts and Dependency Injection are read as their Micronaut equivalents, so that the scenarios themselves can be
+deployed.
+
+The kit also describes two deployments a container is required to reject rather than run. Nothing is deployed here,
+so each is handed to the compiler instead, with this module's annotation processor on it, and the compilation is
+required to fail: what a container reports as it starts, this module reports as it builds.
+
+Running them found four defects that the tests of this repository had missed, each now covered by a test here as
+well: `proceed()` called a second time skipped the rest of the chain instead of running it again, `proceed()`
+returned the constructed instance from an `@AroundConstruct` method where the specification returns nothing,
+`getConstructor()` returned the constructor of the generated proxy rather than of the target class, and a binding
+annotation reaching a class along two paths with different member values was silently resolved to one of them
+rather than reported. The kit's own scenarios then caught the first attempt at that last fix over-reporting: a
+class that states a binding itself has already answered what that binding binds by, whatever the annotations it
+declares carry.
+
+What the specification does have is an assertion catalogue: the
+https://repo1.maven.org/maven2/jakarta/tck/cdi-tck-ee-impl/11.0.0.M1/cdi-tck-ee-impl-11.0.0.M1-coverage-interceptors.html[Jakarta
+Interceptors Specification TCK Coverage Report] breaks it into 166 numbered assertions. This page records where this
+module stands against every one of them.
+
+|===
+| | Assertions
+
+| Covered by a test of this repository | 124
+| Differs from the specification, deliberately | 9
+| Not applicable to a module without Jakarta Enterprise Beans, a deployment descriptor or a naming context | 29
+| A statement of intent, with nothing to verify | 4
+|===
+
+Everything the specification describes that applies to a module of this kind is covered by a test, apart from the
+9 differences below, each of which is deliberate.
+
+== Where this module differs
+|===
+| Assertion | Difference
+
+| 2.2 c)
+| An interceptor class is a bean, so it needs no public no-arg constructor and may take injection
+
+| 2.3 ba)
+| An interceptor instance is created when the interceptor is first needed rather than when the target instance is created
+
+| 2.6 cb)
+| A private interceptor method is rejected: it has no executable method to invoke
+
+| 2.7 jb)
+| A private interceptor method is rejected
+
+| 2.8 c)
+| A private interceptor method is rejected
+
+| 3.3 f)
+| Micronaut leaves a final class or method uninterceptable rather than reporting a definition error
+
+| 3.3 g)
+| Micronaut leaves a final method uninterceptable rather than reporting a definition error
+
+| 3.4.2 c)
+| An array-valued member is supported and compared by its contents
+
+| 5.2.1 b)
+| Interceptors of equal priority are ordered by their class name
+|===
+
+== Every assertion
+
+=== Section 2.2 - Definition of Interceptor Classes and Interceptor Methods
+|===
+| | Assertion | Status | Where
+
+| aa)
+| Interceptor method may be defined on an interceptor class associated with the target class.
+| Covered
+| AroundInvokeTest
+
+| ab)
+| Interceptor method may be defined in the target class.
+| Covered
+| SelfInterceptionTest
+
+| ac)
+| Interceptor method may be defined in a super class of the target class.
+| Covered
+| StructuralConformanceTest
+
+| ad)
+| Interceptor method may be defined in a super class of the interceptor class.
+| Covered
+| InheritedInterceptorMethodTest
+
+| b)
+| Any number of interceptor classes may be associated with a target class.
+| Covered
+| InterceptorsTest
+
+| c)
+| An interceptor class must not be abstract and must have a public no-arg constructor.
+| Differs
+| An interceptor class is a bean, so it needs no public no-arg constructor and may take injection
+
+| ca)
+| Around-invoke interceptor methods (annotated with the jakarta.interceptor.AroundInvoke annotation). Around-invoke interceptor methods interpose on the invocation of business methods.
+| Covered
+| EveryKindTest
+
+| cb)
+| Around-timeout interceptor methods (annotated with the jakarta.interceptor.AroundTimeout annotation). Around-timeout interceptor methods interpose on the invocation of timeout methods, in response to timer events.
+| Covered
+| AroundTimeoutTest
+
+| cc)
+| Post-construct interceptor methods (annotated with the jakarta.annotation.PostConstruct annotation). Post-construct interceptor methods are invoked after dependency injection has been completed on the target instance.
+| Covered
+| LifecycleInterceptionTest
+
+| cd)
+| Pre-destroy interceptor methods (annotated with the jakarta.annotation.PreDestroy annotation). Pre-destroy interceptor methods are invoked before the target instance and all interceptor instances associated with it are destroyed by the container.
+| Covered
+| LifecycleInterceptionTest
+
+| ce)
+| Around-construct interceptor methods (annotated with the jakarta.interceptor.AroundConstruct annotation). Around-construct interceptor methods interpose on the invocation of the constructor of the target instance.
+| Covered
+| AroundConstructTest
+
+| d)
+| Up to one interceptor method of each interceptor method type may be defined in the same class. More specifically, up to one around-invoke interceptor method, one around-timeout interceptor method, and one lifecycle callback interceptor method for each of the different lifecycle events may be defined in the same class. Only the interceptor methods of the interceptor class that are relevant for the given invocation context are invoked. For example, when a business method is invoked, around-invoke interceptor methods are invoked, but any around-construct, around-timeout, post-construct, or pre-destroy methods are ignored.
+| Covered
+| InterceptorValidationTest, EveryKindTest
+
+| f)
+| Interceptor methods and interceptor classes may be defined for a class by means of metadata annotations or, optionally, by means of a deployment descriptor.
+| Not applicable
+| No deployment descriptor
+
+| g)
+| Interceptors classes may be associated with the target class using either interceptor binding or the Interceptors annotation. Typically only one interceptor association type is used for any component.
+| Covered
+| InterceptorsTest, BindingMembersTest
+
+| h)
+| An extension specification may use a deployment descriptor to specify the invocation order of interceptors or to override the order specified in metadata annotations. A deployment descriptor can be optionally used to define default interceptors or to associate interceptors with the target class. For example, the EJB specification requires support for the ejb-jar.xml deployment descriptor and the CDI specification requires supports for the beans.xml deployment descriptor.
+| Not applicable
+| No deployment descriptor
+|===
+
+=== Section 2.3 - Interceptor Life Cycle
+|===
+| | Assertion | Status | Where
+
+| a)
+| The lifecycle of an interceptor instance is the same as that of the target class instance with which it is associated.
+| Covered
+| InterceptorStateTest
+
+| ba)
+| Except as noted below, when the target instance is created, a corresponding interceptor instance is created for each associated interceptor class.
+| Differs
+| An interceptor instance is created when the interceptor is first needed rather than when the target instance is created
+
+| bb)
+| These interceptor instances are destroyed if the target instance fails to be created or when it is removed.
+| Not applicable
+| Destruction of an instance cannot be observed
+
+| c)
+| An interceptor instance may be the target of dependency injection. Dependency injection is performed when the interceptor instance is created, using the naming context of the associated target class.
+| Covered
+| InterceptorInjectionTest
+
+| ca)
+| With the exception of around-construct lifecycle callback interceptor methods, no interceptor methods are invoked until after dependency injection has been completed on both the interceptor instances an the target instance.
+| Covered
+| OwnLifecycleTest
+
+| cb)
+| Post-construct interceptor methods for the target instance are invoked after dependency injection has been completed on the target instance.
+| Covered
+| LifecycleInterceptionTest
+
+| cc)
+| Pre-destroy interceptor methods are invoked before the target instance and all interceptor instances associated with it are destroyed.
+| Covered
+| LifecycleInterceptionTest
+
+| da)
+| Around-construct lifecycle callback interceptor methods are invoked after dependency injection has been completed on the instances of all interceptor classes associated with the target class.
+| Covered
+| InterceptorInjectionTest, AroundConstructTest
+
+| daz)
+| Injection of the target component into interceptor instances that are invoked during the AroundConstruct lifecycle callback is not supported.
+| Not applicable
+| Not supported by the specification either
+
+| db)
+| The target instance is created after the last interceptor method in the around-construct interceptor chain invokes the InvocationContext.proceed method. If the constructor for the target instance supports injection, such constructor injection is performed. If the InvocationContext.proceed method is not invoked by an interceptor method, the target instance will not be created.
+| Covered
+| AroundConstructTest
+
+| dc)
+| The AroundConstruct interceptor method can access the constructed instance using the InvocationContext.getTarget method after the InvocationContext.proceed completes.
+| Covered
+| AroundConstructTest
+
+| dd)
+| Dependency injection on the target instance is not completed until after invocation of all interceptor methods in the AroundConstruct interceptor chain complete successfully. Around-construct lifecycle callback interceptor methods should therefore exercise caution when invoking methods of the target instance since dependency injection on the target instance will not have been completed.
+| Not applicable
+| Micronaut completes injection as part of construction
+|===
+
+=== Section 2.3.1 - Interceptor Environment
+|===
+| | Assertion | Status | Where
+
+| a)
+| An interceptor class shares the enterprise naming context of its associated target class. Annotations and/or XML deployment descriptor elements for dependency injection or for direct JNDI lookup refer to this shared naming context.
+| Not applicable
+| No enterprise naming context
+
+| b)
+| Around-invoke and around-timeout interceptor methods run in the same Java thread as the associated target method.
+| Covered
+| InvocationContextConformanceTest
+
+| ba)
+| Around-construct interceptor methods run in the same Java thread as the target constructor.
+| Not applicable
+| Construction is never dispatched to another thread
+
+| c)
+| It is possible to carry state across multiple interceptor method invocations for a single method invocation or lifecycle callback event in the context data of the InvocationContext object. The InvocationContext object also provides information that enables interceptor methods to control the behavior of the interceptor invocation chain, including whether the next method in the chain is invoked and the values of its parameters and result.
+| Covered
+| InvocationContextTest
+|===
+
+=== Section 2.4 - InvocationContext
+|===
+| | Assertion | Status | Where
+
+| a)
+| The InvocationContext object provides information that enables interceptor methods to control the behavior of the invocation chain.
+| Statement
+| 
+
+| ba)
+| The same InvocationContext instance is passed to each interceptor method for a given target class method or lifecycle event interception. This allows an interceptor to save information in the context data property of the InvocationContext that can be subsequently retrieved in other interceptors as a means to pass contextual data between interceptors. The contextual data is not sharable across separate target class method invocations or lifecycle callback events.
+| Covered
+| InvocationContextConformanceTest
+
+| bb)
+| If interceptors are invoked as a result of the invocation on a web service endpoint, the map returned by getContextData() will be the JAX-WS MessageContext.
+| Not applicable
+| No web service endpoint
+
+| c)
+| The getTarget method returns the associated target instance. For the AroundConstruct lifecycle callback interceptor method, getTarget returns null if called before the proceed method returns.
+| Covered
+| InvocationContextTest, AroundConstructTest
+
+| da)
+| The getTimer method returns the timer object associated with a timeout method invocation.
+| Covered
+| AroundTimeoutTest
+
+| db)
+| The getTimer method returns null for around-invoke methods and lifecycle callback interceptor methods.
+| Covered
+| LifecycleProceedTest, InvocationContextTest
+
+| ea)
+| The getMethod method returns the method of the target class for which the interceptor was invoked.
+| Covered
+| InvocationContextTest
+
+| eb)
+| In a lifecycle callback interceptor for which there is no corresponding lifecycle callback method on the target class or in the AroundConstruct lifecycle callback interceptor method, getMethod returns null .
+| Covered
+| LifecycleProceedTest
+
+| f)
+| The getParameters method returns the parameters of the method or constructor invocation. If the setParameters method has been called, getParameters returns the values to which the parameters have been set.
+| Covered
+| InvocationContextConformanceTest
+
+| ga)
+| Test setParameters method modifies the parameters used.
+| Covered
+| InvocationContextTest
+
+| gb)
+| Test invalid number of parameters.
+| Covered
+| InvocationContextConformanceTest
+
+| gc)
+| Test invalid parameter types.
+| Covered
+| InvocationContextConformanceTest
+
+| ha)
+| Test around-invoke interceptor method.
+| Covered
+| AroundInvokeTest
+
+| hb)
+| Test around-timeout interceptor method.
+| Covered
+| AroundTimeoutTest
+
+| i)
+| For AroundConstruct lifecycle callback interceptor methods, the invocation of the last interceptor method in the chain causes the target instance to be created.
+| Covered
+| AroundConstructTest
+
+| j)
+| Interceptor methods must always call the InvocationContext.proceed method or no subsequent interceptor methods, target class method, or lifecycle callback methods will be invoked, or the target instance will not be created.
+| Covered
+| ExceptionsTest
+
+| k)
+| If a method is of type void, the invocation of the proceed method returns null .
+| Covered
+| LifecycleProceedTest
+
+| l)
+| For all other lifecycle callback interceptor methods, if there is no callback method defined on the target class, the invocation of proceed in the last interceptor method in the chain is a no-op, and null is returned.
+| Covered
+| LifecycleProceedTest
+
+| m)
+| In case of the PostConstruct interceptor, if there is no callback method defined on the target class, the invocation of InvocationContext.proceed method in the last interceptor method in the chain validates the target instance.
+| Not applicable
+| The specification leaves validation undefined
+
+| n)
+| The getInterceptorBindings method returns the set of interceptor binding annotations for the method or constructor whose invocation is being intercepted. In case there is no target method or target constructor, interceptor binding annotations applied to the target class are returned. All interceptor binding annotations are returned, including interceptor binding annotations that associate interceptors of a different interceptor method type, as well as interceptor binding annotations that associate no interceptor.
+| Covered
+| InvocationContextConformanceTest
+
+| o)
+| The getInterceptorBinding method returns the single annotation of given type present in the set of interceptor bindings returned by getInterceptorBindings() .
+| Covered
+| InvocationContextConformanceTest
+|===
+
+=== Section 2.5 - Exceptions
+|===
+| | Assertion | Status | Where
+
+| a)
+| Interceptor methods are allowed to throw runtime exceptions or any checked exceptions that the associated target method allows within its throws clause.
+| Covered
+| ExceptionsTest
+
+| ba)
+| Interceptor method is allowed to catch and suppress exceptions.
+| Covered
+| BindingReplacementTest
+
+| bb)
+| Interceptor method is allowed to recover by calling the InvocationContext.proceed method.
+| Covered
+| BindingReplacementTest
+
+| c)
+| The invocation of the InvocationContext.proceed method will throw the same exception as any thrown by the associated target method unless an interceptor further down the Java call stack has caught it and thrown a different exception.
+| Covered
+| ExceptionsTest
+
+| d)
+| Exceptions and initialization and/or cleanup operations should typically be handled in try/catch/finally blocks around the proceed method.
+| Statement
+| 
+|===
+
+=== Section 2.6 - Business Method Interceptor Methods
+|===
+| | Assertion | Status | Where
+
+| a)
+| Interceptor methods that interpose on business method invocations are denoted by the AroundInvoke annotation.
+| Covered
+| AroundInvokeTest
+
+| b)
+| Around-invoke methods may be defined on interceptor classes and/or the target class and/or superclasses of the target class or the interceptor classes. However, only one around-invoke method may be defined on a given class.
+| Covered
+| SelfInterceptionTest, InterceptorValidationTest
+
+| ca)
+| Test public level access.
+| Covered
+| AroundInvokeTest
+
+| cb)
+| Test private level access.
+| Differs
+| A private interceptor method is rejected: it has no executable method to invoke
+
+| cc)
+| Test protected level access.
+| Covered
+| AccessLevelTest
+
+| cd)
+| Test package level access.
+| Covered
+| AccessLevelTest
+
+| d)
+| An around-invoke method must not be declared as abstract , final or static .
+| Covered
+| InterceptorValidationTest
+
+| e)
+| An around-invoke method can invoke any component or resource that the method it is intercepting can invoke.
+| Covered
+| InterceptorInjectionTest
+
+| fa)
+| Test transaction context.
+| Not applicable
+| No transaction context
+
+| fb)
+| Test security context.
+| Not applicable
+| No security context
+|===
+
+=== Section 2.7 - Interceptor Methods for Lifecycle Event Callbacks
+|===
+| | Assertion | Status | Where
+
+| a)
+| The AroundConstruct annotation denotes lifecycle callback interceptor methods that interpose on invocation of the target instance’s constructor.
+| Covered
+| AroundConstructTest
+
+| b)
+| The PostConstruct annotation denotes lifecycle callback interceptor methods that are invoked after the target instance has been constructed and dependency injection on that instance has been completed, but before any business method or other event can be invoked on the target instance.
+| Covered
+| LifecycleInterceptionTest
+
+| c)
+| The PreDestroy annotation denotes lifecycle callback interceptor methods that interpose on the target instance’s removal.
+| Covered
+| LifecycleInterceptionTest
+
+| d)
+| The AroundConstruct interceptor methods may be only defined on interceptor classes and/or superclasses of interceptor classes. The AroundConstruct callback should not be defined on the target class.
+| Covered
+| A class declaring @AroundConstruct is read as an interceptor class
+
+| ea)
+| Test PostConstruct interceptor method.
+| Covered
+| LifecycleInterceptionTest
+
+| eb)
+| Test PreDestroy interceptor method.
+| Covered
+| LifecycleInterceptionTest
+
+| f)
+| A single lifecycle callback interceptor method may be used to interpose on multiple callback events.
+| Covered
+| AccessLevelTest
+
+| g)
+| Lifecycle callback interceptor methods are invoked in an unspecified security context.
+| Not applicable
+| No security context
+
+| h)
+| Lifecycle callback interceptor methods are invoked in a transaction context determined by their target class and/or method.
+| Not applicable
+| No transaction context
+
+| i)
+| AroundConstruct lifecycle callback interceptor methods may be defined on superclasses of interceptor classes. All other lifecycle callback interceptor methods may be defined on superclasses of the target class or of interceptor classes. However, a given class may not have more than one lifecycle callback interceptor method for the same lifecycle event. Any subset or combination of lifecycle callback annotations may otherwise be specified on a target class or interceptor class.
+| Covered
+| InheritedInterceptorMethodTest, InterceptorValidationTest
+
+| ia)
+| If a lifecycle callback interceptor method returns a value, it is ignored by the container.
+| Covered
+| AccessLevelTest
+
+| ja)
+| Test public level access.
+| Covered
+| LifecycleInterceptionTest
+
+| jb)
+| Test private level access.
+| Differs
+| A private interceptor method is rejected
+
+| jc)
+| Test protected level access.
+| Covered
+| AccessLevelTest
+
+| jd)
+| Test package level access.
+| Covered
+| AccessLevelTest
+
+| k)
+| A lifecycle callback interceptor method must not be declared as abstract , final or static .
+| Covered
+| InterceptorValidationTest
+|===
+
+=== Section 2.7.1 - Exceptions
+|===
+| | Assertion | Status | Where
+
+| a)
+| Lifecycle callback interceptor methods may throw runtime exceptions, but not checked exceptions.
+| Covered
+| LifecycleExceptionTest
+
+| b)
+| A lifecycle callback interceptor method (other than a method on the target class or its superclasses) may catch an exception thrown by another lifecycle callback interceptor method in the invocation chain, and clean up before returning.
+| Covered
+| LifecycleExceptionTest
+
+| c)
+| The PreDestroy callbacks are not invoked when the target instance and the interceptors are discarded as a result of such exceptions: the lifecycle callback interceptor methods in the chain should perform any necessary clean-up operations as the interceptor chain unwinds.
+| Not applicable
+| Discarding an instance on failure is Micronaut's own
+|===
+
+=== Section 2.8 - Timeout Method Interceptor Methods
+|===
+| | Assertion | Status | Where
+
+| a)
+| Interceptor methods that interpose on timeout methods are denoted by the AroundTimeout annotation.
+| Covered
+| AroundTimeoutTest
+
+| ba)
+| Test interceptor classes and/or superclasses.
+| Covered
+| AroundTimeoutTest
+
+| bb)
+| Test target class and/or superclasses.
+| Covered
+| OwnLifecycleTest
+
+| c)
+| Around-timeout methods can have public , private , protected , or package level access. An around-timeout method must not be declared as abstract , final or static .
+| Differs
+| A private interceptor method is rejected
+
+| d)
+| An around-timeout method can invoke any component or resource that its corresponding timeout method can invoke.
+| Covered
+| AroundTimeoutTest
+
+| ea)
+| Test transaction context.
+| Not applicable
+| No transaction context
+
+| eb)
+| Test security context.
+| Not applicable
+| No security context
+
+| f)
+| The InvocationContext.getTimer method allows an around-timeout method to retrieve the timer object associated with the timeout.
+| Covered
+| AroundTimeoutTest
+|===
+
+=== Section 2.9 - Constructor- and Method-level Interceptors
+|===
+| | Assertion | Status | Where
+
+| aa)
+| Method-level interceptors are interceptor classes associated with a specific business or timeout method of the target class.
+| Covered
+| InterceptorsTest
+
+| ab)
+| Constructor-level interceptors are interceptor classes associated with a constructor of the target class.
+| Covered
+| ConstructorInterceptorsTest
+
+| b)
+| Only the interceptor methods of the interceptor class that are relevant for the context in which the interceptor is bound are invoked. For example, if the interceptor is bound only to a business method, any AroundConstruct , AroundTimeout , PostConstruct , or PreDestroy methods on the interceptor are not called.
+| Covered
+| StructuralConformanceTest
+
+| c)
+| Method-level interceptors may not be associated with a lifecycle callback method of the target class.
+| Not applicable
+| A lifecycle callback is not a business method here
+
+| d)
+| The same interceptor may be applied to more than one business or timeout method of the target class.
+| Covered
+| StructuralConformanceTest
+
+| e)
+| The applicability of a method-level interceptor to more than one method of an associated target class does not affect the relationship between the interceptor instance and the target class - only a single instance of the interceptor class is created per target class instance.
+| Covered
+| StructuralConformanceTest
+|===
+
+=== Section 2.10 - Default Interceptors
+|===
+| | Assertion | Status | Where
+
+| a)
+| Default interceptors are interceptors that apply to a set of target classes. If a deployment descriptor is supported, it may be used to define default interceptors and their relative ordering.
+| Not applicable
+| Default interceptors need a deployment descriptor
+|===
+
+=== Section 3 - Associating Interceptors with Classes and Methods using Interceptor Bindings
+|===
+| | Assertion | Status | Where
+
+| a)
+| Interceptor bindings are intermediate annotations that may be used to associate interceptors with any component that is not itself an interceptor.
+| Statement
+| 
+|===
+
+=== Section 3.1 - Interceptor Binding Types
+|===
+| | Assertion | Status | Where
+
+| a)
+| An interceptor binding type is a Java annotation defined as Retention(RUNTIME) . Typically an interceptor binding is defined as Target({TYPE, METHOD, CONSTRUCTOR}) or any subset of valid target types.
+| Covered
+| BindingMembersTest
+
+| b)
+| An interceptor binding type may be declared by specifying the InterceptorBinding meta-annotation.
+| Covered
+| AroundInvokeTest
+|===
+
+=== Section 3.1.1 - Interceptor binding types with additional interceptor bindings
+|===
+| | Assertion | Status | Where
+
+| a)
+| An interceptor binding type may declare other interceptor bindings.
+| Covered
+| CdiBindingRulesTest
+
+| b)
+| Interceptor bindings are transitive - an interceptor binding declared by an interceptor binding type is inherited by all components and other interceptor binding types that declare that interceptor binding type.
+| Covered
+| CdiBindingRulesTest
+
+| c)
+| An interceptor binding type can only be applied to an interceptor binding type defining a superset of it's target types. For example interceptor binding types declared Target(TYPE) may not be applied to interceptor binding types declared Target({TYPE, METHOD}) .
+| Not applicable
+| Target types are checked by the Java compiler
+|===
+
+=== Section 3.1.2 - Other sources of interceptor bindings
+|===
+| | Assertion | Status | Where
+
+| a)
+| An extension specification may define other sources of interceptor bindings, such as via a CDI stereotype.
+| Covered
+| BindingResolutionTckTest: a stereotype carrying a binding binds through it
+|===
+
+=== Section 3.2 - Declaring Interceptor Bindings of an Interceptor
+|===
+| | Assertion | Status | Where
+
+| a)
+| The interceptor bindings of an interceptor are specified by annotating the interceptor class with the binding types and the Interceptor annotation and are called the set of interceptor bindings for the interceptor.
+| Covered
+| AroundInvokeTest
+
+| b)
+| An interceptor class may declare multiple interceptor bindings.
+| Covered
+| CdiBindingRulesTest
+
+| c)
+| Multiple interceptors may declare the same interceptor bindings.
+| Covered
+| PriorityOrderingTest
+
+| d)
+| An extension specification may define other ways of declaring an interceptor.
+| Not applicable
+| No extension defines other ways
+
+| e)
+| If an interceptor does not declare an Interceptor annotation, it could be bound to components using Interceptors annotation or a deployment descriptor file.
+| Covered
+| InterceptorsTest
+
+| f)
+| All interceptors declared using the Interceptor annotation should specify at least one interceptor binding. If an interceptor declared using the Interceptor annotation does not declare any interceptor binding, non-portable behavior results.
+| Not applicable
+| Non-portable behaviour
+
+| g)
+| With the exception of AroundConstruct lifecycle callback interceptors, an interceptor for lifecycle callbacks may only declare interceptor binding types that are defined as Target(TYPE) .
+| Not applicable
+| Target types are checked by the Java compiler
+|===
+
+=== Section 3.3 - Binding an Interceptor to a Component
+|===
+| | Assertion | Status | Where
+
+| aa)
+| Test a component class.
+| Covered
+| AroundInvokeTest
+
+| ab)
+| Test a method.
+| Covered
+| BindingMembersTest
+
+| ac)
+| Test a constructor.
+| Covered
+| ConstructorBindingTest
+
+| ba)
+| Test a component class.
+| Covered
+| CdiBindingRulesTest
+
+| bb)
+| Test a method.
+| Covered
+| CdiBindingRulesTest
+
+| bc)
+| Test a constructor.
+| Covered
+| ConstructorBindingRulesTest
+
+| c)
+| The set of interceptor bindings for a method or constructor are those declared at class level combined with those declared at method or constructor level.
+| Covered
+| CdiBindingRulesTest
+
+| da)
+| Test a constructor.
+| Covered
+| ConstructorBindingRulesTest
+
+| db)
+| Test a method.
+| Covered
+| BindingReplacementTest
+
+| e)
+| An extension specification may define additional rules for combining interceptor bindings, such as interceptors defined via a CDI stereotype.
+| Covered
+| BindingResolutionTckTest: a stereotype carrying a binding binds through it
+
+| f)
+| If the component class declares or inherits a class level interceptor binding, it must not be declared final , or have any non- static , non- private , final methods. If a component has a class-level interceptor binding and is declared final or has a non- static , non- private , final method, the container automatically detects the problem and treats it as a definition error.
+| Differs
+| Micronaut leaves a final class or method uninterceptable rather than reporting a definition error
+
+| g)
+| If a non- static , non- private method of a component class declares a method level interceptor binding, neither the method nor the component class may be declared final . If a non- static , non- private , final method of a component has a method level interceptor binding, the container automatically detects the problem and treats it as a definition error.
+| Differs
+| Micronaut leaves a final method uninterceptable rather than reporting a definition error
+|===
+
+=== Section 3.4 - Interceptor Resolution
+|===
+| | Assertion | Status | Where
+
+| a)
+| The process of matching interceptors to a certain lifecycle callback method, timeout method, business method or a constructor of a certain component is called interceptor resolution.
+| Statement
+| 
+
+| b)
+| For a lifecycle callback, the interceptor bindings include the interceptor bindings declared or inherited by the component at the class level, including, recursively, interceptor bindings declared as meta-annotations of other interceptor bindings.
+| Covered
+| CdiBindingRulesTest
+
+| ca)
+| Test a business method.
+| Covered
+| AroundInvokeTest
+
+| cb)
+| Test a timeout method.
+| Covered
+| AroundTimeoutTest
+
+| cc)
+| Test a constructor.
+| Covered
+| ConstructorBindingTest
+
+| da)
+| The method or constructor has all the interceptor bindings of the interceptor. A method or constructor has an interceptor binding of an interceptor if it has an interceptor binding with (a) the same type and (b) the same annotation member value for each member. An extension specification may further refine this rule. For example the CDI specification adds the jakarta.enterprise.util.Nonbinding annotation, causing member values to be ignored by the resolution process.
+| Covered
+| BindingMembersTest
+
+| db)
+| The interceptor intercepts the given kind of lifecycle callback or business method.
+| Covered
+| StructuralConformanceTest
+
+| dc)
+| The interceptor is enabled.
+| Not applicable
+| Every interceptor class of the context is enabled
+|===
+
+=== Section 3.4.1 - Interceptors with multiple bindings
+|===
+| | Assertion | Status | Where
+
+| a)
+| An interceptor class may specify multiple interceptor bindings.
+| Covered
+| CdiBindingRulesTest
+|===
+
+=== Section 3.4.2 - Interceptor binding types with members
+|===
+| | Assertion | Status | Where
+
+| a)
+| Interceptor binding types may have annotation members.
+| Covered
+| BindingMembersTest
+
+| b)
+| Annotation member values are compared using the equals method.
+| Covered
+| BindingMembersTest
+
+| c)
+| Array-valued or annotation-valued members of an interceptor binding type are not supported. An extension specification may add support for these member types. For example the CDI specification adds the jakarta.enterprise.util.Nonbinding annotation, allowing array-valued or annotation-valued members to be used on the annotation type, but ignored by the resolution process.
+| Differs
+| An array-valued member is supported and compared by its contents
+
+| d)
+| If the set of interceptor bindings of a component class or interceptor, including bindings inherited from stereotypes and other interceptor bindings, has two instances of a certain interceptor binding type and the instances have different values of some annotation member, the container automatically detects the problem and treats it as a definition error.
+| Covered
+| InterceptorValidationTest, BrokenDeploymentTckTest
+|===
+
+=== Section 4 - Associating Interceptors with Classes and Methods using the Interceptors Annotation
+|===
+| | Assertion | Status | Where
+
+| a)
+| The Interceptors annotation can be used to denote interceptor classes and associate one or more interceptor classes with a target class, and/or one or more of its methods, and/or a constructor of the target class.
+| Covered
+| InterceptorsTest
+
+| b)
+| Method-level around-invoke and around-timeout interceptors can be defined by applying the Interceptors annotation to the method for which the interceptors are to be invoked.
+| Covered
+| InterceptorsTest, AroundTimeoutTest
+
+| c)
+| Constructor-level interceptors can be defined by applying the Interceptors annotation to the constructor for which the interceptors are to be invoked.
+| Covered
+| ConstructorInterceptorsTest
+
+| ca)
+| Constructor- and method-level interceptors are invoked in addition to any default interceptors and interceptors defined for the target class (and its superclasses).
+| Covered
+| InterceptorsTest
+
+| d)
+| If multiple interceptors are defined for the target class in the Interceptors annotation, they are invoked in the order in which they are specified. See Chapter 5 for the rules on interceptors ordering.
+| Covered
+| InterceptorsTest
+
+| e)
+| The Interceptor annotation is ignored on interceptor classes bound using the Interceptors annotation.
+| Covered
+| OwnLifecycleTest
+
+| f)
+| An extension specification may support the use of a deployment descriptor to associate interceptor classes with a target class, and/or method or constructor of a target class, and to specify the order of interceptor invocation or override metadata specified by annotations.
+| Not applicable
+| No deployment descriptor
+|===
+
+=== Section 5.1 - Enabling Interceptors
+|===
+| | Assertion | Status | Where
+
+| a)
+| Interceptors declared using the Interceptors annotation are enabled by that annotation. Using the Interceptors annotation to associate interceptor classes with a target class or a method or constructor of a target class enables them for that target class, method, or constructor. The order in which the interceptor classes are specified in the Interceptors annotation controls interceptor ordering (see Section 5.2).
+| Covered
+| InterceptorsTest
+
+| b)
+| An extension specification may define alternative mechanisms (e.g., a deployment descriptor such as the CDI beans.xml or the EJB ejb-jar.xml deployment descriptor) to enable and order interceptors, to override the order specified by means of annotations, or to disable interceptors.
+| Not applicable
+| No deployment descriptor
+|===
+
+=== Section 5.2 - Interceptor Ordering Rules
+|===
+| | Assertion | Status | Where
+
+| a)
+| Default interceptors are invoked in the order defined by the extension specification (e.g., by their order in the deployment descriptor).
+| Not applicable
+| No default interceptors
+
+| b)
+| If a default interceptor class has superclasses, interceptor methods declared in the interceptor class’s superclasses are invoked before the interceptor method declared in the interceptor class itself, most general superclass first.
+| Not applicable
+| No default interceptors
+
+| c)
+| Interceptor methods declared in the interceptor classes listed in the Interceptors annotation are invoked in the same order as the specification of the interceptor classes in that annotation.
+| Covered
+| InterceptorsTest
+
+| d)
+| If an interceptor class declared by applying the Interceptors annotation at class-level has superclasses, interceptor methods declared in the interceptor class’s superclasses are invoked before the interceptor method declared in the interceptor class itself, most general superclass first.
+| Covered
+| HierarchyOrderTest
+
+| e)
+| Interceptor methods declared in the interceptor classes listed in the Interceptors annotation are invoked in the same order as the specification of the interceptor classes in that annotation.
+| Covered
+| InterceptorsTest
+
+| f)
+| If an interceptor class declared by applying the Interceptors annotation at method- or constructor-level has superclasses, interceptor methods declared in the interceptor class’s superclasses are invoked before the interceptor method declared in the interceptor class itself, most general superclass first.
+| Covered
+| HierarchyOrderTest
+
+| g)
+| All interceptors specified using interceptor binding annotations visible on the target class (e.g., specified on the class or visible on the class because they were declared with the Inherited annotation) are combined with all binding annotations on the target method and sorted by the priorities specified by the Priority annotation; and then the interceptor methods are invoked in order of priority. The Priority annotation is described in Section 5.2.1.
+| Covered
+| PriorityOrderingTest
+
+| h)
+| If an interceptor class declared using interceptor bindings has superclasses, interceptor methods declared in the interceptor class’s superclasses are invoked before the interceptor method declared in the interceptor class itself, most general superclass first.
+| Covered
+| HierarchyOrderTest
+
+| i)
+| If the target class has superclasses, interceptor methods declared in the target class’s superclasses are invoked before an interceptor method declared in the target class itself, most general superclass first.
+| Covered
+| HierarchyOrderTest
+
+| j)
+| If an interceptor method is overridden by another method (regardless whether that method is itself an interceptor method), it will not be invoked.
+| Covered
+| StructuralConformanceTest
+|===
+
+=== Section 5.2.1 - Use of the Priority Annotation in Ordering Interceptors
+|===
+| | Assertion | Status | Where
+
+| )
+| The Priority annotation can be used to enable and order interceptors associated with components that use interceptor bindings. The required value element of the Priority annotation determines the ordering. Interceptors with smaller priority values are called first.
+| Covered
+| PriorityOrderingTest
+
+| b)
+| If more than one interceptor has the same priority, the relative order of these interceptor is undefined.
+| Differs
+| Interceptors of equal priority are ordered by their class name
+
+| c)
+| The Priority annotation is ignored on interceptors bound to a component using the Interceptors annotation.
+| Covered
+| ConstructorBindingRulesTest
+|===
+
+=== Section 5.3 - Excluding Interceptors
+|===
+| | Assertion | Status | Where
+
+| a)
+| Interceptors may be excluded from execution by means of the ExcludeClassInterceptors annotation and the ExcludeDefaultInterceptors annotation.
+| Covered
+| InterceptorsTest
+
+| b)
+| The ExcludeClassInterceptors annotation can be used to exclude the invocation of the class-level interceptors defined by means of the Interceptors annotation.
+| Covered
+| InterceptorsTest
+
+| c)
+| The ExcludeDefaultInterceptors annotation can be used to exclude the invocation of default interceptors for a target class or—when applied to a target class constructor or method—to exclude the invocation of default interceptors for a particular constructor or method.
+| Not applicable
+| Default interceptors need a deployment descriptor
+
+| d)
+| An extension specification may define other means for excluding interceptors from execution, such as by means of a deployment descriptor.
+| Not applicable
+| No deployment descriptor
+|===

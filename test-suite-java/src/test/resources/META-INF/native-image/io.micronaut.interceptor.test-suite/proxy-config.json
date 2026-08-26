@@ -1,0 +1,12 @@
+[
+  {
+    "comment": "InvocationContext.getInterceptorBindings() hands the interceptor instances of the binding annotations, which Micronaut builds as dynamic proxies of the annotation type and AnnotationValueProvider. Only an interceptor that asks for its bindings needs these; the binding of an interceptor to an element is decided from the annotation metadata and builds no annotation.",
+    "interfaces": ["io.micronaut.interceptor.test.context.Observed", "io.micronaut.core.annotation.AnnotationValueProvider"]
+  },
+  {
+    "interfaces": ["io.micronaut.interceptor.test.conformance.Ctx", "io.micronaut.core.annotation.AnnotationValueProvider"]
+  },
+  {
+    "interfaces": ["io.micronaut.interceptor.test.conformance.Unbound", "io.micronaut.core.annotation.AnnotationValueProvider"]
+  }
+]

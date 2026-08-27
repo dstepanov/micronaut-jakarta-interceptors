@@ -19,7 +19,6 @@ import io.micronaut.context.ApplicationContext;
 import org.jboss.cdi.tck.util.ActionSequence;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -73,9 +72,6 @@ class LifecycleInterceptorDefinitionTckTest {
     }
 
     @Test
-    @Disabled("Micronaut does not invoke the @PreDestroy and @PostConstruct methods a bean declares on itself once "
-        + "the bean has lifecycle interception, so the sequences end at the interceptor classes and do not reach "
-        + "Weapon and Rocket. The interceptor half of each sequence is asserted by testLifecycleInterception")
     void testMultipleLifecycleInterceptors() {
         ActionSequence.reset();
 

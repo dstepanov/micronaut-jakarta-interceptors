@@ -30,8 +30,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Each of that test's methods asks a {@code jakarta.enterprise.inject.spi.BeanManager} how many interceptors a
  * set of bindings resolves to, and then checks which interceptor actually ran. There is no bean manager here to
- * ask, so the count is left out and what it was asked about is asserted instead: whether the one interceptor of
- * the deployment interposed. It is the same question, put to the interception rather than to the container.</p>
+ * ask, so the same question is put to the interception rather than to the container: the binding set each of those
+ * counts is taken over is the binding set of an element of this deployment, so a count of one is that the one
+ * interceptor interposed and that neither of the other two did. Both halves are asserted here.</p>
+ *
+ * <p>What the count discriminates is worth stating, because the three interceptor classes of the deployment are
+ * alike: each declares {@code @TransactionalBinding} and {@code @LoggedBinding} and differs in one binding and in
+ * the kind of interceptor method it declares. So a wrongly widened match, or an interceptor method invoked for the
+ * wrong interception type, shows up as a second interceptor having interposed.</p>
  *
  * <p>The bindings these scenarios resolve by are as involved as the kit has. {@code ComplicatedInterceptor} binds
  * on five annotations at once, and a service only matches them by collecting them from everywhere a binding can
@@ -63,16 +69,19 @@ class BindingResolutionTckTest {
     void testBusinessMethodInterceptorBindings() {
         MessageService messageService = context.getBean(MessageService.class);
         assertNotNull(messageService);
-        ComplicatedInterceptor.reset();
+        reset();
         messageService.ping();
         assertTrue(ComplicatedInterceptor.intercepted);
+        // the count: the around-invoke interceptor and no other
+        assertNoOtherInterceptorInterposed();
 
         MonitorService monitorService = context.getBean(MonitorService.class);
         assertNotNull(monitorService);
-        ComplicatedInterceptor.reset();
+        reset();
         monitorService.ping();
         // MonitorService declares everything ComplicatedInterceptor binds on except @MessageBinding
         assertFalse(ComplicatedInterceptor.intercepted);
+        assertNoOtherInterceptorInterposed();
     }
 
     /**
@@ -80,7 +89,7 @@ class BindingResolutionTckTest {
      */
     @Test
     void testLifecycleInterceptorBindings() {
-        ComplicatedLifecycleInterceptor.reset();
+        reset();
 
         RemoteMessageService remoteMessageService = context.createBean(RemoteMessageService.class);
         remoteMessageService.ping();
@@ -88,6 +97,11 @@ class BindingResolutionTckTest {
 
         assertTrue(ComplicatedLifecycleInterceptor.postConstructCalled);
         assertTrue(ComplicatedLifecycleInterceptor.preDestroyCalled);
+        // the count, once for each of the two callbacks: the lifecycle interceptor and no other. Neither of the
+        // others interposes, although ComplicatedInterceptor declares every binding this bean carries but
+        // @BasketBinding, which is what keeps it out
+        assertFalse(ComplicatedInterceptor.intercepted);
+        assertFalse(ComplicatedAroundConstructInterceptor.aroundConstructCalled);
     }
 
     /**
@@ -95,10 +109,29 @@ class BindingResolutionTckTest {
      */
     @Test
     void testConstructorInterceptorBindings() {
-        ComplicatedAroundConstructInterceptor.reset();
+        reset();
 
         assertNotNull(context.createBean(MachineService.class));
 
         assertTrue(ComplicatedAroundConstructInterceptor.aroundConstructCalled);
+        // the count: the around-construct interceptor and no other
+        assertFalse(ComplicatedInterceptor.intercepted);
+        assertFalse(ComplicatedLifecycleInterceptor.postConstructCalled);
+        assertFalse(ComplicatedLifecycleInterceptor.preDestroyCalled);
+    }
+
+    private static void reset() {
+        ComplicatedInterceptor.reset();
+        ComplicatedLifecycleInterceptor.reset();
+        ComplicatedAroundConstructInterceptor.reset();
+    }
+
+    /**
+     * That nothing but the around-invoke interceptor of the deployment interposed.
+     */
+    private static void assertNoOtherInterceptorInterposed() {
+        assertFalse(ComplicatedLifecycleInterceptor.postConstructCalled);
+        assertFalse(ComplicatedLifecycleInterceptor.preDestroyCalled);
+        assertFalse(ComplicatedAroundConstructInterceptor.aroundConstructCalled);
     }
 }

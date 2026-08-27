@@ -72,10 +72,6 @@ class LifecycleCallbackTckTest {
     }
 
     @Test
-    @Disabled("Micronaut does not invoke the @PreDestroy method of a bean that has pre-destroy interception: the "
-        + "generated doDispose of the intercepted bean definition calls preDestroy(..) but not the callback itself, "
-        + "unlike doInitialize, which does call the @PostConstruct method. The interceptors of the callback do run, "
-        + "which is what testPreDestroyInterceptor asserts here")
     void testPreDestroyCallbackOfTheBeanItself() {
         createAndDestroyInstance(Goat.class);
         assertTrue(Goat.isPreDestroyInterceptorCalled());
@@ -91,9 +87,6 @@ class LifecycleCallbackTckTest {
     }
 
     @Test
-    @Disabled("Micronaut does not invoke the @PreDestroy method of a bean that has pre-destroy interception, so the "
-        + "one method the bean declares for both of its callbacks is invoked once rather than twice. The same "
-        + "defect as in testPreDestroyCallbackOfTheBeanItself")
     void testSingleMethodOfTheBeanInterposingOnBothOfItsCallbacks() {
         AlmightyLifecycleInterceptor.reset();
         Dog.reset();

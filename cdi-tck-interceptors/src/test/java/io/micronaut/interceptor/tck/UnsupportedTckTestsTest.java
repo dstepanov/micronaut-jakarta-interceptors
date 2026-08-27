@@ -28,14 +28,6 @@ import org.junit.jupiter.api.Test;
 class UnsupportedTckTestsTest {
 
     @Test
-    @Disabled("bindings/resolution/InterceptorBindingResolutionTest counts how many interceptors a set of bindings "
-        + "resolves to by asking a BeanManager, which Micronaut does not implement. Only the count is missing: the "
-        + "rest of every one of its methods, which is whether the interceptor of the deployment then interposed, "
-        + "runs in BindingResolutionTckTest")
-    void interceptorCountsThroughTheBeanManager() {
-    }
-
-    @Test
     @Disabled("contract/aroundInvoke/AroundInvokeAccessInterceptorTest#testPrivateAroundInvokeInterceptor and "
         + "contract/lifecycleCallback/LifecycleCallbackInterceptorTest#testPrivateLifecycleInterceptorMethod "
         + "declare a private interceptor method. This module rejects one, because it is invoked through the "

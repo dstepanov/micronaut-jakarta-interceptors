@@ -49,8 +49,3 @@ interceptor's own callback.
 
 `getMethod()` is `null` for a lifecycle callback and `getParameters()` fails, as the specification prescribes;
 `getTarget()` is the bean throughout.
-
-WARNING: The `@PreDestroy` method of the intercepted bean itself is currently not invoked when the bean has
-pre-destroy interception; the interceptors run, but the chain does not reach the callback. This is a defect of the
-Micronaut bean definition writer rather than of this module — the equivalent post-construct path is correct — and
-the test that covers it is disabled until it is fixed upstream.

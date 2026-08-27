@@ -133,8 +133,3 @@ three.
 
 A Kotlin suspending function is intercepted for the whole of its suspension, and the continuation the compiler adds
 after the arguments it declares is not shown to the interceptor.
-
-== Upstream defect
-
-The `@PreDestroy` method of an intercepted bean is not invoked when the bean has pre-destroy interception. See
-<<lifecycle,Lifecycle and Constructor Interception>>.

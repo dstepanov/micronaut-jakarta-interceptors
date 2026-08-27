@@ -23,7 +23,7 @@ import org.junit.jupiter.api.Test;
  * all, each recorded with the reason. They are marked rather than left out, so that what the harness does not
  * cover is as visible in a test report as what it does.
  *
- * <p>The kit's own assertions for everything else are ported into the packages of the scenarios they belong to.</p>
+ * <p>The kit's own test classes and assertions run directly for everything else.</p>
  */
 class UnsupportedTckTestsTest {
 
@@ -34,5 +34,13 @@ class UnsupportedTckTestsTest {
         + "executable method Micronaut generates for it and a private method has none. Recorded as a difference "
         + "under Conformance, sections 2.6 cb) and 2.7 jb)")
     void privateInterceptorMethods() {
+    }
+
+    @Test
+    @Disabled("contract/interceptorLifeCycle/InterceptorLifeCycleTest#"
+        + "testInterceptorInstanceCreatedWhenTargetInstanceCreated expects every associated interceptor instance "
+        + "to be created with its target. This module creates an interceptor when it is first needed instead, as "
+        + "recorded under Conformance, section 2.3 ba)")
+    void interceptorInstancesCreatedWithTheirTarget() {
     }
 }

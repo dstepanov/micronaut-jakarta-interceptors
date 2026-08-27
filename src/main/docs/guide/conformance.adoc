@@ -11,18 +11,19 @@ Neither can be run against this module, and the reason is not the runtime they n
 `jakarta.enterprise.inject.spi.BeanContainer`, Arquillian deployments and the CDI rules of type discovery.
 Micronaut has a dependency injection container of its own and implements none of that.
 
-What can be run are the *scenarios* those tests deploy. The `org.jboss.cdi.tck.interceptors.tests` package of
-`jakarta.enterprise:cdi-tck-core-impl` carries the scenarios of the Interceptors specification - the beans, the
-interceptor classes and the binding annotations its own authors wrote - and they are ordinary Jakarta Interceptors
-code. The `cdi-tck-interceptors` module of this repository fetches those sources from Maven Central at build time,
-compiles them with the annotation processor of this module and drives them from Micronaut, asserting what the
-kit's own test classes assert. Nothing is vendored; the sources are Apache 2.0 licensed, as this project is.
+What can be run are the interceptor tests with their container access adapted. The
+`org.jboss.cdi.tck.interceptors.tests` package of `jakarta.enterprise:cdi-tck-core-impl` carries the scenarios of the
+Interceptors specification - the beans, the interceptor classes and the binding annotations its own authors wrote -
+and they are ordinary Jakarta Interceptors code. The `cdi-tck-interceptors` module fetches those sources from Maven
+Central at build time and compiles them with this module's annotation processor. It then runs the kit's own compiled
+TestNG test classes unchanged, with a small `AbstractTest` bridge translating the Arquillian and CDI bean operations
+they use into Micronaut operations. Nothing is vendored; the sources are Apache 2.0 licensed, as this project is.
 
 The harness marks the kit's test methods it cannot run, each with its reason, so that what is not covered is as
 visible in a test report as what is. What it cannot run declares a private interceptor method, which this module
-rejects. A bean manager is stood in for where a scenario only takes one as an argument, and the scopes and producer
-methods of Jakarta Contexts and Dependency Injection are read as their Micronaut equivalents, so that the scenarios
-themselves can be deployed.
+rejects, expects eager interceptor creation, or expects an Arquillian deployment to fail. The last case is tested
+by compiling the deployment and requiring compilation to fail. The scopes and producer methods of Jakarta Contexts
+and Dependency Injection are read as their Micronaut equivalents, so that the scenarios themselves can be created.
 
 Where the kit asks a bean manager how many interceptors a set of bindings resolves to, the count is asserted of the
 interception instead. Each of those binding sets is the binding set of an element of the deployment it is taken

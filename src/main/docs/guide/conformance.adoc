@@ -21,9 +21,10 @@ they use into Micronaut operations. Nothing is vendored; the sources are Apache 
 
 The harness marks the kit's test methods it cannot run, each with its reason, so that what is not covered is as
 visible in a test report as what is. What it cannot run declares a private interceptor method, which this module
-rejects, expects eager interceptor creation, or expects an Arquillian deployment to fail. The last case is tested
-by compiling the deployment and requiring compilation to fail. The scopes and producer methods of Jakarta Contexts
-and Dependency Injection are read as their Micronaut equivalents, so that the scenarios themselves can be created.
+rejects, or expects eager interceptor creation. For tests that expect an Arquillian deployment to fail, the bridge
+reads the original deployment archive, compiles its classes with Micronaut's annotation processor and requires that
+compilation to fail. The scopes and producer methods of Jakarta Contexts and Dependency Injection are read as their
+Micronaut equivalents, so that the scenarios themselves can be created.
 
 Where the kit asks a bean manager how many interceptors a set of bindings resolves to, the count is asserted of the
 interception instead. Each of those binding sets is the binding set of an element of the deployment it is taken

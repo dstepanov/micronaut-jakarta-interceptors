@@ -15,6 +15,7 @@
  */
 package org.jboss.cdi.tck;
 
+import io.micronaut.annotation.processing.test.JavaParser;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationUtil;
@@ -36,13 +37,21 @@ import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.DataProvider;
 
+import javax.tools.JavaFileObject;
+import javax.tools.SimpleJavaFileObject;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Proxy;
 import java.lang.reflect.Type;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -51,6 +60,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 /**
  * Runs the unchanged CDI TCK tests against a Micronaut application context instead of Arquillian.
@@ -62,12 +72,24 @@ public abstract class AbstractTest {
 
     private static final String INTERCEPTOR = "jakarta.interceptor.Interceptor";
     private static final String INTERCEPTOR_BINDING = "jakarta.interceptor.InterceptorBinding";
+    private static final String ARQUILLIAN_DEPLOYMENT = "org.jboss.arquillian.container.test.api.Deployment";
+    private static final String SHOULD_THROW_EXCEPTION =
+        "org.jboss.arquillian.container.test.api.ShouldThrowException";
+    private static final Map<String, String> EXPECTED_DEPLOYMENT_DIAGNOSTICS = Map.of(
+        "org.jboss.cdi.tck.interceptors.tests.bindings.broken.InvalidTransitiveInterceptorBindingAnnotationsTest",
+        "BazBinding",
+        "org.jboss.cdi.tck.interceptors.tests.bindings.broken.InvalidStereotypeInterceptorBindingAnnotationsTest",
+        "BazBinding"
+    );
 
     private ApplicationContext context;
     private BeanManager beanManager;
 
     @BeforeClass(alwaysRun = true)
-    public void startMicronaut() throws IllegalAccessException {
+    public void startMicronaut() throws ReflectiveOperationException {
+        if (verifyExpectedDeploymentFailure()) {
+            return;
+        }
         context = ApplicationContext.run();
         beanManager = beanManager();
         injectTestFields();
@@ -109,6 +131,113 @@ public abstract class AbstractTest {
             }
         }
         return false;
+    }
+
+    /**
+     * Replaces Arquillian's deployment phase for tests whose entire assertion is that deployment fails.
+     *
+     * <p>The original test method is empty: Arquillian normally builds the archive returned by the method annotated
+     * with Arquillian's {@code @Deployment} and satisfies {@code @ShouldThrowException} when the container rejects
+     * it. This bridge reads that unchanged archive, obtains the corresponding source resources and hands them to
+     * Micronaut's annotation processor instead.</p>
+     */
+    private boolean verifyExpectedDeploymentFailure() throws ReflectiveOperationException {
+        for (Method deployment : getClass().getDeclaredMethods()) {
+            Annotation expected = annotation(deployment, SHOULD_THROW_EXCEPTION);
+            if (annotation(deployment, ARQUILLIAN_DEPLOYMENT) == null || expected == null) {
+                continue;
+            }
+            Object archive;
+            try {
+                archive = deployment.invoke(null);
+            } catch (InvocationTargetException e) {
+                throw new IllegalStateException("Cannot create TCK deployment archive", e.getCause());
+            }
+            List<JavaFileObject> sources = deploymentSources(archive);
+            if (sources.isEmpty()) {
+                throw new AssertionError("The TCK deployment archive contains no source classes");
+            }
+            String expectedDiagnostic = EXPECTED_DEPLOYMENT_DIAGNOSTICS.get(getClass().getName());
+            if (expectedDiagnostic == null) {
+                throw new AssertionError("No expected deployment diagnostic is recorded for " + getClass().getName());
+            }
+            try (JavaParser parser = new JavaParser()) {
+                try {
+                    parser.generate(sources.toArray(JavaFileObject[]::new));
+                } catch (RuntimeException expectedFailure) {
+                    if (!failureMentions(expectedFailure, expectedDiagnostic)) {
+                        throw new AssertionError(
+                            "Deployment failed without the expected diagnostic [" + expectedDiagnostic + "]",
+                            expectedFailure
+                        );
+                    }
+                    return true;
+                }
+            }
+            Class<?> expectedType = (Class<?>) expected.annotationType().getMethod("value").invoke(expected);
+            throw new AssertionError("Expected deployment to throw " + expectedType.getName());
+        }
+        return false;
+    }
+
+    private static boolean failureMentions(Throwable failure, String expected) {
+        for (Throwable current = failure; current != null; current = current.getCause()) {
+            if (current.getMessage() != null && current.getMessage().contains(expected)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Annotation annotation(Method method, String annotationName) {
+        return Arrays.stream(method.getAnnotations())
+            .filter(annotation -> annotation.annotationType().getName().equals(annotationName))
+            .findFirst()
+            .orElse(null);
+    }
+
+    private static List<JavaFileObject> deploymentSources(Object archive) throws ReflectiveOperationException {
+        Map<String, JavaFileObject> sources = new TreeMap<>();
+        Class<?> archiveType = Class.forName("org.jboss.shrinkwrap.api.Archive");
+        Class<?> archivePathType = Class.forName("org.jboss.shrinkwrap.api.ArchivePath");
+        Map<?, ?> content = (Map<?, ?>) archiveType.getMethod("getContent").invoke(archive);
+        Method getPath = archivePathType.getMethod("get");
+        for (Object archivePath : content.keySet()) {
+            String path = (String) getPath.invoke(archivePath);
+            int classes = path.indexOf("/classes/");
+            if (classes < 0 || !path.endsWith(".class")) {
+                continue;
+            }
+            String className = path.substring(classes + "/classes/".length(), path.length() - ".class".length());
+            int nested = className.indexOf('$');
+            if (nested >= 0) {
+                className = className.substring(0, nested);
+            }
+            String sourcePath = "/" + className + ".java";
+            JavaFileObject source = sourceOf(sourcePath);
+            if (source != null) {
+                sources.putIfAbsent(sourcePath, source);
+            }
+        }
+        return List.copyOf(sources.values());
+    }
+
+    private static JavaFileObject sourceOf(String path) {
+        try (InputStream input = AbstractTest.class.getResourceAsStream(path)) {
+            if (input == null) {
+                // The archive also contains the TCK test class; only its deployment classes are source resources.
+                return null;
+            }
+            String text = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+            return new SimpleJavaFileObject(URI.create("string://" + path), JavaFileObject.Kind.SOURCE) {
+                @Override
+                public CharSequence getCharContent(boolean ignoreEncodingErrors) {
+                    return text;
+                }
+            };
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     private Object argument(Type type) {

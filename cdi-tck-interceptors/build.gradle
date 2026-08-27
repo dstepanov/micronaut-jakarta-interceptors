@@ -55,7 +55,7 @@ def tckScenarios = tasks.register('tckScenarios', Sync) {
         // archive and a BeanManager. The scenarios they deploy are what is kept
         exclude '**/*Test.java'
         // a broken scenario is meant to be rejected as it is deployed rather than run. It is not compiled with
-        // the rest; it is handed to the compiler by `brokenTckScenarios` below, which asserts that it is rejected
+        // the rest; it is handed to the compiler by the AbstractTest bridge, which asserts that it is rejected
         exclude '**/broken/**'
         exclude unbuildableScenarios
     }
@@ -73,8 +73,9 @@ def tckScenarios = tasks.register('tckScenarios', Sync) {
 }
 
 // The deployments the kit expects a container to reject. They are kept as text rather than compiled with the
-// rest, and handed to the annotation processor one deployment at a time by `BrokenDeploymentTckTest`, which
-// asserts that compilation fails: what a container reports as it deploys, this module reports as it compiles.
+// rest, and handed to the annotation processor one deployment at a time by the AbstractTest bridge, which reads
+// the original TCK deployment archive and asserts that compilation fails. What a container reports as it deploys,
+// this module reports as it compiles.
 def brokenTckScenarios = tasks.register('brokenTckScenarios', Sync) {
     description = 'Unpacks the interceptor deployments the technology compatibility kit expects to be rejected.'
     from({ zipTree(configurations.tckSources.singleFile) }) {
@@ -92,9 +93,6 @@ def directTckTests = tasks.register('directTckTests', Sync) {
     from({ zipTree(configurations.tckTests.singleFile) }) {
         include 'org/jboss/cdi/tck/interceptors/tests/**/*Test.class'
         include 'org/jboss/cdi/tck/interceptors/tests/**/*Test$*.class'
-        // These two tests assert that an Arquillian deployment is rejected. Their unchanged methods cannot express
-        // that without a deployment container; BrokenDeploymentTckTest performs the equivalent compiler check.
-        exclude 'org/jboss/cdi/tck/interceptors/tests/bindings/broken/**'
     }
     into layout.buildDirectory.dir('generated/tck-tests')
 }
@@ -138,8 +136,8 @@ def directTckTest = tasks.register('directTckTest', Test) {
     classpath = files(sourceSets.test.output, configurations.testRuntimeClasspath, configurations.tckTestRuntime)
     useTestNG()
     filter {
-        // Private interceptor methods are the two documented conformance differences whose scenario sources cannot
-        // be compiled into Micronaut executable methods.
+        // The three documented conformance differences: private interceptor methods cannot be compiled into
+        // Micronaut executable methods, and interceptor instances are created lazily rather than with their target.
         excludeTestsMatching '*AroundInvokeAccessInterceptorTest.testPrivateAroundInvokeInterceptor'
         excludeTestsMatching '*LifecycleCallbackInterceptorTest.testPrivateLifecycleInterceptorMethod'
         excludeTestsMatching '*InterceptorLifeCycleTest.testInterceptorInstanceCreatedWhenTargetInstanceCreated'

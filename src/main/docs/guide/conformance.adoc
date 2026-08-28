@@ -418,7 +418,7 @@ Everything the specification describes that applies to a module of this kind is 
 | cb)
 | Test private level access.
 | Covered
-| AccessLevelTest
+| AroundInvokeAccessInterceptorTest, from the kit
 
 | cc)
 | Test protected level access.
@@ -518,7 +518,7 @@ Everything the specification describes that applies to a module of this kind is 
 | jb)
 | Test private level access.
 | Covered
-| AccessLevelTest
+| LifecycleCallbackInterceptorTest, from the kit
 
 | jc)
 | Test protected level access.

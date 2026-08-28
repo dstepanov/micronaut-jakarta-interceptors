@@ -13,8 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.micronaut.interceptor.runtime;
+package io.micronaut.interceptor.processor;
 
+import io.micronaut.core.annotation.AnnotationClassValue;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationUtil;
 import io.micronaut.core.annotation.AnnotationValue;
@@ -28,15 +29,19 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 /**
- * Reads the interceptor bindings of an element and compares them the way the specification does.
+ * Reads the interceptor bindings of an element and reduces each of them to what it is compared by.
  *
  * <p>An interceptor applies to an element when every binding annotation the interceptor declares is also declared
  * by the element, with the same member values. A member excluded from the binding, which is what
  * {@code jakarta.enterprise.util.Nonbinding} does, is left out of the comparison, and the values an annotation
  * defaults to are filled in first, so that {@code @Logged} and {@code @Logged(level = "INFO")} are the same binding
  * when {@code "INFO"} is the default.</p>
+ *
+ * <p>None of that depends on the running application, so it happens here rather than there: what each binding is
+ * compared by is written out on the element, and the runtime compares the strings.</p>
  *
  * @author Denis Stepanov
  * @since 1.0
@@ -122,8 +127,8 @@ public final class InterceptorBindingValues {
      * @param annotationMetadata The metadata of the element
      * @return The bindings
      */
-    static Set<Binding> of(AnnotationMetadata annotationMetadata) {
-        List<String> names = annotationMetadata.getAnnotationNamesByStereotype(JakartaInterceptorSupport.INTERCEPTOR_BINDING);
+    public static Set<Binding> of(AnnotationMetadata annotationMetadata) {
+        List<String> names = annotationMetadata.getAnnotationNamesByStereotype(JakartaInterceptors.INTERCEPTOR_BINDING);
         if (names.isEmpty()) {
             return Set.of();
         }
@@ -167,5 +172,50 @@ public final class InterceptorBindingValues {
      * @param values The member values
      */
     public record Binding(String name, Map<String, Object> values) {
+
+        /**
+         * Writes the binding out as one string, so that two of them can be compared without reading either
+         * annotation again.
+         *
+         * <p>The members are written in the order of their names rather than the order they were declared in, so
+         * that an interceptor and the element it intercepts produce the same string for the same binding however
+         * either of them wrote it.</p>
+         *
+         * @return The binding as a string
+         */
+        public String canonical() {
+            StringBuilder builder = new StringBuilder(name).append('(');
+            boolean first = true;
+            for (Map.Entry<String, Object> entry : new TreeMap<>(values).entrySet()) {
+                if (!first) {
+                    builder.append(',');
+                }
+                first = false;
+                builder.append(entry.getKey()).append('=');
+                render(builder, entry.getValue());
+            }
+            return builder.append(')').toString();
+        }
+
+        private static void render(StringBuilder builder, @Nullable Object value) {
+            switch (value) {
+                case null -> builder.append("null");
+                case AnnotationClassValue<?> classValue -> builder.append(classValue.getName());
+                case Class<?> type -> builder.append(type.getName());
+                case AnnotationValue<?> annotation -> builder.append(of(annotation).canonical());
+                case Enum<?> constant -> builder.append(constant.name());
+                case List<?> list -> {
+                    builder.append('[');
+                    for (int i = 0; i < list.size(); i++) {
+                        if (i > 0) {
+                            builder.append(',');
+                        }
+                        render(builder, list.get(i));
+                    }
+                    builder.append(']');
+                }
+                default -> builder.append(value);
+            }
+        }
     }
 }

@@ -21,7 +21,6 @@ import io.micronaut.core.annotation.Internal;
 import io.micronaut.inject.ast.ClassElement;
 import io.micronaut.inject.ast.Element;
 import io.micronaut.inject.visitor.VisitorContext;
-import io.micronaut.interceptor.runtime.InterceptorBindingValues;
 import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;

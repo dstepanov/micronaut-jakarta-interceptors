@@ -15,6 +15,7 @@
  */
 package io.micronaut.interceptor.runtime;
 
+import io.micronaut.aop.Adapter;
 import io.micronaut.aop.InterceptorKind;
 import io.micronaut.context.BeanContext;
 import io.micronaut.core.annotation.AnnotationMetadata;
@@ -25,7 +26,9 @@ import io.micronaut.inject.BeanDefinition;
 import io.micronaut.inject.ExecutableMethod;
 import io.micronaut.interceptor.annotation.InterceptionKind;
 import io.micronaut.interceptor.annotation.JakartaInterception;
+import io.micronaut.interceptor.annotation.JakartaInterceptorIndex;
 import io.micronaut.interceptor.annotation.JakartaInterceptorMethods;
+import io.micronaut.interceptor.annotation.JakartaVoidInterceptorIndex;
 import jakarta.inject.Singleton;
 import jakarta.interceptor.Interceptor;
 import jakarta.interceptor.InvocationContext;
@@ -36,6 +39,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -58,6 +62,10 @@ public final class InterceptorChainResolver {
 
     private final BeanContext beanContext;
     private final Map<ChainKey, List<InterceptorReference>> chains = new ConcurrentHashMap<>();
+    // an interceptor class describes itself the same way whichever element its chain was resolved for, so what is
+    // read of it is read once rather than once for every element it intercepts
+    private final Map<Class<?>, Optional<BeanDefinition<?>>> describing = new ConcurrentHashMap<>();
+    private final Map<ReferenceKey, List<InterceptorReference>> references = new ConcurrentHashMap<>();
 
     /**
      * @param beanContext The bean context the interceptor classes are beans of
@@ -117,7 +125,7 @@ public final class InterceptorChainResolver {
                 ordered.putIfAbsent(interceptorClass, definition);
             }
         }
-        for (BeanDefinition<?> definition : boundInterceptors(metadata)) {
+        for (BeanDefinition<?> definition : boundInterceptors(interception)) {
             BeanDefinition<?> describing = describing(definition.getBeanType());
             ordered.putIfAbsent(definition.getBeanType(), describing == null ? definition : describing);
         }
@@ -150,16 +158,26 @@ public final class InterceptorChainResolver {
     /**
      * Finds the interceptor classes whose binding annotations the element declares as well. The specification binds
      * an interceptor to an element when every binding of the interceptor is a binding of the element.
+     *
+     * <p>What a binding is compared by was worked out by the processor and written out on both of them, so what is
+     * compared here are the strings it wrote rather than the annotations themselves.</p>
      */
-    private List<BeanDefinition<?>> boundInterceptors(AnnotationMetadata metadata) {
-        Set<InterceptorBindingValues.Binding> declared = InterceptorBindingValues.of(metadata);
+    private List<BeanDefinition<?>> boundInterceptors(@Nullable AnnotationValue<JakartaInterception> interception) {
+        if (interception == null) {
+            return List.of();
+        }
+        Set<String> declared = Set.of(interception.stringValues("bindings"));
         if (declared.isEmpty()) {
             return List.of();
         }
         List<BeanDefinition<?>> matching = new ArrayList<>();
         for (BeanDefinition<?> definition : allInterceptorClasses()) {
-            Set<InterceptorBindingValues.Binding> bindings =
-                InterceptorBindingValues.of(definition.getAnnotationMetadata());
+            AnnotationValue<JakartaInterceptorMethods> methods =
+                definition.getAnnotation(JakartaInterceptorMethods.class);
+            if (methods == null) {
+                continue;
+            }
+            Set<String> bindings = Set.of(methods.stringValues("bindings"));
             if (!bindings.isEmpty() && declared.containsAll(bindings)) {
                 matching.add(definition);
             }
@@ -179,6 +197,11 @@ public final class InterceptorChainResolver {
      * by the bean context.</p>
      */
     private @Nullable BeanDefinition<?> describing(Class<?> interceptorClass) {
+        return describing.computeIfAbsent(interceptorClass, type -> Optional.ofNullable(describe(type)))
+            .orElse(null);
+    }
+
+    private @Nullable BeanDefinition<?> describe(Class<?> interceptorClass) {
         BeanDefinition<?> fallback = null;
         for (BeanDefinition<?> definition : beanContext.getBeanDefinitions(interceptorClass)) {
             if (definition.getAnnotation(JakartaInterceptorMethods.class) == null) {
@@ -195,6 +218,11 @@ public final class InterceptorChainResolver {
     /**
      * All the interceptor classes of the context.
      *
+     * <p>They are asked for by the type the processor indexed them under rather than by reading every bean
+     * definition of the context and keeping the ones that are interceptor classes. An index is what the context
+     * keeps for exactly this question, and it answers it without the size of the application being the cost of
+     * resolving one chain.</p>
+     *
      * <p>They are looked for again for every chain that is resolved, rather than once and remembered. The first
      * chain of an application is resolved while a bean of it is being created, and the definitions the context
      * knows of at that moment are not yet all of them; a list taken then and kept would leave every interceptor
@@ -202,19 +230,45 @@ public final class InterceptorChainResolver {
      * each intercepted element, so this runs once for each of them rather than once for each invocation.</p>
      */
     private List<BeanDefinition<?>> allInterceptorClasses() {
-        return beanContext.getAllBeanDefinitions()
-            .stream()
-            .filter(definition -> definition.hasAnnotation(JakartaInterceptorSupport.INTERCEPTOR))
-            .<BeanDefinition<?>>map(definition -> definition)
-            .toList();
+        List<BeanDefinition<?>> interceptors = new ArrayList<>();
+        collectIndexed(JakartaInterceptorIndex.class, interceptors);
+        collectIndexed(JakartaVoidInterceptorIndex.class, interceptors);
+        return interceptors;
+    }
+
+    private void collectIndexed(Class<?> index, List<BeanDefinition<?>> interceptors) {
+        for (BeanDefinition<?> indexed : beanContext.getBeanDefinitions(index)) {
+            // the definition of the index is the one of the adapted method, and what it describes is the
+            // interceptor class the method was declared by
+            Class<?> interceptorClass = indexed
+                .classValue(Adapter.class, Adapter.InternalAttributes.ADAPTED_BEAN)
+                .orElse(null);
+            if (interceptorClass == null) {
+                continue;
+            }
+            BeanDefinition<?> definition = describing(interceptorClass);
+            // a class that declares an interceptor method without declaring itself an interceptor class is one
+            // only where it is named directly, and takes no part in what a binding annotation binds
+            if (definition != null && definition.hasAnnotation(JakartaInterceptorSupport.INTERCEPTOR)) {
+                interceptors.add(definition);
+            }
+        }
     }
 
     /**
      * The interceptor methods of one interceptor class that interpose on a kind of interception, in the order the
      * specification invokes them: the ones its superclasses declare first, its own last.
      */
+    private List<InterceptorReference> references(BeanDefinition<?> definition, InterceptionKind kind, boolean self) {
+        // the interceptor methods of a class that interpose on a kind are the same for every element whose chain
+        // includes it, so the list is built once and shared between them
+        return references.computeIfAbsent(
+            new ReferenceKey(definition.getBeanType(), kind, self),
+            key -> referencesOf(definition, kind, self));
+    }
+
     @SuppressWarnings("unchecked")
-    private static List<InterceptorReference> references(BeanDefinition<?> definition, InterceptionKind kind, boolean self) {
+    private static List<InterceptorReference> referencesOf(BeanDefinition<?> definition, InterceptionKind kind, boolean self) {
         AnnotationValue<JakartaInterceptorMethods> methods =
             definition.getAnnotation(JakartaInterceptorMethods.class);
         if (methods == null) {
@@ -236,7 +290,9 @@ public final class InterceptorChainResolver {
                     + "to be compiled with the Jakarta Interceptors annotation processor"));
             references.add(new InterceptorReference(definition.getBeanType(), method, self));
         }
-        return references;
+        // the list is shared between every chain that includes this interceptor, so it is not one of theirs to
+        // change
+        return List.copyOf(references);
     }
 
     /**
@@ -266,5 +322,16 @@ public final class InterceptorChainResolver {
      * @param kind    The kind of interception
      */
     record ChainKey(Object element, InterceptorKind kind) {
+    }
+
+    /**
+     * Identifies the interceptor methods of one interceptor class that interpose on one kind of interception,
+     * invoked on an interceptor of its own or on the intercepted instance.
+     *
+     * @param interceptorClass The interceptor class
+     * @param kind             The kind of interception
+     * @param self             Whether the methods are invoked on the intercepted instance
+     */
+    private record ReferenceKey(Class<?> interceptorClass, InterceptionKind kind, boolean self) {
     }
 }

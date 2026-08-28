@@ -76,4 +76,12 @@ public @interface JakartaInterceptorMethods {
      * @return The method names, most general superclass first
      */
     String[] preDestroy() default {};
+
+    /**
+     * The binding annotations the interceptor class declares, each written out as one string by the processor,
+     * the same way the ones of an intercepted element are.
+     *
+     * @return The bindings of the interceptor class
+     */
+    String[] bindings() default {};
 }

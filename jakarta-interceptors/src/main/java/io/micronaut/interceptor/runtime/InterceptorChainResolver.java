@@ -120,7 +120,7 @@ public final class InterceptorChainResolver {
                 ordered.putIfAbsent(interceptorClass, definition);
             }
         }
-        for (BeanDefinition<?> definition : boundInterceptors(metadata)) {
+        for (BeanDefinition<?> definition : boundInterceptors(interception)) {
             BeanDefinition<?> describing = describing(definition.getBeanType());
             ordered.putIfAbsent(definition.getBeanType(), describing == null ? definition : describing);
         }
@@ -153,16 +153,26 @@ public final class InterceptorChainResolver {
     /**
      * Finds the interceptor classes whose binding annotations the element declares as well. The specification binds
      * an interceptor to an element when every binding of the interceptor is a binding of the element.
+     *
+     * <p>What a binding is compared by was worked out by the processor and written out on both of them, so what is
+     * compared here are the strings it wrote rather than the annotations themselves.</p>
      */
-    private List<BeanDefinition<?>> boundInterceptors(AnnotationMetadata metadata) {
-        Set<InterceptorBindingValues.Binding> declared = InterceptorBindingValues.of(metadata);
+    private List<BeanDefinition<?>> boundInterceptors(@Nullable AnnotationValue<JakartaInterception> interception) {
+        if (interception == null) {
+            return List.of();
+        }
+        Set<String> declared = Set.of(interception.stringValues("bindings"));
         if (declared.isEmpty()) {
             return List.of();
         }
         List<BeanDefinition<?>> matching = new ArrayList<>();
         for (BeanDefinition<?> definition : allInterceptorClasses()) {
-            Set<InterceptorBindingValues.Binding> bindings =
-                InterceptorBindingValues.of(definition.getAnnotationMetadata());
+            AnnotationValue<JakartaInterceptorMethods> methods =
+                definition.getAnnotation(JakartaInterceptorMethods.class);
+            if (methods == null) {
+                continue;
+            }
+            Set<String> bindings = Set.of(methods.stringValues("bindings"));
             if (!bindings.isEmpty() && declared.containsAll(bindings)) {
                 matching.add(definition);
             }

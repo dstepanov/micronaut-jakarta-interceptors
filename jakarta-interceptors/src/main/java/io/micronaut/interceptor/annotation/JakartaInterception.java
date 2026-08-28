@@ -89,4 +89,15 @@ public @interface JakartaInterception {
      * @return Whether the element is a timeout method
      */
     boolean timeout() default false;
+
+    /**
+     * The binding annotations in effect on the element, each written out as one string by the processor.
+     *
+     * <p>An interceptor class is bound to the element when every binding it declares is one of these. Comparing
+     * the two is comparing strings: what a binding is compared by - the members it declares, the ones it defaults
+     * to, less the ones excluded from the binding - was worked out at compilation time.</p>
+     *
+     * @return The bindings of the element
+     */
+    String[] bindings() default {};
 }

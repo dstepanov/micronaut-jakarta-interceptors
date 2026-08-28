@@ -39,6 +39,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -61,6 +62,10 @@ public final class InterceptorChainResolver {
 
     private final BeanContext beanContext;
     private final Map<ChainKey, List<InterceptorReference>> chains = new ConcurrentHashMap<>();
+    // an interceptor class describes itself the same way whichever element its chain was resolved for, so what is
+    // read of it is read once rather than once for every element it intercepts
+    private final Map<Class<?>, Optional<BeanDefinition<?>>> describing = new ConcurrentHashMap<>();
+    private final Map<ReferenceKey, List<InterceptorReference>> references = new ConcurrentHashMap<>();
 
     /**
      * @param beanContext The bean context the interceptor classes are beans of
@@ -192,6 +197,11 @@ public final class InterceptorChainResolver {
      * by the bean context.</p>
      */
     private @Nullable BeanDefinition<?> describing(Class<?> interceptorClass) {
+        return describing.computeIfAbsent(interceptorClass, type -> Optional.ofNullable(describe(type)))
+            .orElse(null);
+    }
+
+    private @Nullable BeanDefinition<?> describe(Class<?> interceptorClass) {
         BeanDefinition<?> fallback = null;
         for (BeanDefinition<?> definition : beanContext.getBeanDefinitions(interceptorClass)) {
             if (definition.getAnnotation(JakartaInterceptorMethods.class) == null) {
@@ -249,8 +259,16 @@ public final class InterceptorChainResolver {
      * The interceptor methods of one interceptor class that interpose on a kind of interception, in the order the
      * specification invokes them: the ones its superclasses declare first, its own last.
      */
+    private List<InterceptorReference> references(BeanDefinition<?> definition, InterceptionKind kind, boolean self) {
+        // the interceptor methods of a class that interpose on a kind are the same for every element whose chain
+        // includes it, so the list is built once and shared between them
+        return references.computeIfAbsent(
+            new ReferenceKey(definition.getBeanType(), kind, self),
+            key -> referencesOf(definition, kind, self));
+    }
+
     @SuppressWarnings("unchecked")
-    private static List<InterceptorReference> references(BeanDefinition<?> definition, InterceptionKind kind, boolean self) {
+    private static List<InterceptorReference> referencesOf(BeanDefinition<?> definition, InterceptionKind kind, boolean self) {
         AnnotationValue<JakartaInterceptorMethods> methods =
             definition.getAnnotation(JakartaInterceptorMethods.class);
         if (methods == null) {
@@ -272,7 +290,9 @@ public final class InterceptorChainResolver {
                     + "to be compiled with the Jakarta Interceptors annotation processor"));
             references.add(new InterceptorReference(definition.getBeanType(), method, self));
         }
-        return references;
+        // the list is shared between every chain that includes this interceptor, so it is not one of theirs to
+        // change
+        return List.copyOf(references);
     }
 
     /**
@@ -302,5 +322,16 @@ public final class InterceptorChainResolver {
      * @param kind    The kind of interception
      */
     record ChainKey(Object element, InterceptorKind kind) {
+    }
+
+    /**
+     * Identifies the interceptor methods of one interceptor class that interpose on one kind of interception,
+     * invoked on an interceptor of its own or on the intercepted instance.
+     *
+     * @param interceptorClass The interceptor class
+     * @param kind             The kind of interception
+     * @param self             Whether the methods are invoked on the intercepted instance
+     */
+    private record ReferenceKey(Class<?> interceptorClass, InterceptionKind kind, boolean self) {
     }
 }

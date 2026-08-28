@@ -20,11 +20,11 @@ TestNG test classes unchanged, with a small `AbstractTest` bridge translating th
 they use into Micronaut operations. Nothing is vendored; the sources are Apache 2.0 licensed, as this project is.
 
 The harness marks the kit's test methods it cannot run, each with its reason, so that what is not covered is as
-visible in a test report as what is. What it cannot run declares a private interceptor method, which this module
-rejects, or expects eager interceptor creation. For tests that expect an Arquillian deployment to fail, the bridge
-reads the original deployment archive, compiles its classes with Micronaut's annotation processor and requires that
-compilation to fail. The scopes and producer methods of Jakarta Contexts and Dependency Injection are read as their
-Micronaut equivalents, so that the scenarios themselves can be created.
+visible in a test report as what is. What it cannot run expects eager interceptor creation. For tests that expect
+an Arquillian deployment to fail, the bridge reads the original deployment archive, compiles its classes with
+Micronaut's annotation processor and requires that compilation to fail. The scopes and producer methods of Jakarta
+Contexts and Dependency Injection are read as their Micronaut equivalents, so that the scenarios themselves can be
+created.
 
 Where the kit asks a bean manager how many interceptors a set of bindings resolves to, the count is asserted of the
 interception instead. Each of those binding sets is the binding set of an element of the deployment it is taken
@@ -52,14 +52,14 @@ module stands against every one of them.
 |===
 | | Assertions
 
-| Covered by a test of this repository | 124
-| Differs from the specification, deliberately | 9
+| Covered by a test of this repository | 127
+| Differs from the specification, deliberately | 6
 | Not applicable to a module without Jakarta Enterprise Beans, a deployment descriptor or a naming context | 29
 | A statement of intent, with nothing to verify | 4
 |===
 
 Everything the specification describes that applies to a module of this kind is covered by a test, apart from the
-9 differences below, each of which is deliberate.
+6 differences below, each of which is deliberate.
 
 == Where this module differs
 |===
@@ -70,15 +70,6 @@ Everything the specification describes that applies to a module of this kind is 
 
 | 2.3 ba)
 | An interceptor instance is created when the interceptor is first needed rather than when the target instance is created
-
-| 2.6 cb)
-| A private interceptor method is rejected: it has no executable method to invoke
-
-| 2.7 jb)
-| A private interceptor method is rejected
-
-| 2.8 c)
-| A private interceptor method is rejected
 
 | 3.3 f)
 | Micronaut leaves a final class or method uninterceptable rather than reporting a definition error
@@ -426,8 +417,8 @@ Everything the specification describes that applies to a module of this kind is 
 
 | cb)
 | Test private level access.
-| Differs
-| A private interceptor method is rejected: it has no executable method to invoke
+| Covered
+| AroundInvokeAccessInterceptorTest, from the kit
 
 | cc)
 | Test protected level access.
@@ -526,8 +517,8 @@ Everything the specification describes that applies to a module of this kind is 
 
 | jb)
 | Test private level access.
-| Differs
-| A private interceptor method is rejected
+| Covered
+| LifecycleCallbackInterceptorTest, from the kit
 
 | jc)
 | Test protected level access.
@@ -586,8 +577,8 @@ Everything the specification describes that applies to a module of this kind is 
 
 | c)
 | Around-timeout methods can have public , private , protected , or package level access. An around-timeout method must not be declared as abstract , final or static .
-| Differs
-| A private interceptor method is rejected
+| Covered
+| AroundTimeoutTest, InterceptorValidationTest
 
 | d)
 | An around-timeout method can invoke any component or resource that its corresponding timeout method can invoke.

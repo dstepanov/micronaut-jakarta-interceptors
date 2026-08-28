@@ -41,7 +41,7 @@ public class LoggingInterceptor {
 
 <1> `@Interceptor` marks the class and makes it a bean, so it may have its own dependencies injected.
 <2> The binding: this interceptor applies wherever `@Logged` is declared.
-<3> The interceptor method. It must accept a single `InvocationContext` and must not be `private`.
+<3> The interceptor method. It must accept a single `InvocationContext`.
 <4> `proceed()` continues to the next interceptor and finally to the intercepted method.
 
 Declare the bean to intercept:

@@ -27,6 +27,7 @@ import io.micronaut.core.annotation.AnnotationUtil;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.AnnotationValueBuilder;
 import io.micronaut.core.annotation.Internal;
+import io.micronaut.core.annotation.ReflectiveAccess;
 import io.micronaut.inject.ast.ClassElement;
 import io.micronaut.inject.ast.Element;
 import io.micronaut.inject.ast.ElementQuery;
@@ -184,6 +185,11 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         for (Map.Entry<InterceptionKind, List<MethodElement>> entry : model.methods().entrySet()) {
             for (MethodElement method : entry.getValue()) {
                 method.annotate(Executable.class);
+                if (method.isPrivate()) {
+                    // the specification allows a private interceptor method. Micronaut generates an executable
+                    // method that reaches it reflectively once it is told that reflection is permitted
+                    method.annotate(ReflectiveAccess.class);
+                }
                 if (entry.getKey() == InterceptionKind.POST_CONSTRUCT) {
                     method.removeAnnotation(JakartaInterceptors.POST_CONSTRUCT);
                 } else if (entry.getKey() == InterceptionKind.PRE_DESTROY) {
@@ -289,8 +295,12 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
                                         boolean classDeclares,
                                         VisitorContext context) {
         if (model.isInterceptorMethod(method)) {
-            // an interceptor method is not a business method, so it takes no part in the interception of the class
-            method.annotate(JakartaInterception.class, builder -> builder.member("excluded", true));
+            // an interceptor method is not a business method, so it takes no part in the interception of the
+            // class. A private method is never intercepted to begin with, and marking one would leave advice
+            // metadata on a method Micronaut cannot override, which it reports as an error
+            if (!method.isPrivate()) {
+                method.annotate(JakartaInterception.class, builder -> builder.member("excluded", true));
+            }
             return;
         }
         if (!isBusinessMethod(method)) {

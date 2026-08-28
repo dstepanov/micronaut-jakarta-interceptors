@@ -28,15 +28,6 @@ import org.junit.jupiter.api.Test;
 class UnsupportedTckTestsTest {
 
     @Test
-    @Disabled("contract/aroundInvoke/AroundInvokeAccessInterceptorTest#testPrivateAroundInvokeInterceptor and "
-        + "contract/lifecycleCallback/LifecycleCallbackInterceptorTest#testPrivateLifecycleInterceptorMethod "
-        + "declare a private interceptor method. This module rejects one, because it is invoked through the "
-        + "executable method Micronaut generates for it and a private method has none. Recorded as a difference "
-        + "under Conformance, sections 2.6 cb) and 2.7 jb)")
-    void privateInterceptorMethods() {
-    }
-
-    @Test
     @Disabled("contract/interceptorLifeCycle/InterceptorLifeCycleTest#"
         + "testInterceptorInstanceCreatedWhenTargetInstanceCreated expects every associated interceptor instance "
         + "to be created with its target. This module creates an interceptor when it is first needed instead, as "

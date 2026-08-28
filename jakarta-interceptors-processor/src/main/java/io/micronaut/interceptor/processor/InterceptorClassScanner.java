@@ -154,12 +154,6 @@ public final class InterceptorClassScanner {
     }
 
     private static void validate(ClassElement declaringClass, MethodElement method, String annotation, InterceptionKind kind) {
-        if (method.isPrivate()) {
-            throw new ProcessingException(method, "The @" + simpleName(annotation) + " method [" + method.getName()
-                + "] of [" + declaringClass.getName() + "] is private. An interceptor method is invoked through the "
-                + "executable method Micronaut generates for it rather than reflectively, so it has to be at least "
-                + "package private");
-        }
         if (method.isStatic() || method.isFinal()) {
             throw new ProcessingException(method, "The @" + simpleName(annotation) + " method [" + method.getName()
                 + "] of [" + declaringClass.getName() + "] must not be static or final");

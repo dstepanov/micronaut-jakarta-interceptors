@@ -2,18 +2,18 @@ name: GraalVM Native Tests
 on:
   push:
     branches:
-      - master
+      - main
       - '[1-9]+.[0-9]+.x'
   pull_request:
     branches:
-      - master
+      - main
       - '[1-9]+.[0-9]+.x'
 jobs:
   nativeTest:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        java: ['21']
+        java: ['25']
     steps:
       - uses: actions/checkout@v4
       - name: Set up GraalVM

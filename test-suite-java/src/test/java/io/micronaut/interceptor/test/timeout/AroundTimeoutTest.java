@@ -45,6 +45,19 @@ class AroundTimeoutTest {
         }
     }
 
+    /**
+     * 2.8 c): an around-timeout method may be private.
+     */
+    @Test
+    void interposesOnAScheduledMethodThroughAPrivateAroundTimeout() throws Exception {
+        try (ApplicationContext context = ApplicationContext.run()) {
+            assertTrue(PrivatelyTimedService.RAN.await(5, TimeUnit.SECONDS), "the schedule did not run");
+
+            List<String> calls = List.copyOf(PrivateTimeoutInterceptor.CALLS);
+            assertTrue(calls.contains("private aroundTimeout onSchedule"), calls.toString());
+        }
+    }
+
     @Test
     void interposesOnAScheduledMethodThroughAnInterceptorNamedDirectly() throws Exception {
         try (ApplicationContext context = ApplicationContext.run()) {

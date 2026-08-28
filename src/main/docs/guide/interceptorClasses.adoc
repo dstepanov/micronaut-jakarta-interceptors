@@ -38,12 +38,16 @@ bean being intercepted.
 
 The processor reports a declaration the specification does not allow while it is compiled:
 
-* an interceptor method must not be `private`: it is invoked through the executable method Micronaut generates for
-it, so it has to be at least package private;
 * an interceptor method must not be `static` or `final`;
 * a class must not declare two interceptor methods of the same kind;
 * an `@AroundInvoke` or `@AroundTimeout` method must return `Object`;
 * a class annotated `@Interceptor` must declare at least one interceptor method.
+
+An interceptor method may have any access level, which the specification requires in sections 2.6 cb) to cd) and
+2.7 jb) to jd). A `private` one is reached reflectively, because the executable method Micronaut generates cannot
+call it directly; the processor annotates it with `@ReflectiveAccess`, which is what permits that call and what
+`micronaut-graal` turns into the reachability metadata a native image needs. Prefer at least package private
+access where you can, so that the call stays a direct one.
 
 == Injection
 

@@ -48,20 +48,6 @@ class InterceptorValidationTest {
     }
 
     @Test
-    void aPrivateInterceptorMethodIsReported() {
-        String error = compile("""
-            @Interceptor
-            public class Subject {
-                @AroundInvoke
-                private Object intercept(InvocationContext context) throws Exception {
-                    return context.proceed();
-                }
-            }
-            """);
-        assertTrue(error.contains("is private"), error);
-    }
-
-    @Test
     void anInterceptorMethodThatReturnsNothingIsReported() {
         String error = compile("""
             @Interceptor

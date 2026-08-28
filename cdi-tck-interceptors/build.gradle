@@ -34,16 +34,6 @@ dependencies {
     tckTestRuntime libs.cdi.tck.core
 }
 
-// The scenarios that cannot be built here, and why. Each is a deliberate exclusion rather than a silent one.
-def unbuildableScenarios = [
-    // the specification allows a private interceptor method; this module rejects one, because it is invoked
-    // through the executable method Micronaut generates for it and a private method has none. Recorded as a
-    // difference under Conformance, sections 2.6 cb) and 2.7 jb)
-    '**/contract/aroundInvoke/PrivateInterceptor.java',
-    '**/contract/aroundInvoke/Bean3.java',
-    '**/contract/lifecycleCallback/PrivateLifecycleInterceptor.java',
-]
-
 def tckScenarios = tasks.register('tckScenarios', Sync) {
     description = 'Unpacks the interceptor scenarios of the technology compatibility kit.'
     from({ zipTree(configurations.tckSources.singleFile) }) {
@@ -57,7 +47,6 @@ def tckScenarios = tasks.register('tckScenarios', Sync) {
         // a broken scenario is meant to be rejected as it is deployed rather than run. It is not compiled with
         // the rest; it is handed to the compiler by the AbstractTest bridge, which asserts that it is rejected
         exclude '**/broken/**'
-        exclude unbuildableScenarios
     }
     into layout.buildDirectory.dir('generated/tck')
     // a scenario that reaches for the deployment container itself cannot be built here. Assertions made from
@@ -136,10 +125,8 @@ def directTckTest = tasks.register('directTckTest', Test) {
     classpath = files(sourceSets.test.output, configurations.testRuntimeClasspath, configurations.tckTestRuntime)
     useTestNG()
     filter {
-        // The three documented conformance differences: private interceptor methods cannot be compiled into
-        // Micronaut executable methods, and interceptor instances are created lazily rather than with their target.
-        excludeTestsMatching '*AroundInvokeAccessInterceptorTest.testPrivateAroundInvokeInterceptor'
-        excludeTestsMatching '*LifecycleCallbackInterceptorTest.testPrivateLifecycleInterceptorMethod'
+        // The documented conformance difference: interceptor instances are created lazily rather than with their
+        // target.
         excludeTestsMatching '*InterceptorLifeCycleTest.testInterceptorInstanceCreatedWhenTargetInstanceCreated'
     }
 }

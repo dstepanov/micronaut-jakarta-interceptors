@@ -115,9 +115,6 @@ interposing on its own business methods, unless the class is a bean of its own. 
 An array-valued member of a binding annotation is supported and compared by its contents; the specification leaves
 such a member to an extension to define.
 
-A private interceptor method is rejected rather than invoked: it is called through the executable method Micronaut
-generates for it, and a private method has none.
-
 A checked exception thrown by a lifecycle callback interceptor method, which the specification does not allow it
 to throw, is reported wrapped in a runtime exception: what invoked the callback is the container, and it declares
 none.

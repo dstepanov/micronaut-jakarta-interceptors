@@ -151,7 +151,7 @@ public final class InterceptorLifecycleSupport
      * @param target  The constructed object
      * @param created The instances created for its construction
      */
-    void adopt(Object target, InterceptorInstances created) {
+    void hold(Object target, InterceptorInstances created) {
         synchronized (instancesByTarget) {
             purgeCollected();
             InterceptorInstances existing = instancesByTarget.get(new TargetKey(target));

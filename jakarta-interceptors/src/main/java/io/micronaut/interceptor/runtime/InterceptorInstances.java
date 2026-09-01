@@ -16,7 +16,9 @@
 package io.micronaut.interceptor.runtime;
 
 import io.micronaut.context.BeanContext;
+import io.micronaut.context.BeanRegistration;
 import io.micronaut.core.annotation.Internal;
+import io.micronaut.core.type.Argument;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -35,7 +37,7 @@ import java.util.Map;
 final class InterceptorInstances {
 
     private final BeanContext beanContext;
-    private final Map<Class<?>, Object> instances = new HashMap<>(4);
+    private final Map<Class<?>, BeanRegistration<?>> instances = new HashMap<>(4);
 
     InterceptorInstances(BeanContext beanContext) {
         this.beanContext = beanContext;
@@ -50,6 +52,36 @@ final class InterceptorInstances {
     synchronized Object get(InterceptorReference reference) {
         // resolved by type rather than from one definition: an interceptor class may also be produced by a
         // factory, and the instance the application configured there is the one to intercept with
-        return instances.computeIfAbsent(reference.interceptorClass(), beanContext::getBean);
+        return instances.computeIfAbsent(reference.interceptorClass(),
+            type -> beanContext.getBeanRegistration(Argument.of(type), null)).bean();
+    }
+
+    /**
+     * Takes over the instances another holder created, keeping its own where both hold one of a class.
+     *
+     * @param other The holder whose instances are taken over
+     */
+    synchronized void adoptAll(InterceptorInstances other) {
+        synchronized (other) {
+            other.instances.forEach(this.instances::putIfAbsent);
+            other.instances.clear();
+        }
+    }
+
+    /**
+     * Destroys every interceptor instance held, which the specification has happen when the object they
+     * intercept is destroyed: an interceptor instance is a dependent object of the target instance.
+     */
+    synchronized void destroyAll() {
+        for (BeanRegistration<?> registration : instances.values()) {
+            destroy(registration);
+        }
+        instances.clear();
+    }
+
+    private <T> void destroy(BeanRegistration<T> registration) {
+        // through the context rather than registration.close(): destruction has to reach the pre-destroy
+        // listeners even for an interceptor with nothing of its own to dispose
+        beanContext.destroyBean(registration);
     }
 }

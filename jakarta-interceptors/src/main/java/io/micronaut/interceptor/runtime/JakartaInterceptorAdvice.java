@@ -55,15 +55,20 @@ import java.util.List;
 public final class JakartaInterceptorAdvice implements MethodInterceptor<Object, Object>, ConstructorInterceptor<Object> {
 
     private final InterceptorChainResolver resolver;
-    private final InterceptorInstances instances;
+    private final InterceptorLifecycleSupport lifecycle;
+    private volatile @org.jspecify.annotations.Nullable InterceptorInstances instances;
+    private final BeanContext beanContext;
 
     /**
      * @param resolver    The resolver of the interceptor chains
+     * @param lifecycle   The lifecycle of the interceptor instances
      * @param beanContext The context the interceptor classes are beans of
      */
-    public JakartaInterceptorAdvice(InterceptorChainResolver resolver, BeanContext beanContext) {
+    public JakartaInterceptorAdvice(InterceptorChainResolver resolver, InterceptorLifecycleSupport lifecycle,
+                                    BeanContext beanContext) {
         this.resolver = resolver;
-        this.instances = new InterceptorInstances(beanContext);
+        this.lifecycle = lifecycle;
+        this.beanContext = beanContext;
     }
 
     @Override
@@ -92,6 +97,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         if (chain.isEmpty()) {
             return context.proceed();
         }
+        InterceptorInstances instances = instancesOf(context.getTarget());
         AbstractInvocationContext invocation = switch (kind) {
             case POST_CONSTRUCT, PRE_DESTROY -> new LifecycleInvocationContext(context, chain, instances);
             default -> new BusinessMethodInvocationContext(context, chain, instances);
@@ -118,8 +124,12 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         if (chain.isEmpty()) {
             return context.proceed();
         }
+        // the object does not exist yet, so its instances cannot be looked up by it: they are created here and
+        // handed over once the constructor has run, so that an interceptor class interposing on both the
+        // construction and the methods of the object is one instance
+        InterceptorInstances constructing = instancesOf(null);
         ConstructorInvocationContextAdapter invocation =
-            new ConstructorInvocationContextAdapter(context, chain, instances);
+            new ConstructorInvocationContextAdapter(context, chain, constructing);
         try {
             invocation.proceed();
         } catch (Exception e) {
@@ -131,7 +141,29 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
                 + constructor.getDeclaringBeanType().getName() + "] returned without calling "
                 + "InvocationContext.proceed(), so no instance was created");
         }
+        // the object exists now: the instances created for its construction are the ones its methods and its
+        // pre-destroy see, because this advice is one object per intercepted object
+        lifecycle.hold(constructed, constructing);
         return constructed;
+    }
+
+    /**
+     * The interceptor instances of the object this advice interposes on. One advice object serves one
+     * intercepted object — the construction of it, its methods and its callbacks — so they are held here.
+     */
+    private InterceptorInstances instancesOf(@org.jspecify.annotations.Nullable Object target) {
+        InterceptorInstances held = instances;
+        if (held == null) {
+            synchronized (this) {
+                held = instances;
+                if (held == null) {
+                    held = target == null ? new InterceptorInstances(beanContext)
+                        : lifecycle.instancesFor(target);
+                    instances = held;
+                }
+            }
+        }
+        return held;
     }
 
     private static InterceptorChainResolver.ChainKey keyOf(MethodInvocationContext<Object, Object> context,

@@ -93,6 +93,19 @@ public final class InterceptorChainResolver {
     }
 
     /**
+     * The chain that would intercept an element of the given metadata, built without being remembered: what
+     * the eager creation of interceptor instances reads, for elements whose own invocation may come later or
+     * never.
+     *
+     * @param metadata The element's annotation metadata
+     * @param kind     The kind of interception
+     * @return The chain
+     */
+    List<InterceptorReference> chainOf(AnnotationMetadata metadata, InterceptorKind kind) {
+        return build(metadata, kind);
+    }
+
+    /**
      * How many chains have been resolved and remembered.
      *
      * <p>Exposed so that a test can hold this map to its bounds: it is keyed by what identifies an intercepted

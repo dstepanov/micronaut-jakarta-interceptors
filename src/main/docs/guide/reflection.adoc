@@ -32,9 +32,13 @@ call those accessors, and nothing else:
 
 * `getInterceptorBindings()` needs a proxy of the binding annotation, together with
 api:core.annotation.AnnotationValueProvider[], which is how Micronaut builds an annotation instance;
-* `getConstructor()` needs the constructor of the target class.
+* `getConstructor()` needs the constructor of the target class;
+* `getMethod()` needs the lifecycle callback of the target class, inside a lifecycle callback interceptor method.
+An `@AroundInvoke` method needs nothing for it: the method it is shown is the one Micronaut already generated an
+executable method for.
 
-`test-suite-java` declares both, in `META-INF/native-image`, and the entries name the accessor that asks for them:
+`test-suite-java` declares all three, in `META-INF/native-image`, and the entries name the accessor that asks for
+them:
 
 [source,json]
 ----

@@ -8,5 +8,8 @@
   },
   {
     "interfaces": ["io.micronaut.interceptor.test.conformance.Unbound", "io.micronaut.core.annotation.AnnotationValueProvider"]
+  },
+  {
+    "interfaces": ["io.micronaut.interceptor.test.construct.Built", "io.micronaut.core.annotation.AnnotationValueProvider"]
   }
 ]

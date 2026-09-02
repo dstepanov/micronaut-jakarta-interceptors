@@ -174,12 +174,24 @@ public final class InterceptorBindingValues {
     public record Binding(String name, Map<String, Object> values) {
 
         /**
+         * The characters {@link #canonical()} punctuates a binding with, which are written with a backslash
+         * before them wherever they occur in a value. The backslash itself is escaped too, so that a value
+         * ending in one cannot escape the punctuation that follows it.
+         */
+        private static final String PUNCTUATION = "\\,=()[]";
+
+        /**
          * Writes the binding out as one string, so that two of them can be compared without reading either
          * annotation again.
          *
          * <p>The members are written in the order of their names rather than the order they were declared in, so
          * that an interceptor and the element it intercepts produce the same string for the same binding however
          * either of them wrote it.</p>
+         *
+         * <p>The characters the string is punctuated with are escaped wherever they occur in a value, so that no
+         * two bindings that differ can be written the same way. Without that, a member whose value contains a
+         * comma or an equals sign would read as two members, and {@code @Sized(a = "1,b=2")} would be
+         * indistinguishable from {@code @Sized(a = "1", b = "2")}.</p>
          *
          * @return The binding as a string
          */
@@ -214,7 +226,21 @@ public final class InterceptorBindingValues {
                     }
                     builder.append(']');
                 }
-                default -> builder.append(value);
+                // a member of any other type is written as it reads, which for a string or a character is
+                // whatever the source wrote. That is the one value that can carry the punctuation of the
+                // string it is being written into, so it is the one that is escaped. A name - of an
+                // annotation, of a member, of a class or of an enum constant - cannot
+                default -> escape(builder, value.toString());
+            }
+        }
+
+        private static void escape(StringBuilder builder, String text) {
+            for (int i = 0; i < text.length(); i++) {
+                char character = text.charAt(i);
+                if (PUNCTUATION.indexOf(character) >= 0) {
+                    builder.append('\\');
+                }
+                builder.append(character);
             }
         }
     }

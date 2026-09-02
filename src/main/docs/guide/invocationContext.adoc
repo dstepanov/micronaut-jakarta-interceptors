@@ -8,7 +8,8 @@ specification:
 | The intercepted instance. `null` inside an `@AroundConstruct` method until it has proceeded.
 
 | `getMethod()`
-| The intercepted method for an `@AroundInvoke` method, `null` for a lifecycle callback and for a constructor.
+| The intercepted method for an `@AroundInvoke` method, and the callback of the intercepted class for a lifecycle
+callback. `null` inside an `@AroundConstruct` method, and for a lifecycle callback of a class that declares none.
 
 | `getConstructor()`
 | The constructor of the target class inside an `@AroundConstruct` method, `null` otherwise.

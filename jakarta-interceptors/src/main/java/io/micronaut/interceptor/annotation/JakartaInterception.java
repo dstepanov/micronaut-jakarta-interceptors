@@ -91,6 +91,26 @@ public @interface JakartaInterception {
     boolean timeout() default false;
 
     /**
+     * The name of the post-construct callback of the intercepted class itself, which the specification hands to a
+     * {@code @PostConstruct} interceptor method as the method it is interposing on.
+     *
+     * <p>It is the callback of the class rather than the one of an interceptor class, and it is the most specific
+     * one when a class and its superclasses each declare one. The interception happens once around all of them,
+     * so it is that one the interceptor is shown.</p>
+     *
+     * @return The name of the callback, or the empty string when the class declares none
+     */
+    String postConstruct() default "";
+
+    /**
+     * The name of the pre-destroy callback of the intercepted class itself.
+     *
+     * @return The name of the callback, or the empty string when the class declares none
+     * @see #postConstruct()
+     */
+    String preDestroy() default "";
+
+    /**
      * The binding annotations in effect on the element, each written out as one string by the processor.
      *
      * <p>An interceptor class is bound to the element when every binding it declares is one of these. Comparing

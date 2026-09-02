@@ -21,7 +21,7 @@ class LifecycleProceedTest {
         assertTrue(Calls.RECORDED.contains("postConstruct proceed -> null"),
             "2.4 l) proceed returns null for a lifecycle callback: " + Calls.RECORDED);
         assertTrue(Calls.RECORDED.contains("postConstruct getMethod -> null"),
-            "2.4 eb) getMethod is null for a lifecycle callback: " + Calls.RECORDED);
+            "2.4 eb) getMethod is null for a lifecycle callback of a class that declares none: " + Calls.RECORDED);
         assertTrue(Calls.RECORDED.contains("postConstruct getTimer -> null"),
             "2.4 db) getTimer is null for a lifecycle callback: " + Calls.RECORDED);
         assertTrue(Calls.RECORDED.contains("postConstruct getParameters -> IllegalStateException"),

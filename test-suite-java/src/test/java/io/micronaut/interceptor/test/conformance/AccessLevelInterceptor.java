@@ -23,7 +23,7 @@ public class AccessLevelInterceptor {
 
     @PostConstruct
     @PreDestroy
-    String bothCallbacks(InvocationContext context) throws Exception {
+    Object bothCallbacks(InvocationContext context) throws Exception {
         Calls.RECORDED.add("package private callback");
         context.proceed();
         return "this return value is ignored";

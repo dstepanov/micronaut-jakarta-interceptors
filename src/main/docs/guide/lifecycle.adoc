@@ -47,5 +47,7 @@ public class LifecycleInterceptor {
 interceptor's own callback.
 <2> Proceeds to the next interceptor and finally to the callback of the bean.
 
-`getMethod()` is `null` for a lifecycle callback and `getParameters()` fails, as the specification prescribes;
-`getTarget()` is the bean throughout.
+`getMethod()` is the callback of the intercepted class, or `null` when it declares none, and `getParameters()`
+fails, as the specification prescribes; `getTarget()` is the bean throughout. Micronaut interposes on the lifecycle
+of a bean rather than on one callback of it, so the callback shown is the one the class itself declares, and the
+chain runs once around every callback of the hierarchy.

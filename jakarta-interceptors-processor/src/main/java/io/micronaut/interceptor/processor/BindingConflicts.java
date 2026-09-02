@@ -23,6 +23,7 @@ import io.micronaut.inject.ast.Element;
 import io.micronaut.inject.visitor.VisitorContext;
 import org.jspecify.annotations.Nullable;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -64,8 +65,30 @@ public final class BindingConflicts {
      * @return The name of the conflicting binding annotation, or {@code null} when there is none
      */
     public static @Nullable String conflictOf(Element element, VisitorContext context) {
-        Set<String> conflicts = resolve(element.getAnnotationMetadata(), context, new HashMap<>(), new HashSet<>())
-            .conflicts();
+        AnnotationMetadata metadata = element.getAnnotationMetadata();
+        return conflictOf(metadata, metadata.getAnnotationNames(), context);
+    }
+
+    /**
+     * Looks for a binding that reaches a method or a constructor twice with different values.
+     *
+     * <p>Only the annotations the member declares itself are followed. The metadata of a member is read together
+     * with the metadata of the class it belongs to, so following all of them would report the conflicts of the
+     * class here as well, once for every member of it; those are the class's own and are reported there.</p>
+     *
+     * @param element The member the bindings are declared on
+     * @param context The visitor context, which resolves the annotation types that are followed
+     * @return The name of the conflicting binding annotation, or {@code null} when there is none
+     */
+    public static @Nullable String declaredConflictOf(Element element, VisitorContext context) {
+        AnnotationMetadata metadata = element.getAnnotationMetadata();
+        return conflictOf(metadata, metadata.getDeclaredAnnotationNames(), context);
+    }
+
+    private static @Nullable String conflictOf(AnnotationMetadata metadata,
+                                               Collection<String> names,
+                                               VisitorContext context) {
+        Set<String> conflicts = resolve(metadata, names, context, new HashMap<>(), new HashSet<>()).conflicts();
         return conflicts.isEmpty() ? null : conflicts.iterator().next();
     }
 
@@ -73,12 +96,15 @@ public final class BindingConflicts {
      * Reads the bindings in effect at one element or annotation type, and the ones that disagree there.
      *
      * @param metadata   The metadata to read
+     * @param names      The annotations of the metadata to follow, which for a member are only the ones it
+     *                   declares itself
      * @param context    The visitor context
      * @param resolved   What has already been worked out for an annotation type, which is the same wherever it is
      *                   declared
      * @param resolving  The annotation types being worked out further up, which is what ends a cycle
      */
     private static Bindings resolve(AnnotationMetadata metadata,
+                                    Collection<String> names,
                                     VisitorContext context,
                                     Map<String, Bindings> resolved,
                                     Set<String> resolving) {
@@ -88,7 +114,7 @@ public final class BindingConflicts {
         Map<String, InterceptorBindingValues.Binding> passed = new LinkedHashMap<>();
         Set<String> conflicts = new LinkedHashSet<>();
         Set<String> declaredNames = metadata.getDeclaredAnnotationNames();
-        for (String name : metadata.getAnnotationNames()) {
+        for (String name : names) {
             if (JakartaInterceptors.INTERCEPTOR_BINDING.equals(name)) {
                 // a binding annotation names itself among its bindings; it is not one of its own
                 continue;
@@ -139,7 +165,8 @@ public final class BindingConflicts {
             return Bindings.EMPTY;
         }
         try {
-            Bindings bindings = resolve(type.getAnnotationMetadata(), context, resolved, resolving);
+            AnnotationMetadata metadata = type.getAnnotationMetadata();
+            Bindings bindings = resolve(metadata, metadata.getAnnotationNames(), context, resolved, resolving);
             resolved.put(name, bindings);
             return bindings;
         } finally {

@@ -153,15 +153,33 @@ public final class InterceptorClassScanner {
             && parameters[0].getType().getName().equals(JakartaInterceptors.INVOCATION_CONTEXT);
     }
 
+    /**
+     * Checks an interceptor method against the signature the specification gives it.
+     *
+     * <p>A method that interposes on a business or a timeout method returns what it interposed on, so it returns
+     * {@code Object}. One that interposes on the construction of an object or on a lifecycle callback has nothing
+     * to return - what it does return is discarded - so it returns either {@code void} or {@code Object}, the
+     * second of which is what lets one method interpose on both.</p>
+     *
+     * <p>None of them can be static, final or abstract: an interceptor method is invoked on an instance of the
+     * class that declares it, and it is the declaration itself that is invoked rather than an override of it.</p>
+     */
     private static void validate(ClassElement declaringClass, MethodElement method, String annotation, InterceptionKind kind) {
-        if (method.isStatic() || method.isFinal()) {
+        if (method.isStatic() || method.isFinal() || method.isAbstract()) {
             throw new ProcessingException(method, "The @" + simpleName(annotation) + " method [" + method.getName()
-                + "] of [" + declaringClass.getName() + "] must not be static or final");
+                + "] of [" + declaringClass.getName() + "] must not be static, final or abstract");
         }
         boolean returnsTheResult = kind == InterceptionKind.AROUND_INVOKE || kind == InterceptionKind.AROUND_TIMEOUT;
-        if (returnsTheResult && method.getReturnType().isVoid()) {
+        boolean returnsObject = Object.class.getName().equals(method.getReturnType().getName());
+        if (returnsTheResult && !returnsObject) {
             throw new ProcessingException(method, "The @" + simpleName(annotation) + " method [" + method.getName()
-                + "] of [" + declaringClass.getName() + "] must return Object");
+                + "] of [" + declaringClass.getName() + "] must return Object, but it returns ["
+                + method.getReturnType().getName() + "]");
+        }
+        if (!returnsTheResult && !returnsObject && !method.getReturnType().isVoid()) {
+            throw new ProcessingException(method, "The @" + simpleName(annotation) + " method [" + method.getName()
+                + "] of [" + declaringClass.getName() + "] must return void or Object, but it returns ["
+                + method.getReturnType().getName() + "]");
         }
     }
 

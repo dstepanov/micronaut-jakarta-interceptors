@@ -254,6 +254,16 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         boolean constructorDeclares = constructor != null
             && (!constructorInterceptors.isEmpty() || !InterceptorClassScanner.bindingsOf(constructor).isEmpty());
         List<MethodElement> methods = element.getEnclosedElements(ElementQuery.ALL_METHODS.onlyInstance());
+        // a binding that disagrees with itself is a definition error wherever it is declared, so the members that
+        // can be bound are checked as the class was, before anything is read from their bindings
+        if (constructor != null) {
+            rejectConflictingBindings(constructor, "constructor", context);
+        }
+        for (MethodElement method : methods) {
+            if (!model.isInterceptorMethod(method) && isBusinessMethod(method)) {
+                rejectConflictingBindings(method, "method", context);
+            }
+        }
         if (!classDeclares && !constructorDeclares
             && methods.stream().noneMatch(JakartaInterceptorVisitor::declaresInterception)) {
             return;
@@ -265,6 +275,7 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
                 interceptorMembers(builder, classInterceptors);
                 selfMember(builder, model);
                 bindingsMember(builder, classBindings);
+                callbackMembers(builder, element, model);
             });
         }
         // the constructor carries the interception of its own: that is where Micronaut decides whether the
@@ -285,6 +296,20 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         }
         for (MethodElement method : methods) {
             interceptMethod(model, method, classInterceptors, classBindings, classDeclares, context);
+        }
+    }
+
+    /**
+     * Reports a binding annotation that reaches a method or a constructor along two paths, carrying different
+     * member values, which the specification makes a definition error there as it does on a class.
+     */
+    private static void rejectConflictingBindings(MethodElement member, String noun, VisitorContext context) {
+        String conflict = BindingConflicts.declaredConflictOf(member, context);
+        if (conflict != null) {
+            throw new ProcessingException(member, "The " + noun + " [" + member.getDeclaringType().getName() + "."
+                + member.getName() + "] is bound by [" + conflict + "] twice, with different member values. A "
+                + "binding annotation declared on two of the annotations of a " + noun + " has to carry the same "
+                + "values in both, or there is no one binding for the " + noun + " to be matched by");
         }
     }
 
@@ -425,6 +450,58 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         builder.member("interceptors", interceptors.stream()
             .map(name -> new AnnotationClassValue<>(name))
             .toArray(AnnotationClassValue<?>[]::new));
+    }
+
+    /**
+     * Records the lifecycle callbacks of the intercepted class itself.
+     *
+     * <p>The specification hands a {@code @PostConstruct} or {@code @PreDestroy} interceptor method the callback of
+     * the class it is interposing on, and only {@code null} when the class has none. Micronaut intercepts the
+     * lifecycle of a bean rather than one callback of it, so the callback is not something the interception itself
+     * carries; it is read here, where the class is being looked at anyway, and the runtime is left with one lookup
+     * to do when an interceptor asks for it.</p>
+     */
+    private static void callbackMembers(AnnotationValueBuilder<JakartaInterception> builder,
+                                        ClassElement element,
+                                        InterceptorClassModel model) {
+        MethodElement postConstruct = callbackOf(element, model, JakartaInterceptors.POST_CONSTRUCT);
+        if (postConstruct != null) {
+            builder.member("postConstruct", postConstruct.getName());
+        }
+        MethodElement preDestroy = callbackOf(element, model, JakartaInterceptors.PRE_DESTROY);
+        if (preDestroy != null) {
+            builder.member("preDestroy", preDestroy.getName());
+        }
+    }
+
+    /**
+     * The name of the lifecycle callback of a class, the most specific one when the class and its superclasses
+     * each declare one: the interception happens once around all of them, and the callback of the class itself is
+     * the one the specification describes.
+     */
+    private static @Nullable MethodElement callbackOf(ClassElement element,
+                                                      InterceptorClassModel model,
+                                                      String annotation) {
+        List<String> hierarchy = new ArrayList<>();
+        for (ClassElement type = element; type != null; type = type.getSuperType().orElse(null)) {
+            hierarchy.add(type.getName());
+        }
+        MethodElement callback = null;
+        int mostSpecific = Integer.MAX_VALUE;
+        for (MethodElement method : element.getEnclosedElements(ElementQuery.ALL_METHODS)) {
+            // an interceptor method a class declares on itself interposes on other objects rather than being a
+            // callback of this one
+            if (!method.hasDeclaredAnnotation(annotation) || model.isInterceptorMethod(method)) {
+                continue;
+            }
+            // the hierarchy is held with the class itself first, so the smaller index is the more specific one
+            int declaredAt = hierarchy.indexOf(method.getDeclaringType().getName());
+            if (declaredAt >= 0 && declaredAt < mostSpecific) {
+                mostSpecific = declaredAt;
+                callback = method;
+            }
+        }
+        return callback;
     }
 
     private static void selfMember(AnnotationValueBuilder<JakartaInterception> builder, InterceptorClassModel model) {

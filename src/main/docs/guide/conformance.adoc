@@ -293,12 +293,12 @@ Everything the specification describes that applies to a module of this kind is 
 | ea)
 | The getMethod method returns the method of the target class for which the interceptor was invoked.
 | Covered
-| InvocationContextTest
+| InvocationContextTest, LifecycleInterceptionTest
 
 | eb)
 | In a lifecycle callback interceptor for which there is no corresponding lifecycle callback method on the target class or in the AroundConstruct lifecycle callback interceptor method, getMethod returns null .
 | Covered
-| LifecycleProceedTest
+| LifecycleProceedTest, LifecycleInterceptionTest, AroundConstructTest
 
 | f)
 | The getParameters method returns the parameters of the method or constructor invocation. If the setParameters method has been called, getParameters returns the values to which the parameters have been set.
@@ -358,7 +358,7 @@ Everything the specification describes that applies to a module of this kind is 
 | n)
 | The getInterceptorBindings method returns the set of interceptor binding annotations for the method or constructor whose invocation is being intercepted. In case there is no target method or target constructor, interceptor binding annotations applied to the target class are returned. All interceptor binding annotations are returned, including interceptor binding annotations that associate interceptors of a different interceptor method type, as well as interceptor binding annotations that associate no interceptor.
 | Covered
-| InvocationContextConformanceTest
+| InvocationContextConformanceTest, AroundConstructTest
 
 | o)
 | The getInterceptorBinding method returns the single annotation of given type present in the set of interceptor bindings returned by getInterceptorBindings() .

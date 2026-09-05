@@ -18,7 +18,7 @@ public class CompiledService {
     void started() {
     }
 
-    public String greet() {
-        return "hello " + name;
+    public String greet(String greeting) {
+        return greeting + " " + name;
     }
 }

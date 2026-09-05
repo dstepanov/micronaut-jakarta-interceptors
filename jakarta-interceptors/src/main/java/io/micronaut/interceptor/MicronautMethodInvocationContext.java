@@ -15,6 +15,7 @@
  */
 package io.micronaut.interceptor;
 
+import io.micronaut.aop.MethodInvocationContext;
 import io.micronaut.inject.ExecutableMethod;
 
 /**
@@ -51,4 +52,30 @@ public interface MicronautMethodInvocationContext extends MicronautInvocationCon
      * @return The executable method, never {@code null}
      */
     ExecutableMethod<Object, Object> getExecutableMethod();
+
+    /**
+     * The Micronaut invocation this interception is part of.
+     *
+     * <p>{@link #getExecutableMethod()} and {@link #getAnnotationMetadata()} answer what an interceptor usually
+     * wants and are the same objects this carries. The whole invocation is here for what they do not reach: the
+     * arguments as a named map through {@link MethodInvocationContext#getParameters()}, the attributes shared with
+     * every other advice on the same invocation, and whatever a later version of Micronaut adds.</p>
+     *
+     * <pre>{@code
+     * MethodInvocationContext<Object, Object> invocation = micronaut.getMicronautInvocation();
+     * Object id = invocation.getParameters().get("id").getValue();   // an argument by name
+     * }</pre>
+     *
+     * <p>Do not call {@link MethodInvocationContext#proceed()} on it. That is what the last interceptor method of
+     * the chain proceeds into, so proceeding it directly runs the intercepted method while skipping every
+     * interceptor method the specification has yet to invoke. Call {@link #proceed()} on this context instead,
+     * which is the chain the specification describes.</p>
+     *
+     * <p>The same caution applies to {@code setParameterValue}: the arguments are replaced
+     * through {@link #setParameters(Object[])}, which checks their count and their types and shows an interceptor
+     * only the arguments the intercepted method declares.</p>
+     *
+     * @return The invocation, never {@code null}
+     */
+    MethodInvocationContext<Object, Object> getMicronautInvocation();
 }

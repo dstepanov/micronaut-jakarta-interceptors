@@ -15,6 +15,7 @@
  */
 package io.micronaut.interceptor;
 
+import io.micronaut.aop.ConstructorInvocationContext;
 import io.micronaut.core.beans.BeanConstructor;
 
 /**
@@ -50,4 +51,20 @@ public interface MicronautConstructorInvocationContext extends MicronautInvocati
      * @return The constructor, never {@code null}
      */
     BeanConstructor<Object> getBeanConstructor();
+
+    /**
+     * The Micronaut construction this interception is part of.
+     *
+     * <p>{@link #getBeanConstructor()} and {@link #getAnnotationMetadata()} answer what an interceptor usually
+     * wants and are the same objects this carries. The whole construction is here for what they do not reach, and
+     * for whatever a later version of Micronaut adds.</p>
+     *
+     * <p>Do not call {@link ConstructorInvocationContext#proceed()} on it: that is what the last interceptor
+     * method of the chain proceeds into, and proceeding it directly constructs the bean while skipping every
+     * interceptor method the specification has yet to invoke, leaving this context without the instance that
+     * {@link #getTarget()} is meant to answer with. Call {@link #proceed()} on this context instead.</p>
+     *
+     * @return The construction, never {@code null}
+     */
+    ConstructorInvocationContext<Object> getMicronautInvocation();
 }

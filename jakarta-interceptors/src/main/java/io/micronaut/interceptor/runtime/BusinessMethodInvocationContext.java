@@ -63,6 +63,12 @@ final class BusinessMethodInvocationContext extends AbstractInvocationContext
         return (ExecutableMethod<Object, Object>) context.getExecutableMethod();
     }
 
+    @SuppressWarnings("unchecked")
+    @Override
+    public MethodInvocationContext<Object, Object> getMicronautInvocation() {
+        return (MethodInvocationContext<Object, Object>) context;
+    }
+
     /**
      * The specification hands the interceptor a {@link Method}, so one is looked up. That lookup is the only
      * reflection of an {@code @AroundInvoke} interception, and it only happens when an interceptor asks for the

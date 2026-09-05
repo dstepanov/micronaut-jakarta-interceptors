@@ -6,6 +6,7 @@ annotations. The types leave no way around it, and resolving one is the only ref
 Everything those three describe, Micronaut worked out while the application was compiled. Every context this module
 hands an interceptor method also implements api:interceptor.MicronautInvocationContext[], which offers it:
 
+.Java
 [source,java]
 ----
 @Interceptor
@@ -15,8 +16,8 @@ public class CachingInterceptor {
     @AroundInvoke
     public Object invoke(InvocationContext context) throws Exception {
         if (context instanceof MicronautMethodInvocationContext micronaut) { // <1>
-            ExecutableMethod<?, ?> method = micronaut.getExecutableMethod(); // <2>
-            String region = micronaut.getAnnotationMetadata()                // <3>
+            ExecutableMethod<?, ?> method = micronaut.getExecutableMethod();  // <2>
+            String region = micronaut.getAnnotationMetadata()                 // <3>
                 .stringValue(Cached.class, "region")
                 .orElse("default");
             cache(region, method.getDeclaringType(), method.getMethodName());
@@ -26,10 +27,55 @@ public class CachingInterceptor {
 }
 ----
 
+.Groovy
+[source,groovy]
+----
+@Interceptor
+@Cached(region = "users")
+class CachingInterceptor {
+
+    @AroundInvoke
+    Object invoke(InvocationContext context) throws Exception {
+        if (context instanceof MicronautMethodInvocationContext) {           // <1>
+            def method = context.executableMethod                            // <2>
+            def region = context.annotationMetadata                          // <3>
+                .stringValue(Cached, "region")
+                .orElse("default")
+            cache(region, method.declaringType, method.methodName)
+        }
+        return context.proceed()
+    }
+}
+----
+
+.Kotlin
+[source,kotlin]
+----
+@Interceptor
+@Cached(region = "users")
+open class CachingInterceptor {
+
+    @AroundInvoke
+    open fun invoke(context: InvocationContext): Any? {
+        if (context is MicronautMethodInvocationContext) {                   // <1>
+            val method = context.executableMethod                            // <2>
+            val region = context.annotationMetadata                          // <3>
+                .stringValue(Cached::class.java, "region")
+                .orElse("default")
+            cache(region, method.declaringType, method.methodName)
+        }
+        return context.proceed()
+    }
+}
+----
+
 <1> every context of this module implements one of these, so the test always succeeds
 <2> the declaring type, the name, the arguments and the annotation metadata of the intercepted method, as Micronaut
 generated them
 <3> the members of a binding read straight from the metadata
+
+Kotlin and Groovy reach the accessors as properties, so `context.executableMethod` reads what
+`getExecutableMethod()` returns.
 
 == What each of them offers
 
@@ -51,6 +97,10 @@ generated them
 | `getBeanConstructor()`
 | `getConstructor()`
 | api:interceptor.MicronautConstructorInvocationContext[]
+
+| `getMicronautInvocation()`
+| nothing - the whole Micronaut invocation, for what the others do not reach
+| both sub-interfaces
 |===
 
 api:interceptor.MicronautMethodInvocationContext[] is the context of a business method, a timeout method or a
@@ -110,6 +160,24 @@ A bean with around advice as well as constructor interception is constructed thr
 whose constructor takes a handful of arguments of its own after the ones the bean declares. `getBeanConstructor()`
 is the constructor of the target class regardless: the declaring type is the bean, and the arguments are the ones
 the bean declares, which is what `getParameters()` lines up with.
+
+== The whole Micronaut invocation
+
+`getMicronautInvocation()` carries the `MethodInvocationContext` or `ConstructorInvocationContext` the interception
+is part of, for what the other accessors do not reach - the arguments as a named map, the attributes shared with
+every other advice on the same invocation, and whatever a later version of Micronaut adds:
+
+[source,java]
+----
+MethodInvocationContext<Object, Object> invocation = micronaut.getMicronautInvocation();
+Object id = invocation.getParameters().get("id").getValue();   // an argument by name
+----
+
+WARNING: Do not call `proceed()` on it. That is what the last interceptor method of the chain proceeds into, so
+proceeding it directly runs the intercepted method while skipping every interceptor method the specification has
+yet to invoke. Call `proceed()` on the `InvocationContext` instead, which is the chain the specification describes.
+The same goes for replacing arguments: `setParameters(Object[])` on the `InvocationContext` checks their count and
+their types, and shows an interceptor only the arguments the intercepted element declares.
 
 == Reflection
 

@@ -123,6 +123,11 @@ final class ConstructorInvocationContextAdapter extends AbstractInvocationContex
     }
 
     @Override
+    public ConstructorInvocationContext<Object> getMicronautInvocation() {
+        return context;
+    }
+
+    @Override
     String description() {
         return "constructor " + context.getConstructor().getDescription(false);
     }

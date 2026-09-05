@@ -1,5 +1,6 @@
 package io.micronaut.interceptor.test.micronautapi;
 
+import io.micronaut.aop.MethodInvocationContext;
 import io.micronaut.interceptor.MicronautConstructorInvocationContext;
 import io.micronaut.interceptor.MicronautInvocationContext;
 import io.micronaut.interceptor.MicronautMethodInvocationContext;
@@ -22,7 +23,10 @@ public class CompiledInterceptor {
         if (context instanceof MicronautConstructorInvocationContext micronaut) {
             Recorded.VALUES.add(micronaut.getInterceptorKind() + " "
                 + micronaut.getBeanConstructor().getDeclaringBeanType().getSimpleName()
-                + "(" + micronaut.getBeanConstructor().getArguments().length + ")");
+                + "(" + micronaut.getBeanConstructor().getArguments().length + ")"
+                // the same constructor reached through the whole Micronaut construction
+                + " same=" + (micronaut.getMicronautInvocation().getConstructor()
+                    == micronaut.getBeanConstructor()));
         }
         context.proceed();
     }
@@ -45,8 +49,18 @@ public class CompiledInterceptor {
                 + micronaut.getExecutableMethod().getDeclaringType().getSimpleName() + "."
                 + micronaut.getExecutableMethod().getMethodName()
                 // the members of the binding, read without building the annotation
-                + " region=" + region(micronaut));
+                + " region=" + region(micronaut)
+                // the whole Micronaut invocation, for what the other accessors do not reach
+                + named(micronaut.getMicronautInvocation()));
         }
+    }
+
+    /** An argument read by name, which the specification's own accessors have no way to do. */
+    private static String named(MethodInvocationContext<Object, Object> invocation) {
+        if (invocation.getParameters().isEmpty()) {
+            return "";
+        }
+        return " parameters=" + invocation.getParameters().keySet();
     }
 
     private static String region(MicronautInvocationContext context) {

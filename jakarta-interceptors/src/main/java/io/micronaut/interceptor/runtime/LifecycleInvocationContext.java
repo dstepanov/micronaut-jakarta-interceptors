@@ -69,6 +69,12 @@ final class LifecycleInvocationContext extends AbstractInvocationContext
         return (ExecutableMethod<Object, Object>) context.getExecutableMethod();
     }
 
+    @SuppressWarnings("unchecked")
+    @Override
+    public MethodInvocationContext<Object, Object> getMicronautInvocation() {
+        return (MethodInvocationContext<Object, Object>) context;
+    }
+
     /**
      * The specification shows a lifecycle callback interceptor method the callback of the intercepted class, and
      * {@code null} only when the class declares none. Which method that is was worked out at compilation time and

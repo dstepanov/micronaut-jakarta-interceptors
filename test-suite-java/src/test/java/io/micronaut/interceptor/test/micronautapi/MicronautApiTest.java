@@ -18,12 +18,12 @@ class MicronautApiTest {
         Recorded.VALUES.clear();
         try (ApplicationContext context = ApplicationContext.run()) {
             CompiledService service = context.createBean(CompiledService.class, "Denis");
-            assertEquals("hello Denis", service.greet());
+            assertEquals("hello Denis", service.greet("hello"));
 
             assertEquals(
-                List.of("AROUND_CONSTRUCT CompiledService(1)",
+                List.of("AROUND_CONSTRUCT CompiledService(1) same=true",
                     "POST_CONSTRUCT CompiledService.started region=users",
-                    "AROUND CompiledService.greet region=users"),
+                    "AROUND CompiledService.greet region=users parameters=[greeting]"),
                 List.copyOf(Recorded.VALUES));
         }
     }

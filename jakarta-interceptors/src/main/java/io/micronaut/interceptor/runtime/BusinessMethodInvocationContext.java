@@ -15,8 +15,11 @@
  */
 package io.micronaut.interceptor.runtime;
 
+import io.micronaut.aop.InterceptorKind;
 import io.micronaut.aop.MethodInvocationContext;
 import io.micronaut.core.annotation.Internal;
+import io.micronaut.inject.ExecutableMethod;
+import io.micronaut.interceptor.MicronautMethodInvocationContext;
 import org.jspecify.annotations.Nullable;
 
 import java.lang.reflect.Method;
@@ -29,7 +32,8 @@ import java.util.List;
  * @since 1.0
  */
 @Internal
-final class BusinessMethodInvocationContext extends AbstractInvocationContext {
+final class BusinessMethodInvocationContext extends AbstractInvocationContext
+    implements MicronautMethodInvocationContext {
 
     private final MethodInvocationContext<Object, ?> context;
     private @Nullable Method method;
@@ -46,6 +50,17 @@ final class BusinessMethodInvocationContext extends AbstractInvocationContext {
     @Override
     public Object getTarget() {
         return context.getTarget();
+    }
+
+    @Override
+    public InterceptorKind getInterceptorKind() {
+        return context.getKind();
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public ExecutableMethod<Object, Object> getExecutableMethod() {
+        return (ExecutableMethod<Object, Object>) context.getExecutableMethod();
     }
 
     /**

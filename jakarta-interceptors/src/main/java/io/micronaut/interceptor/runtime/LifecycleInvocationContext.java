@@ -19,6 +19,8 @@ import io.micronaut.aop.Intercepted;
 import io.micronaut.aop.InterceptorKind;
 import io.micronaut.aop.MethodInvocationContext;
 import io.micronaut.core.annotation.Internal;
+import io.micronaut.inject.ExecutableMethod;
+import io.micronaut.interceptor.MicronautMethodInvocationContext;
 import io.micronaut.interceptor.annotation.JakartaInterception;
 import org.jspecify.annotations.Nullable;
 
@@ -36,7 +38,8 @@ import java.util.List;
  * @since 1.0
  */
 @Internal
-final class LifecycleInvocationContext extends AbstractInvocationContext {
+final class LifecycleInvocationContext extends AbstractInvocationContext
+    implements MicronautMethodInvocationContext {
 
     private final MethodInvocationContext<Object, ?> context;
     private @Nullable Method method;
@@ -53,6 +56,17 @@ final class LifecycleInvocationContext extends AbstractInvocationContext {
     @Override
     public Object getTarget() {
         return context.getTarget();
+    }
+
+    @Override
+    public InterceptorKind getInterceptorKind() {
+        return context.getKind();
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public ExecutableMethod<Object, Object> getExecutableMethod() {
+        return (ExecutableMethod<Object, Object>) context.getExecutableMethod();
     }
 
     /**
@@ -78,7 +92,7 @@ final class LifecycleInvocationContext extends AbstractInvocationContext {
 
     private @Nullable Method resolveCallback() {
         String member = context.getKind() == InterceptorKind.PRE_DESTROY ? "preDestroy" : "postConstruct";
-        String name = annotationMetadata().stringValue(JakartaInterception.class, member).orElse(null);
+        String name = getAnnotationMetadata().stringValue(JakartaInterception.class, member).orElse(null);
         if (name == null || name.isEmpty()) {
             return null;
         }

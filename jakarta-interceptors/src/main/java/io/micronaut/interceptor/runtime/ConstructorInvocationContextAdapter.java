@@ -16,9 +16,11 @@
 package io.micronaut.interceptor.runtime;
 
 import io.micronaut.aop.ConstructorInvocationContext;
+import io.micronaut.aop.InterceptorKind;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.core.beans.BeanConstructor;
+import io.micronaut.interceptor.MicronautConstructorInvocationContext;
 import io.micronaut.core.type.Argument;
 import org.jspecify.annotations.Nullable;
 
@@ -36,7 +38,8 @@ import java.util.List;
  * @since 1.0
  */
 @Internal
-final class ConstructorInvocationContextAdapter extends AbstractInvocationContext {
+final class ConstructorInvocationContextAdapter extends AbstractInvocationContext
+    implements MicronautConstructorInvocationContext {
 
     private final ConstructorInvocationContext<Object> context;
     private @Nullable Object target;
@@ -104,9 +107,19 @@ final class ConstructorInvocationContextAdapter extends AbstractInvocationContex
     }
 
     @Override
-    AnnotationMetadata annotationMetadata() {
+    public AnnotationMetadata getAnnotationMetadata() {
         // a constructor invocation carries no metadata of its own: the constructor does
         return context.getConstructor().getAnnotationMetadata();
+    }
+
+    @Override
+    public InterceptorKind getInterceptorKind() {
+        return InterceptorKind.AROUND_CONSTRUCT;
+    }
+
+    @Override
+    public BeanConstructor<Object> getBeanConstructor() {
+        return context.getConstructor();
     }
 
     @Override

@@ -20,6 +20,7 @@ import io.micronaut.core.annotation.Internal;
 import io.micronaut.core.convert.value.MutableConvertibleValues;
 import io.micronaut.core.reflect.ReflectionUtils;
 import io.micronaut.core.type.Argument;
+import io.micronaut.interceptor.MicronautInvocationContext;
 import jakarta.interceptor.InvocationContext;
 import org.jspecify.annotations.Nullable;
 
@@ -45,7 +46,7 @@ import java.util.Set;
  * @since 1.0
  */
 @Internal
-abstract sealed class AbstractInvocationContext implements InvocationContext
+abstract sealed class AbstractInvocationContext implements MicronautInvocationContext
     permits BusinessMethodInvocationContext, ConstructorInvocationContextAdapter, LifecycleInvocationContext {
 
     /**
@@ -156,11 +157,12 @@ abstract sealed class AbstractInvocationContext implements InvocationContext
     }
 
     /**
-     * The annotation metadata of the intercepted element.
+     * The annotation metadata of the intercepted element, which is what the chain was resolved by.
      *
      * @return The metadata
      */
-    AnnotationMetadata annotationMetadata() {
+    @Override
+    public AnnotationMetadata getAnnotationMetadata() {
         return context.getAnnotationMetadata();
     }
 
@@ -183,7 +185,7 @@ abstract sealed class AbstractInvocationContext implements InvocationContext
     }
 
     private Set<Annotation> resolveBindings() {
-        AnnotationMetadata annotationMetadata = annotationMetadata();
+        AnnotationMetadata annotationMetadata = getAnnotationMetadata();
         List<String> names = annotationMetadata.getAnnotationNamesByStereotype(JakartaInterceptorSupport.INTERCEPTOR_BINDING);
         if (names.isEmpty()) {
             return Collections.emptySet();

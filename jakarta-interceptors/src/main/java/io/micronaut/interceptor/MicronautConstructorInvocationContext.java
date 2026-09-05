@@ -22,6 +22,7 @@ import io.micronaut.core.beans.BeanConstructor;
  *
  * @author Denis Stepanov
  * @since 1.0
+ * @see MicronautMethodInvocationContext
  */
 public interface MicronautConstructorInvocationContext extends MicronautInvocationContext {
 
@@ -29,9 +30,22 @@ public interface MicronautConstructorInvocationContext extends MicronautInvocati
      * The constructor Micronaut instantiates the bean with, as it compiled it.
      *
      * <p>It describes what {@link #getConstructor()} describes - the declaring type, the arguments and the
-     * annotation metadata - without reflecting. Where the bean is one Micronaut also generated a proxy of, it is
-     * the constructor of the target class rather than the one of the proxy, which is the constructor the
-     * specification shows.</p>
+     * annotation metadata of the constructor - and reading any of that reflects on nothing.</p>
+     *
+     * <pre>{@code
+     * BeanConstructor<?> constructor = micronaut.getBeanConstructor();
+     * constructor.getDeclaringBeanType();   // the bean being constructed
+     * constructor.getArguments();           // the arguments it declares
+     * }</pre>
+     *
+     * <p>Where the bean is one Micronaut also generated a proxy of, because it has around advice as well as
+     * constructor interception, this is the constructor of the target class rather than the one of the proxy: the
+     * declaring type is the bean, and the arguments are the ones the bean declares rather than those followed by
+     * the handful the proxy adds. That is the constructor the specification shows an interceptor, and it is what
+     * {@link #getParameters()} lines up with.</p>
+     *
+     * <p>{@link #getTarget()} is {@code null} until the chain has proceeded, since the instance does not exist
+     * before then. The constructor is known throughout.</p>
      *
      * @return The constructor, never {@code null}
      */

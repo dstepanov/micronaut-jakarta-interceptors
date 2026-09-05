@@ -18,23 +18,35 @@ package io.micronaut.interceptor;
 import io.micronaut.inject.ExecutableMethod;
 
 /**
- * The {@link MicronautInvocationContext} of an interception of a method: a business method, a timeout method or a
- * lifecycle callback.
+ * The {@link MicronautInvocationContext} of the interception of a method: a business method, a timeout method, or
+ * a lifecycle callback of a bean.
  *
  * @author Denis Stepanov
  * @since 1.0
+ * @see MicronautConstructorInvocationContext
  */
 public interface MicronautMethodInvocationContext extends MicronautInvocationContext {
 
     /**
-     * The executable method Micronaut generated for the intercepted method at compilation time.
+     * The executable method Micronaut generated for the intercepted method while the application was compiled.
      *
      * <p>It describes what {@link #getMethod()} describes - the declaring type, the name, the arguments and the
-     * annotation metadata - and invoking it dispatches through generated code. Reading it reflects on nothing.</p>
+     * annotation metadata of the method - and reading any of that reflects on nothing. Invoking it dispatches
+     * through generated code rather than through {@link java.lang.reflect.Method#invoke}, which is how the
+     * interception invokes the intercepted method itself.</p>
+     *
+     * <pre>{@code
+     * ExecutableMethod<?, ?> method = micronaut.getExecutableMethod();
+     * method.getDeclaringType();      // the class that declared it
+     * method.getMethodName();         // its name
+     * method.getArguments();          // its arguments, with their generic types
+     * method.getReturnType();         // what it returns
+     * }</pre>
      *
      * <p>For a lifecycle callback this is the callback the chain of the event was started for, which is the first
-     * one the bean runs; {@link #getMethod()} answers with the callback of the intercepted class itself, as the
-     * specification describes.</p>
+     * one the bean runs - the one its most distant superclass declares. {@link #getMethod()} answers instead with
+     * the callback of the intercepted class itself, which is the one the specification describes. Where a bean
+     * declares a callback and inherits none, the two are the same method.</p>
      *
      * @return The executable method, never {@code null}
      */

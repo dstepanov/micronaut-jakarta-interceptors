@@ -21,35 +21,10 @@ the annotation metadata Micronaut recorded at compilation time, and builds no an
 == Reading the interception without reflecting
 
 Nothing forces an interceptor through those three. Every context this module hands an interceptor method also
-implements api:interceptor.MicronautInvocationContext[], which offers what Micronaut compiled:
-
-[source,java]
-----
-@AroundInvoke
-public Object invoke(InvocationContext context) throws Exception {
-    if (context instanceof MicronautMethodInvocationContext micronaut) {
-        ExecutableMethod<?, ?> method = micronaut.getExecutableMethod();      // <1>
-        String region = micronaut.getAnnotationMetadata()                     // <2>
-            .stringValue(Cached.class, "region").orElse("default");
-        log(method.getDeclaringType().getName() + "." + method.getMethodName() + " " + region);
-    }
-    return context.proceed();
-}
-----
-
-<1> the declaring type, the name, the arguments and the annotation metadata of the intercepted method, as
-Micronaut generated them - what `getMethod()` describes, without a `java.lang.reflect.Method`
-<2> the members of a binding read straight from the metadata, rather than by finding the annotation instance among
-`getInterceptorBindings()` and calling its member
-
-api:interceptor.MicronautMethodInvocationContext[] carries the executable method of a business method, a timeout
-method or a lifecycle callback; api:interceptor.MicronautConstructorInvocationContext[] carries the
-`BeanConstructor` of an `@AroundConstruct` interception. Both add `getInterceptorKind()`, which tells an
-interceptor method that interposes on more than one event which event it was invoked for - something the
-specification gives it no way to ask.
-
-An interceptor written this way reflects on nothing, whatever it reads, and needs no reachability metadata of its
-own.
+implements api:interceptor.MicronautInvocationContext[], which offers the same description as Micronaut compiled
+it - the executable method, the bean constructor and the annotation metadata - and reflects on nothing. An
+interceptor written that way needs no reachability metadata of its own. See
+<<micronautApi,The Micronaut Invocation Context>>.
 
 == In a native image
 

@@ -1,0 +1,118 @@
+`jakarta.interceptor.InvocationContext` describes the intercepted element the way the specification does, which in
+three places means the reflection of the platform: `getMethod()` returns a `java.lang.reflect.Method`,
+`getConstructor()` a `java.lang.reflect.Constructor`, and `getInterceptorBindings()` instances of the binding
+annotations. The types leave no way around it, and resolving one is the only reflection an interception performs.
+
+Everything those three describe, Micronaut worked out while the application was compiled. Every context this module
+hands an interceptor method also implements api:interceptor.MicronautInvocationContext[], which offers it:
+
+[source,java]
+----
+@Interceptor
+@Cached(region = "users")
+public class CachingInterceptor {
+
+    @AroundInvoke
+    public Object invoke(InvocationContext context) throws Exception {
+        if (context instanceof MicronautMethodInvocationContext micronaut) { // <1>
+            ExecutableMethod<?, ?> method = micronaut.getExecutableMethod(); // <2>
+            String region = micronaut.getAnnotationMetadata()                // <3>
+                .stringValue(Cached.class, "region")
+                .orElse("default");
+            cache(region, method.getDeclaringType(), method.getMethodName());
+        }
+        return context.proceed();
+    }
+}
+----
+
+<1> every context of this module implements one of these, so the test always succeeds
+<2> the declaring type, the name, the arguments and the annotation metadata of the intercepted method, as Micronaut
+generated them
+<3> the members of a binding read straight from the metadata
+
+== What each of them offers
+
+|===
+| Accessor | Instead of | Interface
+
+| `getAnnotationMetadata()`
+| `getInterceptorBindings()`, and the members of a binding
+| api:interceptor.MicronautInvocationContext[]
+
+| `getInterceptorKind()`
+| nothing - the specification has no counterpart
+| api:interceptor.MicronautInvocationContext[]
+
+| `getExecutableMethod()`
+| `getMethod()`
+| api:interceptor.MicronautMethodInvocationContext[]
+
+| `getBeanConstructor()`
+| `getConstructor()`
+| api:interceptor.MicronautConstructorInvocationContext[]
+|===
+
+api:interceptor.MicronautMethodInvocationContext[] is the context of a business method, a timeout method or a
+lifecycle callback; api:interceptor.MicronautConstructorInvocationContext[] is the context of an
+`@AroundConstruct` interception. An interceptor that interposes on one kind names that interface directly; one that
+interposes on several tests for api:interceptor.MicronautInvocationContext[] and branches on
+`getInterceptorKind()`.
+
+== Reading the bindings
+
+`getInterceptorBindings()` returns annotation instances, and Micronaut builds one as a dynamic proxy of the
+annotation type. Reading a member through the metadata instead builds nothing:
+
+[source,java]
+----
+// the specification's way: finds the instance among the bindings and calls the member on it
+String region = context.getInterceptorBindings().stream()
+    .filter(Cached.class::isInstance)
+    .map(Cached.class::cast)
+    .findFirst()
+    .map(Cached::region)
+    .orElse("default");
+
+// the same answer, from what the chain was resolved by
+String region = micronaut.getAnnotationMetadata()
+    .stringValue(Cached.class, "region")
+    .orElse("default");
+----
+
+The metadata is what the interception itself compares to decide the chain, so an interceptor reading it sees
+exactly what bound it.
+
+== Telling one lifecycle event from another
+
+The specification lets one interceptor method interpose on more than one lifecycle event, and gives it no way to
+ask which event it was invoked for:
+
+[source,java]
+----
+@PostConstruct
+@PreDestroy
+public void lifecycle(InvocationContext context) throws Exception {
+    if (context instanceof MicronautInvocationContext micronaut) {
+        switch (micronaut.getInterceptorKind()) {
+            case POST_CONSTRUCT -> opened(context.getTarget());
+            case PRE_DESTROY -> closed(context.getTarget());
+            default -> { }
+        }
+    }
+    context.proceed();
+}
+----
+
+== The constructor of a proxied bean
+
+A bean with around advice as well as constructor interception is constructed through the proxy Micronaut generated,
+whose constructor takes a handful of arguments of its own after the ones the bean declares. `getBeanConstructor()`
+is the constructor of the target class regardless: the declaring type is the bean, and the arguments are the ones
+the bean declares, which is what `getParameters()` lines up with.
+
+== Reflection
+
+An interceptor written against these accessors reflects on nothing, whatever it reads, and needs no reachability
+metadata of its own in a GraalVM native image. The accessors of the specification keep working beside them, and an
+interceptor may use both. See <<reflection,When Reflection Is Used>>.

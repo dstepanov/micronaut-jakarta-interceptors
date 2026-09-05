@@ -269,6 +269,10 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
                 interceptorMembers(builder, whenConstructed);
                 bindingsMember(builder, constructorBindings);
             });
+            // the specification hands an @AroundConstruct interceptor method a java.lang.reflect.Constructor, which
+            // the runtime looks up on the class. Reflection is permitted for it here so that the lookup answers
+            // inside a native image as it does on a virtual machine
+            constructor.annotate(ReflectiveAccess.class);
         }
         for (MethodElement method : methods) {
             interceptMethod(model, method, classInterceptors, classBindings, classDeclares, context);
@@ -320,6 +324,9 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
             return;
         }
         completeBindings(method, context);
+        // the specification hands an @AroundInvoke or @AroundTimeout interceptor method the intercepted method as
+        // a java.lang.reflect.Method, which the runtime reads off the executable method Micronaut generated
+        permitReflection(method);
         List<String> methodInterceptors = namedInterceptors(method);
         boolean excludesClassInterceptors = method.hasDeclaredAnnotation(JakartaInterceptors.EXCLUDE_CLASS_INTERCEPTORS);
         List<String> interceptors = new ArrayList<>(classInterceptors.size() + methodInterceptors.size());
@@ -452,10 +459,27 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         MethodElement postConstruct = callbackOf(element, model, JakartaInterceptors.POST_CONSTRUCT);
         if (postConstruct != null) {
             builder.member("postConstruct", postConstruct.getName());
+            permitReflection(postConstruct);
         }
         MethodElement preDestroy = callbackOf(element, model, JakartaInterceptors.PRE_DESTROY);
         if (preDestroy != null) {
             builder.member("preDestroy", preDestroy.getName());
+            permitReflection(preDestroy);
+        }
+    }
+
+    /**
+     * Permits reflection on a member the specification shows an interceptor method as a member of the platform.
+     *
+     * <p>{@code getMethod()} and {@code getConstructor()} return a {@code java.lang.reflect.Method} and a
+     * {@code java.lang.reflect.Constructor}, which the specification leaves no way around. Looking one up is the
+     * only reflection the interception does, and a native image answers such a lookup only for a member it was
+     * told to keep; the alternative is a lookup that comes back empty once the application is compiled ahead of
+     * time. Only the members that are actually intercepted are kept.</p>
+     */
+    private static void permitReflection(MethodElement member) {
+        if (!member.hasDeclaredAnnotation(ReflectiveAccess.class)) {
+            member.annotate(ReflectiveAccess.class);
         }
     }
 

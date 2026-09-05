@@ -6,6 +6,8 @@ dependencies {
     testAnnotationProcessor platform(libs.micronaut.core)
     testAnnotationProcessor projects.micronautJakartaInterceptorsProcessor
     testAnnotationProcessor mn.micronaut.inject.java
+    // turns the @ReflectiveAccess the processor declares into the reachability metadata of the image
+    testAnnotationProcessor mn.micronaut.graal
 
     testImplementation platform(libs.micronaut.core)
     testImplementation projects.micronautJakartaInterceptors

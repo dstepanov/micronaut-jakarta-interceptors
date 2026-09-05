@@ -27,4 +27,27 @@ class NativeImageInterceptionTest {
                 Calls.RECORDED);
         }
     }
+
+    /**
+     * A private interceptor method, which Micronaut reaches reflectively, together with the three things an
+     * interceptor may ask the context for that are looked up with the reflection of the platform: the method, the
+     * constructor and the binding annotations. The callbacks of a lifecycle event run in one chain, superclass
+     * first, here as anywhere else.
+     */
+    @Test
+    void reachesWhatNeedsReflectionInsideANativeImage() {
+        Calls.clear();
+        try (ApplicationContext context = ApplicationContext.run()) {
+            assertEquals("done", context.getBean(GuardedService.class).work());
+
+            assertEquals(
+                List.of("aroundConstruct GuardedService",
+                    "postConstruct init",
+                    "base",
+                    "own",
+                    "aroundInvoke work",
+                    "binding Guarded"),
+                Calls.RECORDED);
+        }
+    }
 }

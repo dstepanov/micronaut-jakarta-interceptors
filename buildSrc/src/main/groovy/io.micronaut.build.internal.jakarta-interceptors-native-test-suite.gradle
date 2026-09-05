@@ -1,7 +1,9 @@
 // A test suite whose tests also run inside a GraalVM native image: `nativeTest` compiles the tests and everything
 // they reach into a native binary and runs them there. It is what holds the interception to its promise of using
-// no reflection: nothing here declares any reachability metadata, so an interception that reached for reflection
-// would fail in the image rather than pass unnoticed on the JVM.
+// no reflection beyond what the specification's own accessors return: an interception that reached for reflection
+// the image was not told about would fail there rather than pass unnoticed on the JVM. What the processor asks
+// for is declared by the `@ReflectiveAccess` it writes out, which micronaut-graal turns into metadata; the one
+// thing declared by hand is the annotation proxy of getInterceptorBindings(), which nothing can express yet.
 plugins {
     id 'io.micronaut.build.internal.jakarta-interceptors-test-suite'
     id 'org.graalvm.buildtools.native'

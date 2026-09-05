@@ -1,0 +1,13 @@
+{
+  "comment": "InvocationContext.getInterceptorBindings() returns the binding annotations as instances, which Micronaut builds as a dynamic proxy of the annotation type and AnnotationValueProvider. Neither @ReflectiveAccess nor @ReflectionConfig(accessType = DYNAMIC_PROXY) can declare a proxy of two interfaces, so the pair is declared here by hand until Micronaut Core can express it.",
+  "reflection": [
+    {
+      "type": {
+        "proxy": [
+          "io.micronaut.interceptor.test.graalvm.Guarded",
+          "io.micronaut.core.annotation.AnnotationValueProvider"
+        ]
+      }
+    }
+  ]
+}

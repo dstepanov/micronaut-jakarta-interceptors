@@ -16,7 +16,6 @@
 package io.micronaut.interceptor.runtime;
 
 import io.micronaut.aop.ConstructorInvocationContext;
-import io.micronaut.aop.Intercepted;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.core.beans.BeanConstructor;
@@ -76,8 +75,7 @@ final class ConstructorInvocationContextAdapter extends AbstractInvocationContex
     public @Nullable Constructor<?> getConstructor() {
         if (!constructorResolved) {
             constructorResolved = true;
-            Object[] arguments = readParameters();
-            constructor = resolveConstructor(context.getConstructor(), arguments == null ? 0 : arguments.length);
+            constructor = resolveConstructor(context.getConstructor());
         }
         return constructor;
     }
@@ -119,28 +117,20 @@ final class ConstructorInvocationContextAdapter extends AbstractInvocationContex
     /**
      * Finds the constructor of the class the specification calls the target class.
      *
-     * <p>What is being constructed is the proxy Micronaut generated, whose class is a subclass of the target class
-     * and whose constructor takes a few arguments of its own after the declared ones. The constructor the
-     * interceptor is shown is the one of the target class itself.</p>
+     * <p>What Micronaut constructs for a bean that also has around advice is the proxy it generated, whose
+     * constructor takes a few arguments of its own after the declared ones. It describes the constructor of the
+     * target class to a constructor interceptor regardless, so the declaring type and the arguments read here are
+     * the ones the specification asks for.</p>
      *
      * @param beanConstructor The constructor of the invocation
-     * @param argumentCount   How many of its arguments were declared by the target class
      * @return The constructor, or {@code null} when it cannot be found
      */
-    private static @Nullable Constructor<?> resolveConstructor(BeanConstructor<?> beanConstructor, int argumentCount) {
-        Class<?> declaringType = beanConstructor.getDeclaringBeanType();
-        if (Intercepted.class.isAssignableFrom(declaringType)) {
-            Class<?> superclass = declaringType.getSuperclass();
-            if (superclass != null) {
-                declaringType = superclass;
-            }
-        }
+    private static @Nullable Constructor<?> resolveConstructor(BeanConstructor<?> beanConstructor) {
         Class<?>[] parameterTypes = Arrays.stream(beanConstructor.getArguments())
-            .limit(argumentCount)
             .map(Argument::getType)
             .toArray(Class<?>[]::new);
         try {
-            return declaringType.getDeclaredConstructor(parameterTypes);
+            return beanConstructor.getDeclaringBeanType().getDeclaredConstructor(parameterTypes);
         } catch (NoSuchMethodException e) {
             return null;
         }

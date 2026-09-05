@@ -15,7 +15,6 @@
  */
 package io.micronaut.interceptor.processor.visitor;
 
-import io.micronaut.aop.Adapter;
 import io.micronaut.context.annotation.Bean;
 import io.micronaut.context.annotation.Executable;
 import io.micronaut.context.annotation.NonBinding;
@@ -26,6 +25,7 @@ import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationUtil;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.AnnotationValueBuilder;
+import io.micronaut.core.annotation.Indexed;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.core.annotation.ReflectiveAccess;
 import io.micronaut.inject.ast.ClassElement;
@@ -39,7 +39,6 @@ import io.micronaut.interceptor.annotation.InterceptionKind;
 import io.micronaut.interceptor.annotation.JakartaInterception;
 import io.micronaut.interceptor.annotation.JakartaInterceptorIndex;
 import io.micronaut.interceptor.annotation.JakartaInterceptorMethods;
-import io.micronaut.interceptor.annotation.JakartaVoidInterceptorIndex;
 import io.micronaut.interceptor.processor.BindingConflicts;
 import io.micronaut.interceptor.processor.InterceptorBindingValues;
 import io.micronaut.interceptor.processor.InterceptorClassModel;
@@ -203,35 +202,11 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
      * Puts a bound interceptor class into the bean index of the context, so that the runtime finds the interceptor
      * classes of an application without reading every bean definition there is.
      *
-     * <p>An index holds the definitions of a type, and an interceptor class of the specification implements
-     * nothing. One of its interceptor methods is adapted to the type the runtime asks for instead, which gives
-     * the class a bean definition of that type; the definition carries the metadata of the interceptor class,
-     * which is all the runtime reads. Nothing invokes the adapted method: what it produces is a definition.</p>
+     * <p>An interceptor class of the specification implements nothing, and it does not have to: a bean is
+     * enumerable by every type it is indexed by, whether or not it is one.</p>
      */
     private static void index(InterceptorClassModel model) {
-        MethodElement representative = null;
-        for (List<MethodElement> methods : model.methods().values()) {
-            for (MethodElement method : methods) {
-                // a method that returns the result of what it interposes on is preferred, because a method
-                // returning nothing cannot be adapted to one that returns something
-                if (!method.getReturnType().isVoid()) {
-                    representative = method;
-                    break;
-                }
-                if (representative == null) {
-                    representative = method;
-                }
-            }
-            if (representative != null && !representative.getReturnType().isVoid()) {
-                break;
-            }
-        }
-        if (representative == null) {
-            return;
-        }
-        Class<?> index = representative.getReturnType().isVoid()
-            ? JakartaVoidInterceptorIndex.class : JakartaInterceptorIndex.class;
-        representative.annotate(Adapter.class, builder -> builder.value(index));
+        model.interceptorClass().annotate(Indexed.class, builder -> builder.value(JakartaInterceptorIndex.class));
     }
 
     /**

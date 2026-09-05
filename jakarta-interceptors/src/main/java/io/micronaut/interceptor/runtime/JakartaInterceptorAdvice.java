@@ -26,7 +26,6 @@ import io.micronaut.context.BeanContext;
 import io.micronaut.context.annotation.Prototype;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.core.beans.BeanConstructor;
-import io.micronaut.inject.ExecutableMethod;
 import io.micronaut.interceptor.annotation.JakartaInterception;
 import jakarta.interceptor.Interceptor;
 import org.jspecify.annotations.Nullable;
@@ -56,6 +55,9 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
 
     private final InterceptorChainResolver resolver;
     private final InterceptorInstances instances;
+    // one for each lifecycle event of the object this advice was created for
+    private final LifecyclePhase postConstruct = new LifecyclePhase();
+    private final LifecyclePhase preDestroy = new LifecyclePhase();
 
     /**
      * @param resolver    The resolver of the interceptor chains
@@ -88,23 +90,55 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
     @Override
     public @Nullable Object intercept(MethodInvocationContext<Object, Object> context) {
         InterceptorKind kind = context.getKind();
+        if (kind == InterceptorKind.POST_CONSTRUCT || kind == InterceptorKind.PRE_DESTROY) {
+            return interceptLifecycle(context, kind);
+        }
         List<InterceptorReference> chain = resolver.resolve(keyOf(context, kind), context.getAnnotationMetadata());
         if (chain.isEmpty()) {
             return context.proceed();
         }
-        AbstractInvocationContext invocation = switch (kind) {
-            case POST_CONSTRUCT, PRE_DESTROY -> new LifecycleInvocationContext(context, chain, instances);
-            default -> new BusinessMethodInvocationContext(context, chain, instances);
-        };
-        Object result;
         try {
-            result = invocation.proceed();
+            return new BusinessMethodInvocationContext(context, chain, instances).proceed();
         } catch (Exception e) {
-            throw kind == InterceptorKind.AROUND ? sneakyThrow(e) : lifecycleFailure(e);
+            throw sneakyThrow(e);
+        }
+    }
+
+    /**
+     * Interposes on a {@code @PostConstruct} or {@code @PreDestroy} event of the object this advice was created for.
+     *
+     * <p>Micronaut invokes this once for each callback of the event that the bean declares, and once for a bean
+     * that declares none. The specification instead has one chain of interceptor methods run for the event as a
+     * whole, with every callback of the bean running after it, superclass first, when the chain is proceeded to
+     * the end. The chain is therefore run for the first callback of the event, and the callbacks after it are
+     * invoked on their own - or not at all, when an interceptor kept the chain from reaching the bean.</p>
+     */
+    private @Nullable Object interceptLifecycle(MethodInvocationContext<Object, Object> context, InterceptorKind kind) {
+        LifecyclePhase phase = kind == InterceptorKind.PRE_DESTROY ? preDestroy : postConstruct;
+        if (phase.started) {
+            if (phase.reachedBean) {
+                context.proceed();
+            }
+            return context.getTarget();
+        }
+        phase.started = true;
+        List<InterceptorReference> chain = resolver.resolve(keyOf(context, kind), context.getAnnotationMetadata());
+        if (chain.isEmpty()) {
+            phase.reachedBean = true;
+            context.proceed();
+            return context.getTarget();
+        }
+        LifecycleInvocationContext invocation = new LifecycleInvocationContext(context, chain, instances);
+        try {
+            invocation.proceed();
+        } catch (Exception e) {
+            throw lifecycleFailure(e);
+        } finally {
+            phase.reachedBean = invocation.reachedBean();
         }
         // the chain of a lifecycle callback carries the bean itself, which an interceptor may neither replace nor
         // discard: an interceptor that does not proceed only keeps the rest of the chain from running
-        return kind == InterceptorKind.AROUND ? result : context.getTarget();
+        return context.getTarget();
     }
 
     @Override
@@ -136,13 +170,22 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
 
     private static InterceptorChainResolver.ChainKey keyOf(MethodInvocationContext<Object, Object> context,
                                                            InterceptorKind kind) {
-        ExecutableMethod<Object, Object> method = context.getExecutableMethod();
         return switch (kind) {
-            // the executable method of a lifecycle callback is a new object for every bean, so the class is what
-            // identifies the chain there; a bean has one callback chain of each kind anyway
-            case POST_CONSTRUCT, PRE_DESTROY -> new InterceptorChainResolver.ChainKey(method.getDeclaringType(), kind);
-            default -> new InterceptorChainResolver.ChainKey(method, kind);
+            // a lifecycle chain belongs to the bean, which has one of each kind. It is not identified by the
+            // callback the chain is run for: two beans bound to different interceptors may inherit the callback
+            // the chain starts at from the same superclass
+            case POST_CONSTRUCT, PRE_DESTROY -> new InterceptorChainResolver.ChainKey(targetTypeOf(context), kind);
+            default -> new InterceptorChainResolver.ChainKey(context.getExecutableMethod(), kind);
         };
+    }
+
+    /**
+     * The class of the object being intercepted, which for a bean Micronaut also generated a proxy of is that
+     * proxy. Either way it is one class for one bean, which is what a lifecycle chain is resolved for.
+     */
+    private static Class<?> targetTypeOf(MethodInvocationContext<Object, Object> context) {
+        Object target = context.getTarget();
+        return target == null ? context.getExecutableMethod().getDeclaringType() : target.getClass();
     }
 
     /**
@@ -178,5 +221,13 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
     @SuppressWarnings("unchecked")
     private static <E extends Throwable> RuntimeException sneakyThrow(Throwable e) throws E {
         throw (E) e;
+    }
+
+    /**
+     * What has become of one lifecycle event of the intercepted object.
+     */
+    private static final class LifecyclePhase {
+        private boolean started;
+        private boolean reachedBean;
     }
 }

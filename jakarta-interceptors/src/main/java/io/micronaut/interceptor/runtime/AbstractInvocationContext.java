@@ -238,9 +238,8 @@ abstract sealed class AbstractInvocationContext implements InvocationContext
      * Replaces the arguments the rest of the chain, and finally the intercepted element itself, is invoked with.
      *
      * <p>The arguments are written into the array the chain holds them in, which is the array it goes on to invoke
-     * with. Writing them one by one through the parameter map of the chain would not do for a constructor: the
-     * constructor of a generated proxy takes a handful of arguments of its own after the ones that were declared,
-     * and only the declared ones are the invocation's.</p>
+     * with, rather than one by one through the parameter map of the chain: the array is what a constructor
+     * invocation is proceeded with, and the map does not reach it.</p>
      *
      * @param params The new arguments
      */
@@ -254,7 +253,6 @@ abstract sealed class AbstractInvocationContext implements InvocationContext
         Argument<?>[] arguments = context.getArguments();
         for (int i = 0; i < params.length; i++) {
             Object value = params[i];
-            // the arguments of a proxy constructor outnumber the invocation's, and the extra ones are not checked
             if (i < arguments.length && !isAssignable(arguments[i].getType(), value)) {
                 throw new IllegalArgumentException("Parameter [" + arguments[i].getName() + "] of " + description()
                     + " is of type " + arguments[i].getType().getName() + " and cannot be set to " + value);

@@ -15,7 +15,6 @@
  */
 package io.micronaut.interceptor.test.index;
 
-import io.micronaut.aop.Adapter;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.inject.BeanDefinition;
 import io.micronaut.interceptor.annotation.JakartaInterceptorIndex;
@@ -55,19 +54,17 @@ final class InterceptorIndexTest {
             Collection<BeanDefinition<JakartaInterceptorIndex>> indexed =
                 context.getBeanDefinitions(JakartaInterceptorIndex.class);
 
-            // the definition of the index is the one of the adapted method, and it describes the interceptor
-            // class that declared it
-            List<String> adapted = indexed.stream()
-                .map(d -> d.classValue(Adapter.class, Adapter.InternalAttributes.ADAPTED_BEAN)
-                    .orElseThrow().getName())
+            // an interceptor class is enumerable by the type it is indexed by although it does not implement it
+            List<String> types = indexed.stream()
+                .map(d -> d.getBeanType().getName())
                 .toList();
-            assertTrue(adapted.contains(IndexedFirst.class.getName()));
-            assertTrue(adapted.contains(IndexedSecond.class.getName()));
+            assertTrue(types.contains(IndexedFirst.class.getName()));
+            assertTrue(types.contains(IndexedSecond.class.getName()));
 
-            // and it carries the metadata of that class, which is what the chains are resolved by
+            // and the definition is the one of the interceptor class, carrying the metadata the chains are
+            // resolved by
             BeanDefinition<?> first = indexed.stream()
-                .filter(d -> d.classValue(Adapter.class, Adapter.InternalAttributes.ADAPTED_BEAN)
-                    .filter(IndexedFirst.class::equals).isPresent())
+                .filter(d -> IndexedFirst.class.equals(d.getBeanType()))
                 .findFirst()
                 .orElseThrow();
             assertTrue(first.hasAnnotation("jakarta.interceptor.Interceptor"));

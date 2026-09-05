@@ -41,6 +41,7 @@ final class LifecycleInvocationContext extends AbstractInvocationContext {
     private final MethodInvocationContext<Object, ?> context;
     private @Nullable Method method;
     private boolean methodResolved;
+    private boolean reachedBean;
 
     LifecycleInvocationContext(MethodInvocationContext<Object, ?> context,
                                List<InterceptorReference> chain,
@@ -127,8 +128,23 @@ final class LifecycleInvocationContext extends AbstractInvocationContext {
      */
     @Override
     @Nullable Object proceedTarget() {
+        reachedBean = true;
         super.proceedTarget();
         return null;
+    }
+
+    /**
+     * Whether the chain was proceeded all the way into the bean.
+     *
+     * <p>Micronaut interposes on each callback of a lifecycle event separately, while one chain of interceptor
+     * methods runs for the whole event. The callbacks after the first are invoked without a chain of their own,
+     * and only when this chain reached the bean at all: an interceptor that does not proceed keeps every callback
+     * of the event from running, not only the one its chain was started for.</p>
+     *
+     * @return Whether the bean was reached
+     */
+    boolean reachedBean() {
+        return reachedBean;
     }
 
     @Override

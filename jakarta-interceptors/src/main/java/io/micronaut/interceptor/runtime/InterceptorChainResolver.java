@@ -15,7 +15,6 @@
  */
 package io.micronaut.interceptor.runtime;
 
-import io.micronaut.aop.Adapter;
 import io.micronaut.aop.InterceptorKind;
 import io.micronaut.context.BeanContext;
 import io.micronaut.core.annotation.AnnotationMetadata;
@@ -28,7 +27,6 @@ import io.micronaut.interceptor.annotation.InterceptionKind;
 import io.micronaut.interceptor.annotation.JakartaInterception;
 import io.micronaut.interceptor.annotation.JakartaInterceptorIndex;
 import io.micronaut.interceptor.annotation.JakartaInterceptorMethods;
-import io.micronaut.interceptor.annotation.JakartaVoidInterceptorIndex;
 import jakarta.inject.Singleton;
 import jakarta.interceptor.Interceptor;
 import jakarta.interceptor.InvocationContext;
@@ -231,28 +229,15 @@ public final class InterceptorChainResolver {
      */
     private List<BeanDefinition<?>> allInterceptorClasses() {
         List<BeanDefinition<?>> interceptors = new ArrayList<>();
-        collectIndexed(JakartaInterceptorIndex.class, interceptors);
-        collectIndexed(JakartaVoidInterceptorIndex.class, interceptors);
-        return interceptors;
-    }
-
-    private void collectIndexed(Class<?> index, List<BeanDefinition<?>> interceptors) {
-        for (BeanDefinition<?> indexed : beanContext.getBeanDefinitions(index)) {
-            // the definition of the index is the one of the adapted method, and what it describes is the
-            // interceptor class the method was declared by
-            Class<?> interceptorClass = indexed
-                .classValue(Adapter.class, Adapter.InternalAttributes.ADAPTED_BEAN)
-                .orElse(null);
-            if (interceptorClass == null) {
-                continue;
-            }
-            BeanDefinition<?> definition = describing(interceptorClass);
+        for (BeanDefinition<?> indexed : beanContext.getBeanDefinitions(JakartaInterceptorIndex.class)) {
+            BeanDefinition<?> definition = describing(indexed.getBeanType());
             // a class that declares an interceptor method without declaring itself an interceptor class is one
             // only where it is named directly, and takes no part in what a binding annotation binds
             if (definition != null && definition.hasAnnotation(JakartaInterceptorSupport.INTERCEPTOR)) {
                 interceptors.add(definition);
             }
         }
+        return interceptors;
     }
 
     /**
@@ -314,9 +299,9 @@ public final class InterceptorChainResolver {
      *
      * <p>What identifies it depends on the kind. A business or timeout method is identified by its executable
      * method, which compares by its declaring type, its name and its argument types: overloads of one name are
-     * different elements and must not share a chain. A lifecycle callback and a constructor are identified by the
-     * class instead, because the executable method of a callback is created anew for every bean and would make
-     * this map grow with them, and because a bean has one chain for each of them either way.</p>
+     * different elements and must not share a chain. A lifecycle event and a constructor are identified by the
+     * class of the bean instead, because a bean has one chain for each of them and because the executable method
+     * of a callback is created anew for every bean, which would make this map grow with them.</p>
      *
      * @param element What the chain was resolved for
      * @param kind    The kind of interception

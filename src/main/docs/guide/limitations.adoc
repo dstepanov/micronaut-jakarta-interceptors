@@ -62,6 +62,18 @@ callback exist by the time the object is constructed, and the interceptor of a b
 method is first called. Each intercepted object still has interceptor instances of its own, for the whole of its
 life, which is what the state an interceptor holds depends on.
 
+=== The destroy method of a produced bean that is intercepted
+
+A bean produced by a `@Factory` method that names its destroy method with `@Bean(preDestroy = "close")` does not
+have that method invoked once a binding on the factory method makes the produced bean a proxy. The method named
+there is resolved against the bean definition, and the definition of a proxied factory-produced bean does not
+carry it.
+
+This is Micronaut's own behaviour rather than a rule of the specification: the same factory method bound by an
+ordinary Micronaut `@Around` annotation loses its destroy method too, silently. Nothing in this module can arrange
+it, because the produced type is not the class the binding is declared on and no visitor of this module ever reads
+it. Use `@PreDestroy` on the produced class instead, which is intercepted as the specification describes.
+
 === Methods that return a future
 
 The interception the specification describes is synchronous. A method that returns a `CompletableFuture`, or any

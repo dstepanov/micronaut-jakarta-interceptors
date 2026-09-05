@@ -30,6 +30,29 @@ class CdiInvocationRulesTest {
     }
 
     @Test
+    void theMethodsOfObjectAreNotBusinessMethodsEvenWhenOverridden() {
+        try (ApplicationContext context = ApplicationContext.run()) {
+            OverridingObjectService service = context.getBean(OverridingObjectService.class);
+
+            Calls.clear();
+            service.toString();
+            service.hashCode();
+            service.equals((Object) service);
+            assertEquals(List.of("toString", "hashCode", "equals"), List.copyOf(Calls.RECORDED));
+
+            // a method that only shares a name with one of them is an overload rather than an override, and is a
+            // business method as any other method is
+            Calls.clear();
+            service.toString("a ");
+            service.equals(service);
+            service.work();
+            assertEquals(
+                List.of("secure", "toString overload", "secure", "equals overload", "secure", "work"),
+                List.copyOf(Calls.RECORDED));
+        }
+    }
+
+    @Test
     void anInitializerMethodIsNotABusinessMethod() {
         try (ApplicationContext context = ApplicationContext.run()) {
             Calls.clear();

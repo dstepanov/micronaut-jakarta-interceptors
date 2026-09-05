@@ -32,6 +32,7 @@ import io.micronaut.inject.ast.ClassElement;
 import io.micronaut.inject.ast.Element;
 import io.micronaut.inject.ast.ElementQuery;
 import io.micronaut.inject.ast.MethodElement;
+import io.micronaut.inject.ast.ParameterElement;
 import io.micronaut.inject.processing.ProcessingException;
 import io.micronaut.inject.visitor.TypeElementVisitor;
 import io.micronaut.inject.visitor.VisitorContext;
@@ -303,6 +304,15 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
             }
             return;
         }
+        if (overridesObjectMethod(method)) {
+            // the methods of Object are not business methods, and overriding one does not make it a method of
+            // the class the way an ordinary declaration would. Class level advice reaches every method Micronaut
+            // is able to override, so one of these is marked rather than passed over
+            if (!method.isPrivate()) {
+                method.annotate(JakartaInterception.class, builder -> builder.member("excluded", true));
+            }
+            return;
+        }
         if (!isBusinessMethod(method)) {
             return;
         }
@@ -513,7 +523,27 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         return !method.isPrivate()
             && !method.isFinal()
             && !Object.class.getName().equals(method.getDeclaringType().getName())
+            && !overridesObjectMethod(method)
             && !method.hasDeclaredAnnotation(JakartaInterceptors.POST_CONSTRUCT)
             && !method.hasDeclaredAnnotation(JakartaInterceptors.PRE_DESTROY);
+    }
+
+    /**
+     * Tells whether a method is one of the methods {@link Object} declares, which a class may override and which
+     * are no more a business method of it than they are of {@code Object} itself.
+     *
+     * <p>The overridable ones are matched by their signature: the rest of what {@code Object} declares is final,
+     * so nothing can be declared for it here. A method that only shares a name with one of them - a
+     * {@code toString} that takes something, an {@code equals} of the class's own type - is an overload rather
+     * than an override, and is a business method as any other method would be.</p>
+     */
+    private static boolean overridesObjectMethod(MethodElement method) {
+        ParameterElement[] parameters = method.getParameters();
+        return switch (method.getName()) {
+            case "toString", "hashCode", "clone", "finalize" -> parameters.length == 0;
+            case "equals" -> parameters.length == 1
+                && Object.class.getName().equals(parameters[0].getType().getName());
+            default -> false;
+        };
     }
 }

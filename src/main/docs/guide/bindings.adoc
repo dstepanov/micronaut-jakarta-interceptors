@@ -14,6 +14,15 @@ Declared on a class, the binding applies to every business method of that class,
 lifecycle callbacks. Declared on a method, it applies to that method alone. The two accumulate: a method is
 intercepted by the interceptors bound to it and by those bound to its class.
 
+The business methods of a class are the instance methods a caller invokes on it. Its lifecycle callbacks are
+intercepted as callbacks rather than as methods, an injection point is not a call a caller makes, and the methods
+of `Object` are none of the class's own even where it overrides them, so `toString`, `equals`, `hashCode`, `clone`
+and `finalize` are not intercepted. A method that only shares a name with one of those - a `toString` that takes
+an argument - is an overload rather than an override, and is a business method as any other method is.
+
+A binding declared on a method that is not a business method binds nothing. It is not reported: a binding declared
+on the class reaches such a method too, and there would be nothing wrong with that.
+
 == Binding by member values
 
 The members of a binding annotation are part of the binding, as the specification requires. An interceptor

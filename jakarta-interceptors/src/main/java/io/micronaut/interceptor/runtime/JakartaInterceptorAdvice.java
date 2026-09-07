@@ -56,8 +56,6 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
     private final InterceptorChainResolver resolver;
     private final InterceptorInstances instances;
     // one for each lifecycle event of the object this advice was created for
-    private final LifecyclePhase postConstruct = new LifecyclePhase();
-    private final LifecyclePhase preDestroy = new LifecyclePhase();
 
     /**
      * @param resolver    The resolver of the interceptor chains
@@ -107,24 +105,13 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
     /**
      * Interposes on a {@code @PostConstruct} or {@code @PreDestroy} event of the object this advice was created for.
      *
-     * <p>Micronaut invokes this once for each callback of the event that the bean declares, and once for a bean
-     * that declares none. The specification instead has one chain of interceptor methods run for the event as a
-     * whole, with every callback of the bean running after it, superclass first, when the chain is proceeded to
-     * the end. The chain is therefore run for the first callback of the event, and the callbacks after it are
-     * invoked on their own - or not at all, when an interceptor kept the chain from reaching the bean.</p>
+     * <p>Micronaut invokes this once for the event, and proceeding the chain runs every callback of the bean in
+     * order, superclass first - which is the interception the specification describes. An interceptor that does
+     * not proceed keeps all of them from running.</p>
      */
     private @Nullable Object interceptLifecycle(MethodInvocationContext<Object, Object> context, InterceptorKind kind) {
-        LifecyclePhase phase = kind == InterceptorKind.PRE_DESTROY ? preDestroy : postConstruct;
-        if (phase.started) {
-            if (phase.reachedBean) {
-                context.proceed();
-            }
-            return context.getTarget();
-        }
-        phase.started = true;
         List<InterceptorReference> chain = resolver.resolve(keyOf(context, kind), context.getAnnotationMetadata());
         if (chain.isEmpty()) {
-            phase.reachedBean = true;
             context.proceed();
             return context.getTarget();
         }
@@ -133,8 +120,6 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
             invocation.proceed();
         } catch (Exception e) {
             throw lifecycleFailure(e);
-        } finally {
-            phase.reachedBean = invocation.reachedBean();
         }
         // the chain of a lifecycle callback carries the bean itself, which an interceptor may neither replace nor
         // discard: an interceptor that does not proceed only keeps the rest of the chain from running
@@ -221,13 +206,5 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
     @SuppressWarnings("unchecked")
     private static <E extends Throwable> RuntimeException sneakyThrow(Throwable e) throws E {
         throw (E) e;
-    }
-
-    /**
-     * What has become of one lifecycle event of the intercepted object.
-     */
-    private static final class LifecyclePhase {
-        private boolean started;
-        private boolean reachedBean;
     }
 }

@@ -116,6 +116,14 @@ dependencies {
     testRuntimeOnly libs.junit.jupiter.engine
 }
 
+// The test sources of this module are the kit's scenarios, the harness that compiles a rejected deployment and
+// the AbstractTest bridge - all of them driven by the kit's own test classes under directTckTest, which is
+// TestNG. There is nothing here for the JUnit task to discover, and that is the arrangement rather than a
+// misconfiguration.
+tasks.named('test', Test) {
+    failOnNoDiscoveredTests = false
+}
+
 def directTckTest = tasks.register('directTckTest', Test) {
     description = 'Runs the CDI TCK interceptor tests directly against Micronaut.'
     group = LifecycleBasePlugin.VERIFICATION_GROUP
@@ -124,11 +132,6 @@ def directTckTest = tasks.register('directTckTest', Test) {
     // The locally compiled scenarios and AbstractTest bridge must precede the TCK jar carrying the original tests.
     classpath = files(sourceSets.test.output, configurations.testRuntimeClasspath, configurations.tckTestRuntime)
     useTestNG()
-    filter {
-        // The documented conformance difference: interceptor instances are created lazily rather than with their
-        // target.
-        excludeTestsMatching '*InterceptorLifeCycleTest.testInterceptorInstanceCreatedWhenTargetInstanceCreated'
-    }
 }
 
 tasks.named('check') {

@@ -52,14 +52,14 @@ module stands against every one of them.
 |===
 | | Assertions
 
-| Covered by a test of this repository | 127
-| Differs from the specification, deliberately | 6
+| Covered by a test of this repository | 128
+| Differs from the specification, deliberately | 5
 | Not applicable to a module without Jakarta Enterprise Beans, a deployment descriptor or a naming context | 29
 | A statement of intent, with nothing to verify | 4
 |===
 
 Everything the specification describes that applies to a module of this kind is covered by a test, apart from the
-6 differences below, each of which is deliberate.
+5 differences below, each of which is deliberate.
 
 == Where this module differs
 |===
@@ -67,9 +67,6 @@ Everything the specification describes that applies to a module of this kind is 
 
 | 2.2 c)
 | An interceptor class is a bean, so it needs no public no-arg constructor and may take injection
-
-| 2.3 ba)
-| An interceptor instance is created when the interceptor is first needed rather than when the target instance is created
 
 | 3.3 f)
 | Micronaut leaves a final class or method uninterceptable rather than reporting a definition error
@@ -177,8 +174,8 @@ Everything the specification describes that applies to a module of this kind is 
 
 | ba)
 | Except as noted below, when the target instance is created, a corresponding interceptor instance is created for each associated interceptor class.
-| Differs
-| An interceptor instance is created when the interceptor is first needed rather than when the target instance is created
+| Covered
+| InterceptorLifeCycleTest, from the kit
 
 | bb)
 | These interceptor instances are destroyed if the target instance fails to be created or when it is removed.

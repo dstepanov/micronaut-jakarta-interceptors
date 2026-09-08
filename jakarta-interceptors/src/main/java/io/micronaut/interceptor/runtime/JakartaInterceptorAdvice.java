@@ -24,8 +24,11 @@ import io.micronaut.aop.MethodInterceptor;
 import io.micronaut.aop.MethodInvocationContext;
 import io.micronaut.context.BeanContext;
 import io.micronaut.context.annotation.Prototype;
+import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.core.beans.BeanConstructor;
+import io.micronaut.inject.BeanDefinition;
+import io.micronaut.inject.ExecutableMethod;
 import io.micronaut.interceptor.annotation.JakartaInterception;
 import jakarta.interceptor.Interceptor;
 import org.jspecify.annotations.Nullable;
@@ -151,6 +154,46 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
                 + "InvocationContext.proceed(), so no instance was created");
         }
         return constructed;
+    }
+
+    /**
+     * Creates now every interceptor instance that will interpose on the given object.
+     *
+     * <p>The specification creates an interceptor instance when the object it intercepts is created, whether or
+     * not anything is ever invoked on that object, so that what an interceptor class does as it is constructed
+     * happens then. Resolving a chain the first time it is proceeded would instead create the instances of a
+     * method's interceptors only once that method is called, and never for a method nobody calls.</p>
+     *
+     * <p>Called by {@link InterceptorCreationListener} as the object is created, on the advice bound to it, which
+     * is the advice whose instances every interception of that object goes on to use.</p>
+     *
+     * @param definition The definition of the object
+     */
+    void createInterceptorInstances(BeanDefinition<?> definition) {
+        Class<?> targetType = definition.getBeanType();
+        AnnotationMetadata classMetadata = definition.getAnnotationMetadata();
+        // only what this module intercepts is asked for: an element it does not intercept has no chain, and
+        // resolving one would put an empty chain in the resolver's map for nothing
+        if (classMetadata.hasAnnotation(JakartaInterception.class)) {
+            createInstancesOf(new InterceptorChainResolver.ChainKey(targetType, InterceptorKind.POST_CONSTRUCT), classMetadata);
+            createInstancesOf(new InterceptorChainResolver.ChainKey(targetType, InterceptorKind.PRE_DESTROY), classMetadata);
+        }
+        for (ExecutableMethod<?, ?> method : definition.getExecutableMethods()) {
+            AnnotationMetadata methodMetadata = method.getAnnotationMetadata();
+            if (methodMetadata.hasAnnotation(JakartaInterception.class)) {
+                createInstancesOf(new InterceptorChainResolver.ChainKey(method, InterceptorKind.AROUND), methodMetadata);
+            }
+        }
+    }
+
+    private void createInstancesOf(InterceptorChainResolver.ChainKey key, AnnotationMetadata metadata) {
+        for (InterceptorReference reference : resolver.resolve(key, metadata)) {
+            // an interceptor method the intercepted class declares itself runs on the object, and has no
+            // instance of its own to create
+            if (!reference.self()) {
+                instances.get(reference);
+            }
+        }
     }
 
     private static InterceptorChainResolver.ChainKey keyOf(MethodInvocationContext<Object, Object> context,

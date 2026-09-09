@@ -24,6 +24,7 @@ import com.google.errorprone.matchers.Matcher;
 import com.google.errorprone.matchers.Matchers;
 import com.google.errorprone.matchers.method.MethodMatchers;
 import com.sun.source.tree.ExpressionTree;
+import com.sun.source.tree.MemberReferenceTree;
 import com.sun.source.tree.MethodInvocationTree;
 
 /**
@@ -68,7 +69,8 @@ import com.sun.source.tree.MethodInvocationTree;
         getConstructor a java.lang.reflect.Constructor, getInterceptorBindings the annotation instances themselves \
         - suppress this with @SuppressWarnings("NoReflection") and say above it why the platform had to be asked.""",
     severity = BugPattern.SeverityLevel.ERROR)
-public final class NoReflection extends BugChecker implements BugChecker.MethodInvocationTreeMatcher {
+public final class NoReflection extends BugChecker
+    implements BugChecker.MethodInvocationTreeMatcher, BugChecker.MemberReferenceTreeMatcher {
 
     private static final long serialVersionUID = 1L;
 
@@ -89,20 +91,50 @@ public final class NoReflection extends BugChecker implements BugChecker.MethodI
             "getAnnotation", "getAnnotations", "getDeclaredAnnotation", "getDeclaredAnnotations",
             "getAnnotationsByType", "getDeclaredAnnotationsByType", "isAnnotationPresent");
 
-    /** The accessibility flag, and instantiation that bypasses the bean context. */
+    /**
+     * The accessibility flag, reading and writing a member, and instantiation that bypasses the bean context.
+     * A field is read and written through the same object the flag is set on, so the whole of it is here.
+     */
     private static final Matcher<ExpressionTree> REFLECTIVE_ACCESS = Matchers.anyOf(
         MethodMatchers.instanceMethod().onDescendantOf("java.lang.reflect.AccessibleObject")
             .namedAnyOf("setAccessible", "trySetAccessible", "canAccess"),
         MethodMatchers.instanceMethod().onDescendantOf("java.lang.reflect.Constructor").named("newInstance"),
         MethodMatchers.instanceMethod().onDescendantOf("java.lang.reflect.Method").named("invoke"),
+        MethodMatchers.instanceMethod().onDescendantOf("java.lang.reflect.Field").withAnyName(),
+        MethodMatchers.staticMethod().onClass("java.lang.reflect.Array").withAnyName(),
         MethodMatchers.instanceMethod().onExactClass("java.lang.Class").named("newInstance"),
-        MethodMatchers.staticMethod().onClass("java.lang.Class").named("forName"));
+        MethodMatchers.staticMethod().onClass("java.lang.Class").named("forName"),
+        MethodMatchers.instanceMethod().onDescendantOf("java.lang.ClassLoader")
+            .namedAnyOf("loadClass", "findClass"));
 
     /** A proxy class, which is defined for the life of the class loader it is defined in. */
-    private static final Matcher<ExpressionTree> PROXY = Matchers.anyOf(
+    private static final Matcher<ExpressionTree> PROXY =
         MethodMatchers.staticMethod().onClass("java.lang.reflect.Proxy")
-            .namedAnyOf("newProxyInstance", "getProxyClass"),
-        MethodMatchers.staticMethod().anyClass().namedAnyOf("lookup", "privateLookupIn"));
+            .namedAnyOf("newProxyInstance", "getProxyClass");
+
+    /**
+     * Method and variable handles, which reach a member as reflection does and are looked up the same way. The
+     * lookup was previously matched by the name alone on any class, which caught nothing that mattered and any
+     * method of that name that did not.
+     */
+    private static final Matcher<ExpressionTree> HANDLES = Matchers.anyOf(
+        MethodMatchers.staticMethod().onClass("java.lang.invoke.MethodHandles").withAnyName(),
+        MethodMatchers.instanceMethod().onDescendantOf("java.lang.invoke.MethodHandles.Lookup").withAnyName(),
+        MethodMatchers.instanceMethod().onDescendantOf("java.lang.invoke.MethodHandle").withAnyName(),
+        MethodMatchers.instanceMethod().onDescendantOf("java.lang.invoke.VarHandle").withAnyName());
+
+    /**
+     * The reflection of Micronaut itself. ReflectionUtils is the platform reached through a helper, and a call to
+     * it is the same lookup written more briefly.
+     *
+     * <p>Any method of it but the two that map a primitive type to its wrapper and back, which read a table
+     * compiled into the class and reach for nothing. Matching the class and excepting those keeps a helper added
+     * later inside the check rather than outside it.</p>
+     */
+    private static final Matcher<ExpressionTree> REFLECTION_HELPERS = Matchers.allOf(
+        MethodMatchers.staticMethod().onClass("io.micronaut.core.reflect.ReflectionUtils").withAnyName(),
+        Matchers.not(MethodMatchers.staticMethod().onClass("io.micronaut.core.reflect.ReflectionUtils")
+            .namedAnyOf("getWrapperType", "getPrimitiveType")));
 
     /**
      * Building an annotation instance from the metadata, which is the proxy above reached by another name: the
@@ -123,13 +155,25 @@ public final class NoReflection extends BugChecker implements BugChecker.MethodI
         MethodMatchers.instanceMethod().onDescendantOf("io.micronaut.inject.ExecutableMethod").named("getTargetMethod"));
 
     private static final Matcher<ExpressionTree> ANY = Matchers.anyOf(
-        CLASS_MEMBERS, ANNOTATIONS_OF_AN_ELEMENT, REFLECTIVE_ACCESS, PROXY, ANNOTATION_SYNTHESIS, TARGET_MEMBER);
+        CLASS_MEMBERS, ANNOTATIONS_OF_AN_ELEMENT, REFLECTIVE_ACCESS, PROXY, HANDLES, REFLECTION_HELPERS,
+        ANNOTATION_SYNTHESIS, TARGET_MEMBER);
 
     @Override
     public Description matchMethodInvocation(MethodInvocationTree tree, VisitorState state) {
-        if (!ANY.matches(tree, state)) {
-            return Description.NO_MATCH;
-        }
-        return describeMatch(tree);
+        return ANY.matches(tree, state) ? describeMatch(tree) : Description.NO_MATCH;
+    }
+
+    /**
+     * The same methods named rather than called. A method reference reaches every one of them -
+     * {@code Class::getDeclaredMethod} handed to a map is the lookup, deferred - and matching only the
+     * invocations would leave the whole of this check with one way around it.
+     *
+     * @param tree  The reference
+     * @param state The state
+     * @return Whether it names something that reflects
+     */
+    @Override
+    public Description matchMemberReference(MemberReferenceTree tree, VisitorState state) {
+        return ANY.matches(tree, state) ? describeMatch(tree) : Description.NO_MATCH;
     }
 }

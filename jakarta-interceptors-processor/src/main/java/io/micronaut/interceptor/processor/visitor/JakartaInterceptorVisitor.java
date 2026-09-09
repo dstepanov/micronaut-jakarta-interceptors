@@ -251,8 +251,8 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
                 interceptorMembers(builder, classInterceptors);
                 selfMember(builder, model);
                 bindingsMember(builder, classBindings);
-                callbackMembers(builder, element, model);
             });
+            permitCallbackReflection(element, model);
         }
         // the constructor carries the interception of its own: that is where Micronaut decides whether the
         // construction of a bean is intercepted, and it also lets a constructor declare a binding, or name its own
@@ -445,25 +445,24 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
     }
 
     /**
-     * Records the lifecycle callbacks of the intercepted class itself.
+     * Permits reflection on the lifecycle callbacks of the intercepted class.
      *
      * <p>The specification hands a {@code @PostConstruct} or {@code @PreDestroy} interceptor method the callback of
-     * the class it is interposing on, and only {@code null} when the class has none. Micronaut intercepts the
-     * lifecycle of a bean rather than one callback of it, so the callback is not something the interception itself
-     * carries; it is read here, where the class is being looked at anyway, and the runtime is left with one lookup
-     * to do when an interceptor asks for it.</p>
+     * the class it is interposing on, which the runtime answers with the target method of the executable method the
+     * interception carries. Resolving that reflects, so the callback is declared here, where the class is being
+     * looked at anyway.</p>
+     *
+     * <p>The most specific callback is the one to declare: a chain runs for the event and describes itself by the
+     * last callback it invokes, which is the one this finds - the class's own where it declares one, and the
+     * nearest it inherits where it does not.</p>
      */
-    private static void callbackMembers(AnnotationValueBuilder<JakartaInterception> builder,
-                                        ClassElement element,
-                                        InterceptorClassModel model) {
+    private static void permitCallbackReflection(ClassElement element, InterceptorClassModel model) {
         MethodElement postConstruct = callbackOf(element, model, JakartaInterceptors.POST_CONSTRUCT);
         if (postConstruct != null) {
-            builder.member("postConstruct", postConstruct.getName());
             permitReflection(postConstruct);
         }
         MethodElement preDestroy = callbackOf(element, model, JakartaInterceptors.PRE_DESTROY);
         if (preDestroy != null) {
-            builder.member("preDestroy", preDestroy.getName());
             permitReflection(preDestroy);
         }
     }

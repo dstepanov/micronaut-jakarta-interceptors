@@ -15,13 +15,11 @@
  */
 package io.micronaut.interceptor.runtime;
 
-import io.micronaut.aop.Intercepted;
 import io.micronaut.aop.InterceptorKind;
 import io.micronaut.aop.MethodInvocationContext;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.inject.ExecutableMethod;
 import io.micronaut.interceptor.MicronautMethodInvocationContext;
-import io.micronaut.interceptor.annotation.JakartaInterception;
 import org.jspecify.annotations.Nullable;
 
 import java.lang.reflect.Method;
@@ -76,13 +74,18 @@ final class LifecycleInvocationContext extends AbstractInvocationContext
 
     /**
      * The specification shows a lifecycle callback interceptor method the callback of the intercepted class, and
-     * {@code null} only when the class declares none. Which method that is was worked out at compilation time and
-     * recorded on the class; looking it up is the only reflection of a lifecycle interception, and it only happens
-     * when an interceptor asks for the method.
+     * {@code null} only when the class declares none.
      *
-     * <p>Micronaut interposes on the lifecycle of a bean rather than on one callback of it, so what is looked up
-     * is the callback of the intercepted class itself. It is found by its name, walking up from the class: a class
-     * declares at most one callback of a kind, and the name is the one the processor read from that declaration.</p>
+     * <p>That is what the executable method of the interception already is. A chain runs for the event rather than
+     * for a callback, and it describes itself by the last callback it invokes - the one the intercepted class
+     * declares - so the method of the specification and the method of the interception are the same. A bean bound
+     * for a kind it declares no callback of has the event itself, whose target method is {@code null}, which is
+     * the answer the specification asks for there.</p>
+     *
+     * <p>Resolving it is the one place a lifecycle interception reaches for the reflection of the platform, and it
+     * only happens when an interceptor asks for the method. It used to be a walk up the class hierarchy, looking
+     * for a name the processor had recorded, which read the declared methods of every class between the bean and
+     * the one that declared the callback. Micronaut answers it in one lookup.</p>
      *
      * @return The callback of the intercepted class, or {@code null} when it declares none
      */
@@ -90,52 +93,9 @@ final class LifecycleInvocationContext extends AbstractInvocationContext
     public @Nullable Method getMethod() {
         if (!methodResolved) {
             methodResolved = true;
-            method = resolveCallback();
+            method = context.getExecutableMethod().getTargetMethod();
         }
         return method;
-    }
-
-    private @Nullable Method resolveCallback() {
-        String member = context.getKind() == InterceptorKind.PRE_DESTROY ? "preDestroy" : "postConstruct";
-        String name = getAnnotationMetadata().stringValue(JakartaInterception.class, member).orElse(null);
-        if (name == null || name.isEmpty()) {
-            return null;
-        }
-        Class<?> targetClass = context.getTarget().getClass();
-        if (Intercepted.class.isAssignableFrom(targetClass)) {
-            // what the bean context holds is the proxy Micronaut generated, whose class is a subclass of the one
-            // that declared the callback
-            Class<?> superclass = targetClass.getSuperclass();
-            if (superclass != null) {
-                targetClass = superclass;
-            }
-        }
-        for (Class<?> type = targetClass; type != null; type = type.getSuperclass()) {
-            try {
-                // the specification gives the callback of a class the signature void <METHOD>()
-                return type.getDeclaredMethod(name);
-            } catch (NoSuchMethodException e) {
-                Method callback = declaredMethodNamed(type, name);
-                if (callback != null) {
-                    return callback;
-                }
-            }
-        }
-        return null;
-    }
-
-    /**
-     * The callback of a class that takes something: Micronaut injects into a lifecycle callback, which the
-     * specification does not describe, so the method is found by its name alone. A class declares at most one
-     * callback of a kind, so there is nothing else of that name to find.
-     */
-    private static @Nullable Method declaredMethodNamed(Class<?> type, String name) {
-        for (Method candidate : type.getDeclaredMethods()) {
-            if (candidate.getName().equals(name) && !candidate.isSynthetic()) {
-                return candidate;
-            }
-        }
-        return null;
     }
 
     /**

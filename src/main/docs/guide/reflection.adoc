@@ -14,6 +14,9 @@ specification has them return leave no choice:
 * `getConstructor()` returns a `java.lang.reflect.Constructor`;
 * `getInterceptorBindings()` returns instances of the binding annotations.
 
+`getInterceptorBinding(Class)` and `getInterceptorBindings(Class)`, which the specification added beside the whole
+set, build only the binding asked for rather than the set to filter it.
+
 All three are resolved only when an interceptor asks for them, and remembered afterwards. An application whose
 interceptors do not call them never reflects at all; the binding comparison the interception does is made against
 the annotation metadata Micronaut recorded at compilation time, and builds no annotation.

@@ -25,7 +25,6 @@ import jakarta.interceptor.InvocationContext;
 import org.jspecify.annotations.Nullable;
 
 import java.lang.annotation.Annotation;
-import java.lang.annotation.Repeatable;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.Arrays;
@@ -251,10 +250,15 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
      * Anything else is one binding however many declarations it has: a binding a method declares replaces the one
      * its class declares, and reading the values of the metadata hierarchy would answer with both, resurrecting
      * the declaration the method overrode.</p>
+     *
+     * <p>Whether the binding repeats is read from the metadata by name rather than from the annotation type, which
+     * would ask the platform for the annotations of an annotation and inflate them into the reflection data the
+     * virtual machine keeps for it. Micronaut recorded the container of a repeatable annotation as the application
+     * was compiled, so the metadata answers it having read nothing.</p>
      */
     private Annotation[] synthesizeBindings(Class<? extends Annotation> annotationType) {
         AnnotationMetadata annotationMetadata = getAnnotationMetadata();
-        if (annotationType.isAnnotationPresent(Repeatable.class)) {
+        if (annotationMetadata.findRepeatableAnnotation(annotationType.getName()).isPresent()) {
             return annotationMetadata.synthesizeAnnotationsByType(annotationType);
         }
         Annotation single = annotationMetadata.synthesize(annotationType);

@@ -263,7 +263,7 @@ class level binding, are
 | ba)
 | The same InvocationContext instance is passed to each interceptor method for a given target class method or lifecycle event interception. This allows an interceptor to save information in the context data property of the InvocationContext that can be subsequently retrieved in other interceptors as a means to pass contextual data between interceptors. The contextual data is not sharable across separate target class method invocations or lifecycle callback events.
 | Covered
-| InvocationContextConformanceTest
+| InvocationContextConformanceTest for a method, LifecycleContextDataTest for an event
 
 | bb)
 | If interceptors are invoked as a result of the invocation on a web service endpoint, the map returned by getContextData() will be the JAX-WS MessageContext.

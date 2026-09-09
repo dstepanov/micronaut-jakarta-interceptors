@@ -6,7 +6,7 @@ import jakarta.annotation.PostConstruct;
 
 @Prototype
 @Compiled(region = "users")
-public class CompiledService {
+public class CompiledService extends CompiledBase {
 
     private final String name;
 

@@ -44,10 +44,12 @@ public interface MicronautMethodInvocationContext extends MicronautInvocationCon
      * method.getReturnType();         // what it returns
      * }</pre>
      *
-     * <p>For a lifecycle callback this is the callback the chain of the event was started for, which is the first
-     * one the bean runs - the one its most distant superclass declares. {@link #getMethod()} answers instead with
-     * the callback of the intercepted class itself, which is the one the specification describes. Where a bean
-     * declares a callback and inherits none, the two are the same method.</p>
+     * <p>A lifecycle interception runs one chain for the whole event rather than one for each callback, so there
+     * is no single callback it is the interception of. The chain describes itself by the last callback it invokes,
+     * which is the most derived - the one the intercepted class declares, where it declares one - and that is what
+     * this answers with. It agrees with {@link #getMethod()}, which the specification defines the same way. A bean
+     * bound for a kind it declares no callback of has neither: this answers with the event itself, named
+     * {@code initialize} or {@code dispose}, whose {@code getTargetMethod()} is {@code null}.</p>
      *
      * @return The executable method, never {@code null}
      */

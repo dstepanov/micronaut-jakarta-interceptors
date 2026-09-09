@@ -209,6 +209,7 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
             }
             return null;
         }
+        // reflection: getInterceptorBinding returns the annotation itself, so one has to be built
         return isBinding(annotationType) ? getAnnotationMetadata().synthesize(annotationType) : null;
     }
 
@@ -259,8 +260,10 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     private Annotation[] synthesizeBindings(Class<? extends Annotation> annotationType) {
         AnnotationMetadata annotationMetadata = getAnnotationMetadata();
         if (annotationMetadata.findRepeatableAnnotation(annotationType.getName()).isPresent()) {
+            // reflection: the bindings are the annotations themselves, so they have to be built
             return annotationMetadata.synthesizeAnnotationsByType(annotationType);
         }
+        // reflection: as above, for a binding that does not repeat
         Annotation single = annotationMetadata.synthesize(annotationType);
         return single == null ? EMPTY_BINDINGS : new Annotation[]{single};
     }

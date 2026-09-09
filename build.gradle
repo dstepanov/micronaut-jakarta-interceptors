@@ -2,3 +2,40 @@ plugins {
     id "io.micronaut.build.internal.jakarta-interceptors-base"
     id "io.micronaut.build.internal.parent"
 }
+
+// The interception never reflects, and a Checkstyle task of its own holds it to that. The rules are in
+// config/reflection/ rather than in config/checkstyle/checkstyle.xml, which is shared across the Micronaut
+// projects and replaced wholesale when the common files are synchronised: rules added there would be dropped by
+// the next synchronisation without anything failing to say so. Nothing in config/reflection/ is synchronised, so
+// there is nothing there for it to overwrite.
+//
+// Applied to what this module publishes. The test suites are free to reflect: a test that proves an interception
+// resolved a member without reflecting has to look that member up somehow.
+def reflectionConfig = rootProject.layout.projectDirectory.file('config/reflection/checkstyle-no-reflection.xml')
+
+configure([project(':micronaut-jakarta-interceptors'), project(':micronaut-jakarta-interceptors-processor')]) {
+    plugins.withId('java') {
+        def noReflection = tasks.register('checkstyleNoReflection', Checkstyle) {
+            description = 'Fails on a use of reflection that is not written down as one.'
+            group = LifecycleBasePlugin.VERIFICATION_GROUP
+            source = sourceSets.main.allJava
+            classpath = files()
+            configFile = reflectionConfig.asFile
+            // the shared configuration points Checkstyle at the common suppressions, which name checks this
+            // configuration does not declare
+            configDirectory.set(rootProject.layout.projectDirectory.dir('config/reflection'))
+            // the shared build turns failures off for its own Checkstyle tasks; a rule that reports without
+            // failing would let a reflective call through, which is the one thing this exists to stop
+            ignoreFailures = false
+            maxErrors = 0
+            maxWarnings = 0
+            reports {
+                xml.required = false
+                html.required = false
+            }
+        }
+        tasks.named('check') {
+            dependsOn noReflection
+        }
+    }
+}

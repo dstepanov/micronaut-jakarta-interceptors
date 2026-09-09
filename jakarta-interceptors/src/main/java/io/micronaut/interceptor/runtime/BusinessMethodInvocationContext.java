@@ -80,6 +80,7 @@ final class BusinessMethodInvocationContext extends AbstractInvocationContext
     public Method getMethod() {
         Method resolved = method;
         if (resolved == null) {
+            // reflection: getMethod returns a java.lang.reflect.Method, which only the platform can produce
             resolved = context.getExecutableMethod().getTargetMethod();
             method = resolved;
         }

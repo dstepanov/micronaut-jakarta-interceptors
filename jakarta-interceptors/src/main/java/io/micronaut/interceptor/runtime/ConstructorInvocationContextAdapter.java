@@ -148,6 +148,7 @@ final class ConstructorInvocationContextAdapter extends AbstractInvocationContex
             .map(Argument::getType)
             .toArray(Class<?>[]::new);
         try {
+            // reflection: getConstructor returns a java.lang.reflect.Constructor, which only the platform makes
             return beanConstructor.getDeclaringBeanType().getDeclaredConstructor(parameterTypes);
         } catch (NoSuchMethodException e) {
             return null;

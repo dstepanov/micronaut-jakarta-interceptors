@@ -143,12 +143,13 @@ final class ConstructorInvocationContextAdapter extends AbstractInvocationContex
      * @param beanConstructor The constructor of the invocation
      * @return The constructor, or {@code null} when it cannot be found
      */
+    // getConstructor returns a java.lang.reflect.Constructor, which only the platform makes
+    @SuppressWarnings("NoReflection")
     private static @Nullable Constructor<?> resolveConstructor(BeanConstructor<?> beanConstructor) {
         Class<?>[] parameterTypes = Arrays.stream(beanConstructor.getArguments())
             .map(Argument::getType)
             .toArray(Class<?>[]::new);
         try {
-            // reflection: getConstructor returns a java.lang.reflect.Constructor, which only the platform makes
             return beanConstructor.getDeclaringBeanType().getDeclaredConstructor(parameterTypes);
         } catch (NoSuchMethodException e) {
             return null;

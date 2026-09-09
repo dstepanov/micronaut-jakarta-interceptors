@@ -3,39 +3,30 @@ plugins {
     id "io.micronaut.build.internal.parent"
 }
 
-// The interception never reflects, and a Checkstyle task of its own holds it to that. The rules are in
-// config/reflection/ rather than in config/checkstyle/checkstyle.xml, which is shared across the Micronaut
-// projects and replaced wholesale when the common files are synchronised: rules added there would be dropped by
-// the next synchronisation without anything failing to say so. Nothing in config/reflection/ is synchronised, so
-// there is nothing there for it to overwrite.
+// The interception never reflects, and an ErrorProne check of its own holds it to that. It lives in
+// reflection-errorprone, which is a build tool rather than a module of the library.
+//
+// It is a check rather than a Checkstyle rule because the rule is about types rather than spelling: getAnnotation
+// names both java.lang.Class.getAnnotation, which asks the platform, and AnnotationMetadata.getAnnotation, which
+// reads what Micronaut compiled and is what the resolver and the processor are built on. A regular expression sees
+// one name; the check sees the receiver.
 //
 // Applied to what this module publishes. The test suites are free to reflect: a test that proves an interception
-// resolved a member without reflecting has to look that member up somehow.
-def reflectionConfig = rootProject.layout.projectDirectory.file('config/reflection/checkstyle-no-reflection.xml')
-
+// reached a member without reflecting has to reach it somehow.
 configure([project(':micronaut-jakarta-interceptors'), project(':micronaut-jakarta-interceptors-processor')]) {
-    plugins.withId('java') {
-        def noReflection = tasks.register('checkstyleNoReflection', Checkstyle) {
-            description = 'Fails on a use of reflection that is not written down as one.'
-            group = LifecycleBasePlugin.VERIFICATION_GROUP
-            source = sourceSets.main.allJava
-            classpath = files()
-            configFile = reflectionConfig.asFile
-            // the shared configuration points Checkstyle at the common suppressions, which name checks this
-            // configuration does not declare
-            configDirectory.set(rootProject.layout.projectDirectory.dir('config/reflection'))
-            // the shared build turns failures off for its own Checkstyle tasks; a rule that reports without
-            // failing would let a reflective call through, which is the one thing this exists to stop
-            ignoreFailures = false
-            maxErrors = 0
-            maxWarnings = 0
-            reports {
-                xml.required = false
-                html.required = false
-            }
+    plugins.withId('net.ltgt.errorprone') {
+        dependencies {
+            errorprone project(':micronaut-reflection-errorprone')
         }
-        tasks.named('check') {
-            dependsOn noReflection
+        tasks.withType(JavaCompile).configureEach {
+            options.errorprone {
+                check("NoReflection", net.ltgt.gradle.errorprone.CheckSeverity.ERROR)
+            }
+            if (name.toLowerCase().contains("test")) {
+                options.errorprone {
+                    disable("NoReflection")
+                }
+            }
         }
     }
 }

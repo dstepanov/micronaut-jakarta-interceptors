@@ -89,11 +89,12 @@ final class LifecycleInvocationContext extends AbstractInvocationContext
      *
      * @return The callback of the intercepted class, or {@code null} when it declares none
      */
+    // getMethod returns a java.lang.reflect.Method, which only the platform can produce
+    @SuppressWarnings("NoReflection")
     @Override
     public @Nullable Method getMethod() {
         if (!methodResolved) {
             methodResolved = true;
-            // reflection: getMethod returns a java.lang.reflect.Method, which only the platform can produce
             method = context.getExecutableMethod().getTargetMethod();
         }
         return method;

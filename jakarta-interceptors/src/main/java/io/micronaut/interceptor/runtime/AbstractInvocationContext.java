@@ -198,6 +198,8 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
      * @param <T>            The binding annotation type
      * @return The binding, or {@code null} where the element does not carry one of that type
      */
+    // getInterceptorBinding returns the annotation itself, so one has to be built
+    @SuppressWarnings("NoReflection")
     @Override
     public <T extends Annotation> @Nullable T getInterceptorBinding(Class<T> annotationType) {
         Set<Annotation> resolved = bindings;
@@ -209,7 +211,6 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
             }
             return null;
         }
-        // reflection: getInterceptorBinding returns the annotation itself, so one has to be built
         return isBinding(annotationType) ? getAnnotationMetadata().synthesize(annotationType) : null;
     }
 
@@ -257,13 +258,13 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
      * virtual machine keeps for it. Micronaut recorded the container of a repeatable annotation as the application
      * was compiled, so the metadata answers it having read nothing.</p>
      */
+    // the bindings are the annotations themselves, so they have to be built
+    @SuppressWarnings("NoReflection")
     private Annotation[] synthesizeBindings(Class<? extends Annotation> annotationType) {
         AnnotationMetadata annotationMetadata = getAnnotationMetadata();
         if (annotationMetadata.findRepeatableAnnotation(annotationType.getName()).isPresent()) {
-            // reflection: the bindings are the annotations themselves, so they have to be built
             return annotationMetadata.synthesizeAnnotationsByType(annotationType);
         }
-        // reflection: as above, for a binding that does not repeat
         Annotation single = annotationMetadata.synthesize(annotationType);
         return single == null ? EMPTY_BINDINGS : new Annotation[]{single};
     }

@@ -25,6 +25,7 @@ import jakarta.interceptor.InvocationContext;
 import org.jspecify.annotations.Nullable;
 
 import java.lang.annotation.Annotation;
+import java.lang.annotation.Repeatable;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.Arrays;
@@ -55,6 +56,8 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
      * to any other advice of the same invocation.
      */
     private static final String CONTEXT_DATA = "io.micronaut.interceptor.contextData";
+
+    private static final Annotation[] EMPTY_BINDINGS = new Annotation[0];
 
     private final io.micronaut.aop.InvocationContext<Object, ?> context;
     private final List<InterceptorReference> chain;
@@ -184,6 +187,90 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
         return resolved;
     }
 
+    /**
+     * The binding of one annotation type, which the specification added in 2.2 alongside the whole set.
+     *
+     * <p>Answered without building the rest. The inherited default reads {@link #getInterceptorBindings()} and
+     * filters it, which for this implementation means synthesizing every binding of the element - a dynamic proxy
+     * class apiece, kept for as long as the class loader - to hand back one of them. Where the whole set has
+     * already been built it is read, since the annotation asked for is in it.</p>
+     *
+     * @param annotationType The binding annotation type
+     * @param <T>            The binding annotation type
+     * @return The binding, or {@code null} where the element does not carry one of that type
+     */
+    @Override
+    public <T extends Annotation> @Nullable T getInterceptorBinding(Class<T> annotationType) {
+        Set<Annotation> resolved = bindings;
+        if (resolved != null) {
+            for (Annotation binding : resolved) {
+                if (binding.annotationType().equals(annotationType)) {
+                    return annotationType.cast(binding);
+                }
+            }
+            return null;
+        }
+        return isBinding(annotationType) ? getAnnotationMetadata().synthesize(annotationType) : null;
+    }
+
+    /**
+     * The bindings of one annotation type, of which a repeatable binding may leave several on an element.
+     *
+     * <p>Answered without building the rest, as {@link #getInterceptorBinding(Class)} is.</p>
+     *
+     * @param annotationType The binding annotation type
+     * @param <T>            The binding annotation type
+     * @return The bindings of that type, empty where the element carries none
+     */
+    @Override
+    public <T extends Annotation> Set<T> getInterceptorBindings(Class<T> annotationType) {
+        Set<Annotation> resolved = bindings;
+        if (resolved != null) {
+            Set<T> matching = new LinkedHashSet<>(1);
+            for (Annotation binding : resolved) {
+                if (binding.annotationType().equals(annotationType)) {
+                    matching.add(annotationType.cast(binding));
+                }
+            }
+            return Collections.unmodifiableSet(matching);
+        }
+        if (!isBinding(annotationType)) {
+            return Collections.emptySet();
+        }
+        Set<T> matching = new LinkedHashSet<>(1);
+        for (Annotation binding : synthesizeBindings(annotationType)) {
+            matching.add(annotationType.cast(binding));
+        }
+        return Collections.unmodifiableSet(matching);
+    }
+
+    /**
+     * The bindings of one annotation type carried by the element.
+     *
+     * <p>A repeatable binding declared more than once is that many bindings, and every value of it is read.
+     * Anything else is one binding however many declarations it has: a binding a method declares replaces the one
+     * its class declares, and reading the values of the metadata hierarchy would answer with both, resurrecting
+     * the declaration the method overrode.</p>
+     */
+    private Annotation[] synthesizeBindings(Class<? extends Annotation> annotationType) {
+        AnnotationMetadata annotationMetadata = getAnnotationMetadata();
+        if (annotationType.isAnnotationPresent(Repeatable.class)) {
+            return annotationMetadata.synthesizeAnnotationsByType(annotationType);
+        }
+        Annotation single = annotationMetadata.synthesize(annotationType);
+        return single == null ? EMPTY_BINDINGS : new Annotation[]{single};
+    }
+
+    /**
+     * Whether the element carries the given annotation as an interceptor binding, rather than as an annotation
+     * that simply happens to be there. Read from the metadata, so nothing is built to answer it.
+     */
+    private boolean isBinding(Class<? extends Annotation> annotationType) {
+        return getAnnotationMetadata()
+            .getAnnotationNamesByStereotype(JakartaInterceptorSupport.INTERCEPTOR_BINDING)
+            .contains(annotationType.getName());
+    }
+
     private Set<Annotation> resolveBindings() {
         AnnotationMetadata annotationMetadata = getAnnotationMetadata();
         List<String> names = annotationMetadata.getAnnotationNamesByStereotype(JakartaInterceptorSupport.INTERCEPTOR_BINDING);
@@ -193,8 +280,7 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
         Set<Annotation> resolved = new LinkedHashSet<>(names.size());
         for (String name : names) {
             annotationMetadata.getAnnotationType(name)
-                .map(annotationMetadata::synthesize)
-                .ifPresent(resolved::add);
+                .ifPresent(type -> Collections.addAll(resolved, synthesizeBindings(type)));
         }
         return Collections.unmodifiableSet(resolved);
     }

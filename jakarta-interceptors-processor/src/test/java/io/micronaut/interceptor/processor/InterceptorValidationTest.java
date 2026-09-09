@@ -406,4 +406,49 @@ class InterceptorValidationTest {
             """);
         assertTrue(error.contains("declares no interceptor method"), error);
     }
+
+    /**
+     * Section 3.3 f): a class carrying a class level binding may not be final, and may not declare a non-static
+     * non-private final method. Both are reported, by Micronaut rather than by this module - a class it cannot
+     * generate a proxy of is refused wherever the advice came from.
+     */
+    @Test
+    void aFinalClassCarryingAClassLevelBindingIsReported() {
+        String error = compile("""
+            @InterceptorBinding
+            @Retention(RetentionPolicy.RUNTIME)
+            @Target({ElementType.TYPE, ElementType.METHOD})
+            @interface Guarded {
+            }
+
+            @Singleton
+            @Guarded
+            public final class Subject {
+                public String work() {
+                    return "done";
+                }
+            }
+            """);
+        assertTrue(error.contains("final class"), error);
+    }
+
+    @Test
+    void aFinalMethodOfAClassCarryingAClassLevelBindingIsReported() {
+        String error = compile("""
+            @InterceptorBinding
+            @Retention(RetentionPolicy.RUNTIME)
+            @Target({ElementType.TYPE, ElementType.METHOD})
+            @interface Guarded {
+            }
+
+            @Singleton
+            @Guarded
+            public class Subject {
+                public final String work() {
+                    return "done";
+                }
+            }
+            """);
+        assertTrue(error.contains("declared final"), error);
+    }
 }

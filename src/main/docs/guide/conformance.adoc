@@ -52,14 +52,14 @@ module stands against every one of them.
 |===
 | | Assertions
 
-| Covered by a test of this repository | 128
-| Differs from the specification, deliberately | 5
+| Covered by a test of this repository | 129
+| Differs from the specification, deliberately | 4
 | Not applicable to a module without Jakarta Enterprise Beans, a deployment descriptor or a naming context | 29
 | A statement of intent, with nothing to verify | 4
 |===
 
 Everything the specification describes that applies to a module of this kind is covered by a test, apart from the
-5 differences below, each of which is deliberate.
+4 differences below, each of which is deliberate.
 
 == Where this module differs
 |===
@@ -68,11 +68,9 @@ Everything the specification describes that applies to a module of this kind is 
 | 2.2 c)
 | An interceptor class is a bean, so it needs no public no-arg constructor and may take injection
 
-| 3.3 f)
-| Micronaut leaves a final class or method uninterceptable rather than reporting a definition error
-
 | 3.3 g)
-| Micronaut leaves a final method uninterceptable rather than reporting a definition error
+| A binding declared on a final method is not reported; a final class, and a final method of a class carrying a
+class level binding, are
 
 | 3.4.2 c)
 | An array-valued member is supported and compared by its contents
@@ -794,13 +792,16 @@ Everything the specification describes that applies to a module of this kind is 
 
 | f)
 | If the component class declares or inherits a class level interceptor binding, it must not be declared final , or have any non- static , non- private , final methods. If a component has a class-level interceptor binding and is declared final or has a non- static , non- private , final method, the container automatically detects the problem and treats it as a definition error.
-| Differs
-| Micronaut leaves a final class or method uninterceptable rather than reporting a definition error
+| Covered
+| InterceptorValidationTest: a final class carrying a class level binding, and a final method of such a class,
+are both reported as the class is compiled
 
 | g)
 | If a non- static , non- private method of a component class declares a method level interceptor binding, neither the method nor the component class may be declared final . If a non- static , non- private , final method of a component has a method level interceptor binding, the container automatically detects the problem and treats it as a definition error.
 | Differs
-| Micronaut leaves a final method uninterceptable rather than reporting a definition error
+| A binding declared on the method itself is not reported: Micronaut refuses a class it cannot proxy and a method
+it cannot override, and a final method carrying a binding of its own is neither - the class is proxied and the
+method is left out of the proxy, so the binding simply never applies
 |===
 
 === Section 3.4 - Interceptor Resolution

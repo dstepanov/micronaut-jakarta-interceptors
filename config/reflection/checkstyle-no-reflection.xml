@@ -34,7 +34,10 @@
              the virtual machine keeps for that class -->
         <module name="RegexpSinglelineJava">
             <property name="id" value="NoReflectiveMemberLookup"/>
-            <property name="format" value="\.(getDeclaredMethods?|getDeclaredConstructors?|getDeclaredFields?)\(|\.getMethods\(|\.getConstructors\(|\.getFields\("/>
+            <!-- the public lookups take the member name, and an InvocationContext of this module declares a
+                 getMethod() and a getConstructor() of its own that take nothing; requiring an argument tells the
+                 two apart -->
+            <property name="format" value="\.(getDeclaredMethods?|getDeclaredConstructors?|getDeclaredFields?)\(|\.getMethods\(|\.getConstructors\(|\.getFields\(|\.(getMethod|getConstructor|getField)\(\s*[^)\s]"/>
             <property name="message" value="Reflective member lookup. The interception is resolved at compilation time and dispatched through generated code; where the specification leaves no way around this, say why with a // reflection: comment."/>
         </module>
 
@@ -48,7 +51,11 @@
         <!-- the annotations of a class, read from the class rather than from the metadata Micronaut compiled -->
         <module name="RegexpSinglelineJava">
             <property name="id" value="NoReflectiveAnnotationRead"/>
-            <property name="format" value="\.(isAnnotationPresent|getDeclaredAnnotations)\(|\.getAnnotations\(\)"/>
+            <!-- getAnnotation( and getDeclaredAnnotation( are deliberately absent. AnnotationMetadata declares
+                 both, reading the metadata Micronaut compiled rather than asking the platform, and they are used
+                 throughout the resolver and the processor. The singular reflective forms therefore pass this
+                 check; the plural ones, which are what a walk over a class's annotations uses, do not. -->
+            <property name="format" value="\.(isAnnotationPresent|getDeclaredAnnotations|getAnnotationsByType|getDeclaredAnnotationsByType)\(|\.getAnnotations\(\)|MethodHandles\."/>
             <property name="message" value="Annotations read from a class. Read them from the AnnotationMetadata Micronaut compiled instead, which answers having read nothing."/>
         </module>
 

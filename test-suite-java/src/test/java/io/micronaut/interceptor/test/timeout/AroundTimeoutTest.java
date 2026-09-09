@@ -78,4 +78,26 @@ class AroundTimeoutTest {
                 "an interceptor without an @AroundTimeout method keeps interposing: " + calls);
         }
     }
+
+    /**
+     * Section 4 b) of the specification: an interceptor named on a method is associated with that method, for a
+     * timeout method as for a business method. The other timeout test names its interceptor on the class, where
+     * every method of the class would be associated with it whether the association was read from the method or
+     * not; this one schedules a second method that names none.
+     */
+    @Test
+    void namesATimeoutInterceptorOnTheMethodRatherThanOnTheClass() throws Exception {
+        try (ApplicationContext context = ApplicationContext.run()) {
+            context.getBean(MethodNamedScheduledService.class);
+            assertTrue(MethodNamedScheduledService.NAMED_RAN.await(5, TimeUnit.SECONDS),
+                "the schedule of the named method did not run");
+            assertTrue(MethodNamedScheduledService.PLAIN_RAN.await(5, TimeUnit.SECONDS),
+                "the schedule of the other method did not run");
+
+            List<String> calls = List.copyOf(MethodNamedTimeoutInterceptor.CALLS);
+            assertTrue(calls.contains("named"), "the method that names it is interposed on: " + calls);
+            assertTrue(calls.stream().noneMatch("plain"::equals),
+                "the method that does not name it is not: " + calls);
+        }
+    }
 }

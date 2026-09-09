@@ -28,6 +28,25 @@ class LifecycleProceedTest {
             "2.4 f) getParameters fails for a lifecycle callback: " + Calls.RECORDED);
     }
 
+    /**
+     * Section 2.4 f) again, for the other accessor: a lifecycle callback has no arguments, so replacing them
+     * fails as reading them does. Asserted for both events, and the event still runs to its end afterwards.
+     */
+    @Test
+    void setParametersFailsInALifecycleCallback() {
+        Calls.clear();
+        try (ApplicationContext context = ApplicationContext.run()) {
+            RecordedService service = context.getBean(RecordedService.class);
+            assertTrue(Calls.RECORDED.contains("postConstruct setParameters -> IllegalStateException"),
+                "setParameters fails for a post-construct event: " + Calls.RECORDED);
+
+            Calls.clear();
+            context.destroyBean(service);
+            assertTrue(Calls.RECORDED.contains("preDestroy setParameters -> IllegalStateException"),
+                "setParameters fails for a pre-destroy event: " + Calls.RECORDED);
+        }
+    }
+
     @Test
     void proceedReturnsNullForAVoidMethod() {
         Calls.clear();

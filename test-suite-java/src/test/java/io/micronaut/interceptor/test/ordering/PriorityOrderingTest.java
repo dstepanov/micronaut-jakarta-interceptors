@@ -35,4 +35,23 @@ class PriorityOrderingTest {
                 Calls.RECORDED);
         }
     }
+
+    /**
+     * The specification orders interceptors by {@code jakarta.annotation.Priority}. Micronaut orders its own
+     * advice by {@code @Order}, and this module reads that where an interceptor declares no priority, so that an
+     * interceptor ordered the Micronaut way is ordered as it says. Where both are declared the priority of the
+     * specification is the one that counts.
+     */
+    @Test
+    void ordersByTheMicronautOrderWhereThereIsNoPriority() {
+        try (ApplicationContext context = ApplicationContext.run()) {
+            Calls.RECORDED.clear();
+
+            context.getBean(RankedService.class).work();
+
+            // alphabetically Alpha precedes Zulu, and the order reverses them; the priority of the third beats
+            // the order that would have put it last
+            assertEquals(List.of("prioritised", "zulu", "alpha", "work"), List.copyOf(Calls.RECORDED));
+        }
+    }
 }

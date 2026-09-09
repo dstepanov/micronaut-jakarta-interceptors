@@ -1,6 +1,7 @@
 package io.micronaut.interceptor.test.cdi;
 
 import io.micronaut.context.ApplicationContext;
+import io.micronaut.context.event.ApplicationEventPublisher;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -62,6 +63,22 @@ class CdiInvocationRulesTest {
             Calls.clear();
             assertEquals("injected", service.work());
             assertEquals(List.of("secure", "work"), List.copyOf(Calls.RECORDED));
+        }
+    }
+
+    /**
+     * An observer method is a business method: the kit checks this of a CDI observer method, and the counterpart
+     * here is a method a listener declares for an event the application publishes.
+     */
+    @Test
+    void anObserverMethodIsIntercepted() {
+        try (ApplicationContext context = ApplicationContext.run()) {
+            context.getBean(SignalListener.class);
+            Calls.clear();
+
+            context.getBean(ApplicationEventPublisher.class).publishEvent(new Signal("fired"));
+
+            assertEquals(List.of("monitored", "observed fired"), List.copyOf(Calls.RECORDED));
         }
     }
 }

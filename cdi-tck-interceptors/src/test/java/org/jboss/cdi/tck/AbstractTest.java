@@ -291,6 +291,27 @@ public abstract class AbstractTest {
         throw new IllegalArgumentException("Not a bean created by the Micronaut TCK bridge: " + bean);
     }
 
+    /**
+     * Resolves the interceptors of a set of binding annotations, which is what {@code BeanManager} offers and what
+     * the resolution tests of the kit assert against.
+     *
+     * <p>This cannot delegate to the resolver of the module, and the reason is the design rather than an omission.
+     * The module resolves a chain from the annotation metadata of an <em>element</em>, reading the interceptor
+     * classes its processor already selected and wrote there while the application was compiled; it never compares
+     * a binding against an interceptor at runtime, which is the whole point of resolving the interception at
+     * compilation. The question this method is asked - given these binding annotations, which interceptor classes
+     * apply? - has no runtime counterpart to call.</p>
+     *
+     * <p>What it does share is the comparison: {@link InterceptorBindingValues} is the module's own, so a binding
+     * is matched here exactly as the processor matches one. The selection around it is this bridge's, so the
+     * resolution tests of the kit hold that comparison to the specification rather than holding the module's chain
+     * building to it. The chains themselves are covered by every other test here, which runs interceptors rather
+     * than enumerating them.</p>
+     *
+     * @param type        The interception type
+     * @param annotations The binding annotations
+     * @return The interceptor classes that apply, as the kit's own {@code Interceptor} beans
+     */
     private List<Interceptor<?>> resolveInterceptors(InterceptionType type, Annotation[] annotations) {
         Set<InterceptorBindingValues.Binding> requested = new LinkedHashSet<>();
         Arrays.stream(annotations).map(AbstractTest::bindingValue).forEach(requested::add);

@@ -1,7 +1,12 @@
 package io.micronaut.interceptor.processor;
 
 import io.micronaut.annotation.processing.test.JavaParser;
+import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestFactory;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -450,5 +455,75 @@ class InterceptorValidationTest {
             }
             """);
         assertTrue(error.contains("declared final"), error);
+    }
+
+    /**
+     * Sections 2.2 d), 2.7 i) and k), and 2.8 c) of the specification: a class declares at most one interceptor
+     * method of a kind, and none of them may be static, final or abstract - for every kind, not only the
+     * around-invoke one the tests above use. The checks are one path shared by the five kinds, parameterized only
+     * by the annotation they name, so what each asserts is that the path reports the kind it was reached through.
+     *
+     * @return A test for each kind and each way of declaring its method wrongly
+     */
+    @TestFactory
+    List<DynamicTest> everyKindOfInterceptorMethodIsValidatedAlike() {
+        List<DynamicTest> tests = new ArrayList<>();
+        // an around-timeout method returns what it interposed on; a construction or a lifecycle callback returns
+        // nothing, which is the form its declaration most often takes
+        for (String[] kind : new String[][]{
+            {"AroundTimeout", "Object", "return context.proceed();"},
+            {"AroundConstruct", "void", "context.proceed();"},
+            {"PostConstruct", "void", "context.proceed();"},
+            {"PreDestroy", "void", "context.proceed();"}}) {
+            String annotation = kind[0];
+            String returns = kind[1];
+            String body = kind[2];
+
+            tests.add(DynamicTest.dynamicTest("two @" + annotation + " methods", () -> {
+                String error = compile("""
+                    @Interceptor
+                    public class Subject {
+                        @%1$s
+                        public %2$s one(InvocationContext context) throws Exception {
+                            %3$s
+                        }
+                        @%1$s
+                        public %2$s two(InvocationContext context) throws Exception {
+                            %3$s
+                        }
+                    }
+                    """.formatted(annotation, returns, body));
+                assertTrue(error.contains("more than one @" + annotation + " method"), error);
+            }));
+
+            for (String modifier : new String[]{"static", "final"}) {
+                tests.add(DynamicTest.dynamicTest("a " + modifier + " @" + annotation + " method", () -> {
+                    String error = compile("""
+                        @Interceptor
+                        public class Subject {
+                            @%1$s
+                            public %4$s %2$s intercept(InvocationContext context) throws Exception {
+                                %3$s
+                            }
+                        }
+                        """.formatted(annotation, returns, body, modifier));
+                    assertTrue(error.contains("The @" + annotation + " method [intercept]")
+                        && error.contains("must not be static, final or abstract"), error);
+                }));
+            }
+
+            tests.add(DynamicTest.dynamicTest("an abstract @" + annotation + " method", () -> {
+                String error = compile("""
+                    @Interceptor
+                    public abstract class Subject {
+                        @%1$s
+                        public abstract %2$s intercept(InvocationContext context) throws Exception;
+                    }
+                    """.formatted(annotation, returns));
+                assertTrue(error.contains("The @" + annotation + " method [intercept]")
+                    && error.contains("must not be static, final or abstract"), error);
+            }));
+        }
+        return tests;
     }
 }

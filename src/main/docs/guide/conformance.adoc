@@ -19,17 +19,18 @@ Central at build time and compiles them with this module's annotation processor.
 TestNG test classes unchanged, with a small `AbstractTest` bridge translating the Arquillian and CDI bean operations
 they use into Micronaut operations. Nothing is vendored; the sources are Apache 2.0 licensed, as this project is.
 
-The harness marks the kit's test methods it cannot run, each with its reason, so that what is not covered is as
-visible in a test report as what is. What it cannot run expects eager interceptor creation. For tests that expect
-an Arquillian deployment to fail, the bridge reads the original deployment archive, compiles its classes with
-Micronaut's annotation processor and requires that compilation to fail. The scopes and producer methods of Jakarta
+The kit runs complete: every test method of the package, none of them marked as unrunnable or excluded. For tests
+that expect an Arquillian deployment to fail, the bridge reads the original deployment archive, compiles its classes
+with Micronaut's annotation processor and requires that compilation to fail. The scopes and producer methods of Jakarta
 Contexts and Dependency Injection are read as their Micronaut equivalents, so that the scenarios themselves can be
 created.
 
-Where the kit asks a bean manager how many interceptors a set of bindings resolves to, the count is asserted of the
-interception instead. Each of those binding sets is the binding set of an element of the deployment it is taken
-over, so a count of one is that the one interceptor interposed on that element and that no other did; see
-`BindingResolutionTckTest`.
+Where the kit asks a bean manager which interceptors a set of bindings resolves to, the bridge answers: it walks the
+interceptor classes and compares their bindings with this module's own binding comparison. There is nothing of the
+module's to delegate that question to - it resolves an interception from the metadata of an element while the
+application is compiled, and never compares a binding against an interceptor at runtime - so that count holds the
+comparison to the specification rather than the module's resolution. The kit pairs each count with an invocation of
+the bean it was taken over, and that half holds the module itself; see `InterceptorBindingResolutionTest`.
 
 The kit also describes two deployments a container is required to reject rather than run. Nothing is deployed here,
 so each is handed to the compiler instead, with this module's annotation processor on it, and the compilation is
@@ -693,7 +694,7 @@ class level binding, are
 | a)
 | An extension specification may define other sources of interceptor bindings, such as via a CDI stereotype.
 | Covered
-| BindingResolutionTckTest: a stereotype carrying a binding binds through it
+| InterceptorBindingResolutionTest.testLifecycleInterceptorBindings, whose bean reaches one of its bindings only through a stereotype it inherits; CdiStereotypeRulesTest
 |===
 
 === Section 3.2 - Declaring Interceptor Bindings of an Interceptor
@@ -788,7 +789,7 @@ class level binding, are
 | e)
 | An extension specification may define additional rules for combining interceptor bindings, such as interceptors defined via a CDI stereotype.
 | Covered
-| BindingResolutionTckTest: a stereotype carrying a binding binds through it
+| InterceptorBindingResolutionTest.testLifecycleInterceptorBindings, whose bean reaches one of its bindings only through a stereotype it inherits; CdiStereotypeRulesTest
 
 | f)
 | If the component class declares or inherits a class level interceptor binding, it must not be declared final , or have any non- static , non- private , final methods. If a component has a class-level interceptor binding and is declared final or has a non- static , non- private , final method, the container automatically detects the problem and treats it as a definition error.
@@ -881,7 +882,7 @@ method is left out of the proxy, so the binding simply never applies
 | d)
 | If the set of interceptor bindings of a component class or interceptor, including bindings inherited from stereotypes and other interceptor bindings, has two instances of a certain interceptor binding type and the instances have different values of some annotation member, the container automatically detects the problem and treats it as a definition error.
 | Covered
-| InterceptorValidationTest, including a conflict reached through binding annotations declared on each other in either order; BrokenDeploymentTckTest
+| InterceptorValidationTest, including a conflict reached through binding annotations declared on each other in either order; InvalidStereotypeInterceptorBindingAnnotationsTest and InvalidTransitiveInterceptorBindingAnnotationsTest of the kit
 |===
 
 === Section 4 - Associating Interceptors with Classes and Methods using the Interceptors Annotation

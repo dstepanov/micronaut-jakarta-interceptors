@@ -41,15 +41,20 @@ import com.sun.source.tree.MethodInvocationTree;
  * compiled and is the whole point of the module. A regular expression sees one name; this sees the receiver, so
  * the reflective call is reported and the compiled read is not.</p>
  *
- * <p>Where the specification leaves no way around it, suppress with a reason:</p>
+ * <p>Where the specification leaves no way around it, suppress with a reason, on the local variable that holds
+ * what the platform returned rather than on the method:</p>
  *
  * <pre>{@code
- * // getMethod returns a java.lang.reflect.Method, which only the platform can produce
- * @SuppressWarnings("NoReflection")
  * public Method getMethod() {
- *     return context.getExecutableMethod().getTargetMethod();
+ *     // getMethod returns a java.lang.reflect.Method, which only the platform can produce
+ *     @SuppressWarnings("NoReflection")
+ *     Method target = context.getExecutableMethod().getTargetMethod();
+ *     return target;
  * }
  * }</pre>
+ *
+ * <p>A suppression switches the check off for the whole of the element it is declared on. On a method, a second
+ * reflective call added to that method later is not reported; on the variable, it is.</p>
  *
  * @author Denis Stepanov
  * @since 1.0
@@ -67,7 +72,9 @@ import com.sun.source.tree.MethodInvocationTree;
 
         Where the specification leaves no way around it - getMethod returns a java.lang.reflect.Method, \
         getConstructor a java.lang.reflect.Constructor, getInterceptorBindings the annotation instances themselves \
-        - suppress this with @SuppressWarnings("NoReflection") and say above it why the platform had to be asked.""",
+        - suppress this with @SuppressWarnings("NoReflection") on the local variable that holds the result, and say \
+        above it why the platform had to be asked. On the method instead, it would also hide every other call the \
+        method makes.""",
     severity = BugPattern.SeverityLevel.ERROR)
 public final class NoReflection extends BugChecker
     implements BugChecker.MethodInvocationTreeMatcher, BugChecker.MemberReferenceTreeMatcher {

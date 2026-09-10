@@ -198,8 +198,6 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
      * @param <T>            The binding annotation type
      * @return The binding, or {@code null} where the element does not carry one of that type
      */
-    // getInterceptorBinding returns the annotation itself, so one has to be built
-    @SuppressWarnings("NoReflection")
     @Override
     public <T extends Annotation> @Nullable T getInterceptorBinding(Class<T> annotationType) {
         Set<Annotation> resolved = bindings;
@@ -211,7 +209,13 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
             }
             return null;
         }
-        return isBinding(annotationType) ? getAnnotationMetadata().synthesize(annotationType) : null;
+        if (!isBinding(annotationType)) {
+            return null;
+        }
+        // getInterceptorBinding returns the annotation itself, so one has to be built
+        @SuppressWarnings("NoReflection")
+        T binding = getAnnotationMetadata().synthesize(annotationType);
+        return binding;
     }
 
     /**
@@ -258,13 +262,16 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
      * virtual machine keeps for it. Micronaut recorded the container of a repeatable annotation as the application
      * was compiled, so the metadata answers it having read nothing.</p>
      */
-    // the bindings are the annotations themselves, so they have to be built
-    @SuppressWarnings("NoReflection")
     private Annotation[] synthesizeBindings(Class<? extends Annotation> annotationType) {
         AnnotationMetadata annotationMetadata = getAnnotationMetadata();
         if (annotationMetadata.findRepeatableAnnotation(annotationType.getName()).isPresent()) {
-            return annotationMetadata.synthesizeAnnotationsByType(annotationType);
+            // the bindings are the annotations themselves, so they have to be built
+            @SuppressWarnings("NoReflection")
+            Annotation[] repeated = annotationMetadata.synthesizeAnnotationsByType(annotationType);
+            return repeated;
         }
+        // as above, for a binding that does not repeat
+        @SuppressWarnings("NoReflection")
         Annotation single = annotationMetadata.synthesize(annotationType);
         return single == null ? EMPTY_BINDINGS : new Annotation[]{single};
     }

@@ -76,13 +76,14 @@ final class BusinessMethodInvocationContext extends AbstractInvocationContext
      *
      * @return The intercepted method
      */
-    // getMethod returns a java.lang.reflect.Method, which only the platform can produce
-    @SuppressWarnings("NoReflection")
     @Override
     public Method getMethod() {
         Method resolved = method;
         if (resolved == null) {
-            resolved = context.getExecutableMethod().getTargetMethod();
+            // getMethod returns a java.lang.reflect.Method, which only the platform can produce
+            @SuppressWarnings("NoReflection")
+            Method target = context.getExecutableMethod().getTargetMethod();
+            resolved = target;
             method = resolved;
         }
         return resolved;

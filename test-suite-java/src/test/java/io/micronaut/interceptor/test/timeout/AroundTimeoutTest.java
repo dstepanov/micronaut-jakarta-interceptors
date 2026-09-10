@@ -100,4 +100,29 @@ class AroundTimeoutTest {
                 "the method that does not name it is not: " + calls);
         }
     }
+
+    /**
+     * Sections 2.8 ba), c) and d): an around-timeout method may be protected or have package access, may be
+     * inherited from a superclass of the interceptor class - the superclass's invoked first - and the interceptor
+     * may take injection and use what it was given. The kit has no timeout scenario at all, so these are held to
+     * the specification here or nowhere.
+     */
+    @Test
+    void interposesThroughAroundTimeoutMethodsHoweverTheyAreDeclared() throws Exception {
+        try (ApplicationContext context = ApplicationContext.run()) {
+            assertTrue(VariedScheduledService.RAN.await(5, TimeUnit.SECONDS), "the schedule did not run");
+
+            List<String> calls = List.copyOf(VariedCalls.RECORDED);
+            // the first run of the schedule, up to and including the method itself
+            List<String> firstRun = calls.subList(0, calls.indexOf("scheduled") + 1);
+
+            assertTrue(firstRun.contains("protected"), "a protected around-timeout method: " + firstRun);
+            assertTrue(firstRun.contains("package-private"), "a package-private one: " + firstRun);
+            assertTrue(firstRun.contains("collaborator"), "an interceptor that uses what it was given: " + firstRun);
+            assertTrue(firstRun.indexOf("inherited") >= 0 && firstRun.indexOf("inherited") < firstRun.indexOf("declared"),
+                "an inherited around-timeout method, before the one the subclass declares: " + firstRun);
+            assertEquals("scheduled", firstRun.get(firstRun.size() - 1),
+                "every interceptor before the scheduled method: " + firstRun);
+        }
+    }
 }

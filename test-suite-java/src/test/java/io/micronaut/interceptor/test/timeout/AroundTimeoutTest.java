@@ -125,4 +125,23 @@ class AroundTimeoutTest {
                 "every interceptor before the scheduled method: " + firstRun);
         }
     }
+
+    /**
+     * Section 2.3.1 b) of the specification: an around-timeout interceptor method runs in the same Java thread as
+     * the timeout method it interposes on. InvocationContextConformanceTest holds an around-invoke method to it; a
+     * timeout method is invoked by the scheduler on a thread of its own, which is what makes the timeout half worth
+     * asserting apart. That thread differing from the thread of the test is expected and not what is compared.
+     */
+    @Test
+    void runsAnAroundTimeoutMethodInTheSameThreadAsTheTimeoutMethod() throws Exception {
+        try (ApplicationContext context = ApplicationContext.run()) {
+            assertTrue(ThreadedScheduledService.RAN.await(5, TimeUnit.SECONDS), "the schedule did not run");
+
+            Thread interceptor = ThreadedScheduledService.INTERCEPTOR_THREAD.get();
+            Thread method = ThreadedScheduledService.METHOD_THREAD.get();
+            assertTrue(interceptor != null, "the around-timeout method ran");
+            assertTrue(interceptor == method,
+                "the interceptor ran on [" + interceptor + "] and the timeout method on [" + method + "]");
+        }
+    }
 }

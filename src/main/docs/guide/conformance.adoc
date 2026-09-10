@@ -239,7 +239,7 @@ class level binding, are
 | b)
 | Around-invoke and around-timeout interceptor methods run in the same Java thread as the associated target method.
 | Covered
-| InvocationContextConformanceTest
+| InvocationContextConformanceTest for around-invoke, AroundTimeoutTest for around-timeout
 
 | ba)
 | Around-construct interceptor methods run in the same Java thread as the target constructor.

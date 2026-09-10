@@ -358,7 +358,7 @@ class level binding, are
 | o)
 | The getInterceptorBinding method returns the single annotation of given type present in the set of interceptor bindings returned by getInterceptorBindings() .
 | Covered
-| InvocationContextConformanceTest
+| InvocationContextConformanceTest; TypedBindingTest for a repeated binding, before and after the set is built, and from a construction and a lifecycle event
 |===
 
 === Section 2.5 - Exceptions

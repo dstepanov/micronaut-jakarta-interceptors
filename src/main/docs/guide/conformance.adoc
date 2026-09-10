@@ -876,7 +876,7 @@ method is left out of the proxy, so the binding simply never applies
 | c)
 | Array-valued or annotation-valued members of an interceptor binding type are not supported. An extension specification may add support for these member types. For example the CDI specification adds the jakarta.enterprise.util.Nonbinding annotation, allowing array-valued or annotation-valued members to be used on the annotation type, but ignored by the resolution process.
 | Differs
-| An array-valued member is supported and compared by its contents
+| An array-valued member is supported and compared by its contents: ArrayBindingMemberTest for an array of objects, PrimitiveArrayBindingTest for each primitive array type
 
 | d)
 | If the set of interceptor bindings of a component class or interceptor, including bindings inherited from stereotypes and other interceptor bindings, has two instances of a certain interceptor binding type and the instances have different values of some annotation member, the container automatically detects the problem and treats it as a definition error.

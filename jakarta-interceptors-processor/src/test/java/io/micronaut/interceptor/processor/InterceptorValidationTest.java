@@ -526,4 +526,99 @@ class InterceptorValidationTest {
         }
         return tests;
     }
+
+    /**
+     * Two binding annotations declared on each other, and a third binding one of them carries. The cycle has to end,
+     * and what the annotations bind through it has to be the same however they are reached.
+     */
+    private static final String CYCLIC_BINDINGS = """
+        @InterceptorBinding
+        @Retention(RetentionPolicy.RUNTIME)
+        @Target({ElementType.TYPE, ElementType.METHOD})
+        @interface Level {
+            int value();
+        }
+
+        @InterceptorBinding
+        @Level(1)
+        @Second
+        @Retention(RetentionPolicy.RUNTIME)
+        @Target({ElementType.TYPE, ElementType.METHOD})
+        @interface First {
+        }
+
+        @InterceptorBinding
+        @First
+        @Retention(RetentionPolicy.RUNTIME)
+        @Target({ElementType.TYPE, ElementType.METHOD})
+        @interface Second {
+        }
+
+        @InterceptorBinding
+        @First
+        @Level(2)
+        @Retention(RetentionPolicy.RUNTIME)
+        @Target({ElementType.TYPE, ElementType.METHOD})
+        @interface Overriding {
+        }
+
+        @InterceptorBinding
+        @Second
+        @Retention(RetentionPolicy.RUNTIME)
+        @Target({ElementType.TYPE, ElementType.METHOD})
+        @interface ThroughSecond {
+        }
+        """;
+
+    /**
+     * Binding annotations may be declared on each other, and following them has to end rather than go round.
+     */
+    @Test
+    void bindingAnnotationsDeclaredOnEachOtherCompile() {
+        compileSuccessfully(CYCLIC_BINDINGS + """
+            @First
+            @Singleton
+            public class Subject {
+                public String greet() {
+                    return "hello";
+                }
+            }
+            """);
+        compileSuccessfully(CYCLIC_BINDINGS + """
+            @Second
+            @Singleton
+            public class Subject {
+                public String greet() {
+                    return "hello";
+                }
+            }
+            """);
+    }
+
+    /**
+     * Section 3.4.2 d) through a cycle. Overriding carries First and declares Level(2) itself, so it binds Level
+     * with 2; ThroughSecond carries Second, which carries First, so it binds Level with 1. A class declaring both is
+     * bound by Level twice with different values.
+     *
+     * <p>It was reported only when ThroughSecond was declared first. Declared the other way round, working out
+     * Overriding reached First, whose cycle through Second closed on First and left Second worked out as binding
+     * nothing; that answer was remembered, ThroughSecond read it, and the conflict went unreported. The two orders
+     * are asserted apart because the order is what the defect depended on.</p>
+     */
+    @Test
+    void aConflictReachedThroughACycleIsReportedWhateverTheOrder() {
+        for (String annotations : new String[]{"@Overriding @ThroughSecond", "@ThroughSecond @Overriding"}) {
+            String error = compile(CYCLIC_BINDINGS + """
+                %s
+                @Singleton
+                public class Subject {
+                    public String greet() {
+                        return "hello";
+                    }
+                }
+                """.formatted(annotations));
+            assertTrue(error.contains("is bound by") && error.contains("Level"),
+                "declared as " + annotations + ": " + error);
+        }
+    }
 }

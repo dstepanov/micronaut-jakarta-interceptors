@@ -881,7 +881,7 @@ method is left out of the proxy, so the binding simply never applies
 | d)
 | If the set of interceptor bindings of a component class or interceptor, including bindings inherited from stereotypes and other interceptor bindings, has two instances of a certain interceptor binding type and the instances have different values of some annotation member, the container automatically detects the problem and treats it as a definition error.
 | Covered
-| InterceptorValidationTest, BrokenDeploymentTckTest
+| InterceptorValidationTest, including a conflict reached through binding annotations declared on each other in either order; BrokenDeploymentTckTest
 |===
 
 === Section 4 - Associating Interceptors with Classes and Methods using the Interceptors Annotation

@@ -23,11 +23,13 @@ import io.micronaut.inject.ast.Element;
 import io.micronaut.inject.visitor.VisitorContext;
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -88,7 +90,8 @@ public final class BindingConflicts {
     private static @Nullable String conflictOf(AnnotationMetadata metadata,
                                                Collection<String> names,
                                                VisitorContext context) {
-        Set<String> conflicts = resolve(metadata, names, context, new HashMap<>(), new HashSet<>()).conflicts();
+        Set<String> conflicts = resolve(metadata, names, context, new HashMap<>(), new HashSet<>(), new ArrayList<>())
+            .conflicts();
         return conflicts.isEmpty() ? null : conflicts.iterator().next();
     }
 
@@ -102,12 +105,15 @@ public final class BindingConflicts {
      * @param resolved   What has already been worked out for an annotation type, which is the same wherever it is
      *                   declared
      * @param resolving  The annotation types being worked out further up, which is what ends a cycle
+     * @param cuts       The annotation types a cycle was closed on, which tells a result that is complete from one
+     *                   worked out while an annotation it depends on was still being worked out
      */
     private static Bindings resolve(AnnotationMetadata metadata,
                                     Collection<String> names,
                                     VisitorContext context,
                                     Map<String, Bindings> resolved,
-                                    Set<String> resolving) {
+                                    Set<String> resolving,
+                                    List<String> cuts) {
         // what the element says itself, which is the answer for the element
         Map<String, InterceptorBindingValues.Binding> declared = new LinkedHashMap<>();
         // what the annotations of the element pass along, which is only the answer where the element is silent
@@ -131,7 +137,7 @@ public final class BindingConflicts {
                     declared.put(name, InterceptorBindingValues.of(value));
                 }
             }
-            Bindings carried = of(name, type, context, resolved, resolving);
+            Bindings carried = of(name, type, context, resolved, resolving, cuts);
             conflicts.addAll(carried.conflicts());
             carried.bindings().forEach((carriedName, binding) -> {
                 InterceptorBindingValues.Binding existing = passed.putIfAbsent(carriedName, binding);
@@ -150,24 +156,43 @@ public final class BindingConflicts {
 
     /**
      * The bindings one annotation type passes along to whatever it is declared on.
+     *
+     * <p>What is worked out for an annotation is remembered, and is the same wherever the annotation is declared -
+     * unless it was worked out inside a cycle. An annotation declared on itself through others is cut short where
+     * the cycle closes, and passes nothing further along from there, which is right for the annotation the cycle
+     * closed on: its own bindings are all accounted for once it is done. It is not right for an annotation beneath
+     * it, whose answer was worked out with the one it closed on standing in as empty. Remembering that answer made
+     * the conflicts of a class depend on the order its annotations were declared in, since a later path to the same
+     * annotation read the incomplete answer rather than working it out again.</p>
      */
     private static Bindings of(String name,
                                ClassElement type,
                                VisitorContext context,
                                Map<String, Bindings> resolved,
-                               Set<String> resolving) {
+                               Set<String> resolving,
+                               List<String> cuts) {
         Bindings known = resolved.get(name);
         if (known != null) {
             return known;
         }
         if (!resolving.add(name)) {
-            // an annotation declared on itself, directly or through others; it passes nothing further along
+            // an annotation declared on itself, directly or through others; it passes nothing further along from
+            // here, and what is worked out beneath the annotation that closed the cycle is incomplete until that one
+            // is done
+            cuts.add(name);
             return Bindings.EMPTY;
         }
+        int before = cuts.size();
         try {
             AnnotationMetadata metadata = type.getAnnotationMetadata();
-            Bindings bindings = resolve(metadata, metadata.getAnnotationNames(), context, resolved, resolving);
-            resolved.put(name, bindings);
+            Bindings bindings = resolve(metadata, metadata.getAnnotationNames(), context, resolved, resolving, cuts);
+            // a cycle closed on this annotation is complete now that it is done; one closed on an annotation further
+            // up is not, and stays recorded for that one to settle
+            List<String> beneath = cuts.subList(before, cuts.size());
+            beneath.removeIf(name::equals);
+            if (beneath.isEmpty()) {
+                resolved.put(name, bindings);
+            }
             return bindings;
         } finally {
             resolving.remove(name);

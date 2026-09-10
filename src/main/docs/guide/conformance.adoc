@@ -468,7 +468,7 @@ class level binding, are
 | d)
 | The AroundConstruct interceptor methods may be only defined on interceptor classes and/or superclasses of interceptor classes. The AroundConstruct callback should not be defined on the target class.
 | Covered
-| A class declaring @AroundConstruct is read as an interceptor class
+| SelfConstructTest: a class declaring @AroundConstruct is read as an interceptor class, and the method does not interpose on the construction of the class itself
 
 | ea)
 | Test PostConstruct interceptor method.

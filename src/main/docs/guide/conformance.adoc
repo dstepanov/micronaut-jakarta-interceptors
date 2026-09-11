@@ -541,7 +541,8 @@ RepeatedProceedThroughMicronautAdviceTest, where a Micronaut advice follows
 | a)
 | Lifecycle callback interceptor methods may throw runtime exceptions, but not checked exceptions.
 | Covered
-| LifecycleExceptionTest
+| LifecycleExceptionTest; AroundConstructExceptionsTest for an around-construct method, which may throw what the
+constructor declares
 
 | b)
 | A lifecycle callback interceptor method (other than a method on the target class or its superclasses) may catch an exception thrown by another lifecycle callback interceptor method in the invocation chain, and clean up before returning.

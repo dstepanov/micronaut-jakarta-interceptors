@@ -144,7 +144,11 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         try {
             invocation.proceed();
         } catch (Exception e) {
-            throw lifecycleFailure(e);
+            // unlike a lifecycle callback, an around-construct interceptor method may throw what the constructor
+            // declares, and lets through what the constructor throws. Both leave as they are, so that Micronaut
+            // reports them as it reports a constructor that is not intercepted: a runtime exception of the advice
+            // reaches the caller unchanged, and anything else is the cause of the failure to create the bean
+            throw sneakyThrow(e);
         }
         Object constructed = invocation.constructed();
         if (constructed == null) {

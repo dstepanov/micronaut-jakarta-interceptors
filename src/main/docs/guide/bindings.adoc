@@ -48,6 +48,10 @@ and still bind to each other.
 The value a member defaults to is filled in before the comparison, so `@Cached` and `@Cached(region = "default")`
 are the same binding.
 
+A method declaring a binding annotation its class declares as well replaces the class's declaration as a whole.
+On a class declaring `@Cached(region = "users")`, a method declaring `@Cached` is bound to the region `default`,
+not to `users`: a member the method leaves out takes its default, never the value the class gave it.
+
 == Matching
 
 An interceptor applies to an element when *every* binding annotation the interceptor declares is also declared by

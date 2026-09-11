@@ -375,7 +375,7 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         // a schedule is recorded through its repeatable container even when a method declares only one
         boolean timeout = method.hasDeclaredAnnotation(JakartaInterceptors.SCHEDULED)
             || method.hasDeclaredAnnotation(JakartaInterceptors.SCHEDULES);
-        String[] methodBindings = bindingsOf(method, null);
+        String[] methodBindings = bindingsOf(method, method.getOwningType());
         // a binding the method declares replaces the one of the class, so the method carries a declaration of its
         // own as soon as what it is bound by differs from what its class is bound by
         boolean replacesBindings = !Arrays.equals(classBindings, methodBindings);
@@ -399,14 +399,13 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
      * annotations, the ones they default to filled in and the ones excluded from the binding left out. None of
      * that depends on the running application, so it is worked out here and the runtime compares strings.</p>
      *
-     * <p>The metadata of a member is read together with the metadata of its class, and a binding the member
-     * declares replaces the one of the class, so what is read here is already the set in effect on the element.
-     * A binding declared on another annotation is one of the element's as well, which is why the bindings are
-     * looked for by their stereotype rather than among the annotations the element declares itself.</p>
-     *
-     * <p>A constructor is the one element whose metadata does not carry the bindings of the class it belongs to,
-     * so the class is read first and what the constructor declares is written over it. Reading the class as well
-     * is harmless for a member that does carry them: the same binding read twice is the same binding.</p>
+     * <p>A binding a member declares replaces the one of the same type its class declares - the whole of it, so a
+     * member the declaration leaves to its default takes the default rather than the value the class gives it. The
+     * metadata Micronaut hands out for a method merges the two member by member instead, so the class and the
+     * member are read apart: the bindings of the class first, and the ones the member's own metadata holds written
+     * over them by type. A binding declared on another annotation is one of the element's as well, which is why
+     * the bindings are looked for by their stereotype rather than among the annotations the element declares
+     * itself.</p>
      *
      * @param element The element
      * @param owner   The class the element belongs to, or {@code null} when the element is the class
@@ -419,7 +418,8 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
                 bindings.put(binding.name(), binding);
             }
         }
-        for (InterceptorBindingValues.Binding binding : InterceptorBindingValues.of(element.getAnnotationMetadata())) {
+        AnnotationMetadata own = InterceptorClassScanner.ownMetadataOf(element);
+        for (InterceptorBindingValues.Binding binding : InterceptorBindingValues.of(own)) {
             bindings.put(binding.name(), binding);
         }
         return bindings.values()

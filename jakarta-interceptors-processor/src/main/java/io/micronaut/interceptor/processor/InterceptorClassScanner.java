@@ -121,15 +121,14 @@ public final class InterceptorClassScanner {
      * @return The binding annotations, in a stable order
      */
     public static List<AnnotationValue<?>> bindingsOf(Element element) {
-        AnnotationMetadata annotationMetadata = element.getAnnotationMetadata();
+        AnnotationMetadata annotationMetadata = ownMetadataOf(element);
         List<String> names = annotationMetadata.getAnnotationNamesByStereotype(JakartaInterceptors.INTERCEPTOR_BINDING);
         if (names.isEmpty()) {
             return List.of();
         }
-        // the metadata of a member is read together with the metadata of its class, so a binding of the class
-        // would be read as one of the member too; what is wanted of a member is what it declares itself. A class,
-        // on the other hand, keeps the bindings it inherits from its superclasses, which is what an @Inherited
-        // binding annotation asks for
+        // what is wanted of a member is what it declares itself, which its own metadata holds apart from its class.
+        // A class, on the other hand, keeps the bindings it inherits from its superclasses, which is what an
+        // @Inherited binding annotation asks for
         boolean isClass = element instanceof ClassElement;
         Set<String> declared = isClass ? Set.of() : Set.copyOf(annotationMetadata.getDeclaredAnnotationNames());
         // a map keyed by name keeps the bindings distinct while preserving the declaration order
@@ -145,6 +144,25 @@ public final class InterceptorClassScanner {
             annotationMetadata.findAnnotation(name).ifPresent(av -> bindings.put(name, av));
         }
         return List.copyOf(bindings.values());
+    }
+
+    /**
+     * The metadata of an element without the metadata of the class it belongs to.
+     *
+     * <p>The metadata Micronaut hands out for a method is read together with the metadata of its class, and it
+     * merges the two member by member: a member the method leaves to its default is answered with the value the
+     * class gives it. That is not what a binding the method declares means. It replaces the whole binding of its
+     * class, so {@code @Zone} on a method of a class declaring {@code @Zone("a")} is bound by the default of
+     * {@code value}, not by {@code "a"}. The metadata of the method alone is what says that.</p>
+     *
+     * @param element The element
+     * @return The metadata of a method or a constructor alone, or the metadata of any other element
+     */
+    public static AnnotationMetadata ownMetadataOf(Element element) {
+        if (element instanceof MethodElement method) {
+            return method.getMethodAnnotationMetadata();
+        }
+        return element.getAnnotationMetadata();
     }
 
     private static boolean acceptsInvocationContext(MethodElement method) {

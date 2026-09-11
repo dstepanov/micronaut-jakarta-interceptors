@@ -8,8 +8,8 @@ specification built on the compile-time aspect oriented programming of Micronaut
 
 An annotation processor finds and validates the interceptor methods while they are compiled, resolves the
 interception of every element then and there, and lets Micronaut generate the proxies. At runtime an interceptor
-method is a direct invocation of the executable method Micronaut generated for it — the interception never
-reflects.
+method is invoked through the executable method Micronaut generated for it, which calls it directly unless it is
+declared private — the interception reflects for nothing else.
 
 ## Example
 

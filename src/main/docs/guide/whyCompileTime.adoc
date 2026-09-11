@@ -7,7 +7,9 @@ scanned when the application starts, and no method is looked up when one is invo
 
 *An interceptor method is invoked directly.* Micronaut generates an executable method for each of them, so the
 advice dispatches through generated code rather than through `java.lang.reflect.Method`. An interceptor method
-that has no executable method is a compilation error, never a silent fall back to reflection.
+that has no executable method is a compilation error, never a silent fall back to reflection. The one exception is
+an interceptor method declared `private`, which generated code cannot call, and which its executable method reaches
+reflectively; see <<reflection,When Reflection Is Used>>.
 
 *The order is settled where the whole class is visible.* The interceptor classes an element names with
 `@Interceptors` are ordered by the processor, which sees the class, its methods and their exclusions at once, so

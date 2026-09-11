@@ -6,14 +6,17 @@ import jakarta.interceptor.InvocationContext;
 
 import java.util.List;
 
+/**
+ * The same interceptor as {@link MeasuringInterceptor}, with a private interceptor method.
+ */
 @Interceptor
-@Measured
-public class MeasuringInterceptor {
+@PrivatelyMeasured
+public class PrivateMeasuringInterceptor {
 
     public static List<String> frames = List.of();
 
     @AroundInvoke
-    public Object measure(InvocationContext context) throws Exception {
+    private Object measure(InvocationContext context) throws Exception {
         frames = Frames.current();
         return context.proceed();
     }

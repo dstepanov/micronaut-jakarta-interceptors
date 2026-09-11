@@ -1,11 +1,17 @@
-The interception itself never reflects.
+The interception itself reflects only to invoke an interceptor method that is declared `private`.
 
 An interceptor method is invoked through the `io.micronaut.inject.ExecutableMethod` Micronaut generates for it at
 compilation time, which dispatches through generated code. An interceptor method that has no executable method is
-an error at resolution rather than a fall back to reflection, so there is no path through
-`java.lang.reflect.Method` for an invocation to take. The interceptor chain of an element is read from the
+an error at resolution rather than a fall back to reflection. The interceptor chain of an element is read from the
 annotations the processor left on it, the interceptor instances come from the bean context, and the proxy of an
 intercepted bean is a generated subclass.
+
+Generated code cannot call a `private` method of another class, which the specification nevertheless allows an
+interceptor method to be. For one of those the executable method Micronaut generates calls it through
+`java.lang.reflect.Method`, by way of `io.micronaut.core.reflect.ReflectionUtils`, and the processor declares
+`@ReflectiveAccess` on the method, which is what has Micronaut generate that call. An interceptor method that is
+package private, protected or public is called directly, so declaring interceptor methods with at least package
+private access keeps every invocation of them free of reflection.
 
 Three accessors of `InvocationContext` do reach for the reflection of the platform, because the types the
 specification has them return leave no choice:
@@ -18,8 +24,9 @@ specification has them return leave no choice:
 set, build only the binding asked for rather than the set to filter it.
 
 All three are resolved only when an interceptor asks for them, and remembered afterwards. An application whose
-interceptors do not call them never reflects at all; the binding comparison the interception does is made against
-the annotation metadata Micronaut recorded at compilation time, and builds no annotation.
+interceptors do not call them, and declare no private interceptor method, never reflects at all; the binding
+comparison the interception does is made against the annotation metadata Micronaut recorded at compilation time,
+and builds no annotation.
 
 == Reading the interception without reflecting
 
@@ -45,11 +52,15 @@ processor declares `@ReflectionConfig(type = ..., accessType = DYNAMIC_PROXY)` o
 binding annotation of the class, its constructor and its business methods, which `micronaut-graal` turns into the
 registration of that pair. This needs Micronaut Core 5.2 or later.
 
-That is verified rather than asserted. The `test-suite-graalvm` and `test-suite-java` modules run inside a native
-image through the `nativeTest` task, their interceptors call all three accessors, and neither declares any
-reachability metadata: an interception that reached for reflection the image was not told about would fail there
-rather than pass unnoticed on the JVM.
+A private interceptor method is covered by the `@ReflectiveAccess` the processor declares on it, which
+`micronaut-graal` turns into the metadata the reflective call needs, so it is invoked inside an image as it is on a
+virtual machine, and an application declares nothing for it either.
 
-An application whose interceptors call none of the three needs nothing at all. Nothing else of the interception -
-the chains, the bindings, the ordering, the invocation of the interceptor methods, the parameters, the lifecycle
-and the construction - asks for any metadata.
+That is verified rather than asserted. The `test-suite-graalvm` and `test-suite-java` modules run inside a native
+image through the `nativeTest` task, their interceptors call all three accessors, `test-suite-java` declares a
+private interceptor method, and neither declares any reachability metadata: an interception that reached for
+reflection the image was not told about would fail there rather than pass unnoticed on the JVM.
+
+An application whose interceptors call none of the three and declare no private interceptor method needs nothing
+at all. Nothing else of the interception - the chains, the bindings, the ordering, the invocation of the interceptor
+methods that are not private, the parameters, the lifecycle and the construction - asks for any metadata.

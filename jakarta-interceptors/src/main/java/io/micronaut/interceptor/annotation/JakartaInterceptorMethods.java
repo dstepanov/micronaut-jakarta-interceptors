@@ -28,7 +28,7 @@ import java.lang.annotation.Target;
  *
  * <p>The interceptor methods are named rather than looked up again at runtime: the processor has already found and
  * validated them, and the names are what the advice resolves the executable methods Micronaut generated for them
- * by, so that an interceptor method is invoked without reflection.</p>
+ * by, so that no interceptor method is looked up reflectively.</p>
  *
  * <p>Each kind names as many methods as the class and its superclasses declare of it, in the order the
  * specification invokes them: the most general superclass first.</p>

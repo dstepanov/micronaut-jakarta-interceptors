@@ -17,9 +17,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What becomes of a {@code final} class or method that a binding reaches. A proxy of the class is a subclass of it,
- * so a final class cannot have one and a final method cannot be overridden by one. Micronaut refuses the first
- * outright and the second where it would have advised the method; everywhere else the method is left out of the
- * proxy and is not intercepted.
+ * so a final class cannot have one and a final method cannot be overridden by one. Section 3.3 f) makes a final
+ * class carrying a class level binding, and a non-static non-private final method of such a class - declared or
+ * inherited - a definition error, and both are reported as the class is compiled. A final method that declares a
+ * binding of its own is the one case left out of the proxy rather than reported, which section 3.3 g) records as
+ * a deliberate difference.
  *
  * <p>A final class carrying a class level binding, and a public final method declared by such a class, are in
  * {@link InterceptorValidationTest}, which the conformance page cites for section 3.3 f).</p>
@@ -142,10 +144,6 @@ class FinalElementsTest {
         assertTrue(error.contains("Cannot apply AOP advice to final class"), error);
     }
 
-    /**
-     * Micronaut advises the package private methods of a class carrying class level advice as well as the public
-     * ones, and refuses one of them that is final alike.
-     */
     @Test
     void aPackagePrivateFinalMethodOfAClassCarryingAClassLevelBindingIsReported() {
         String error = compile("""
@@ -157,16 +155,16 @@ class FinalElementsTest {
                 }
             }
             """);
-        assertTrue(error.contains("Public method inherits AOP advice but is declared final"), error);
+        assertTrue(error.contains("method [work], declared final by [io.micronaut.interceptor.test.invalid.Subject]"), error);
     }
 
     /**
-     * A protected method is not one Micronaut advises for a class level binding, so a final one is not refused. It
-     * is not intercepted: the proxy overrides the other method and leaves it out.
+     * A protected method is not one Micronaut advises for a class level binding, so Micronaut would pass a final one
+     * over; the specification does not.
      */
     @Test
-    void aProtectedFinalMethodOfAClassCarryingAClassLevelBindingCompilesAndIsNotIntercepted() throws Exception {
-        assertEquals(List.of("other"), proxiedMethods("""
+    void aProtectedFinalMethodOfAClassCarryingAClassLevelBindingIsReported() {
+        String error = compile("""
             @Singleton
             @Guarded
             public class Subject {
@@ -178,22 +176,48 @@ class FinalElementsTest {
                     return "other";
                 }
             }
-            """));
+            """);
+        assertTrue(error.contains("method [work], declared final by [io.micronaut.interceptor.test.invalid.Subject]"), error);
     }
 
     /**
      * Micronaut refuses a public final method only where the class declares it, and passes over one the class
-     * inherits from a superclass. The inherited one is not intercepted: the proxy overrides the method the class
-     * declares and leaves it out.
+     * inherits from a superclass; the specification counts the inherited one too.
      */
     @Test
-    void anInheritedFinalMethodOfAClassCarryingAClassLevelBindingCompilesAndIsNotIntercepted() throws Exception {
-        assertEquals(List.of("work"), proxiedMethods("""
+    void anInheritedFinalMethodOfAClassCarryingAClassLevelBindingIsReported() {
+        String error = compile("""
             @Singleton
             @Guarded
             public class Subject extends Base {
                 public String work() {
                     return "done";
+                }
+            }
+            """);
+        assertTrue(error.contains("method [inherited], declared final by [io.micronaut.interceptor.test.invalid.Base]"), error);
+    }
+
+    /**
+     * The final methods every class inherits from {@code Object} are not methods of the class the specification
+     * has in mind, and a private or static final method is not one a proxy would have to override.
+     */
+    @Test
+    void aPrivateOrStaticFinalMethodOfAClassCarryingAClassLevelBindingCompiles() throws Exception {
+        assertEquals(List.of("work"), proxiedMethods("""
+            @Singleton
+            @Guarded
+            public class Subject {
+                private final String hidden() {
+                    return "hidden";
+                }
+
+                static final String shared() {
+                    return "shared";
+                }
+
+                public String work() {
+                    return hidden() + shared();
                 }
             }
             """));

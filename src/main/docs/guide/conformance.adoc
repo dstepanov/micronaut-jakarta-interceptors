@@ -815,7 +815,8 @@ and FactoryMethodsOfOneClassTest, where two factory methods bind one class diffe
 | If the component class declares or inherits a class level interceptor binding, it must not be declared final , or have any non- static , non- private , final methods. If a component has a class-level interceptor binding and is declared final or has a non- static , non- private , final method, the container automatically detects the problem and treats it as a definition error.
 | Covered
 | InterceptorValidationTest: a final class carrying a class level binding, and a final method of such a class,
-are both reported as the class is compiled
+are both reported as the class is compiled; FinalElementsTest, for a final method of every access level the class
+declares or inherits
 
 | g)
 | If a non- static , non- private method of a component class declares a method level interceptor binding, neither the method nor the component class may be declared final . If a non- static , non- private , final method of a component has a method level interceptor binding, the container automatically detects the problem and treats it as a definition error.

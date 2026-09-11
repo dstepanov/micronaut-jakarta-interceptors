@@ -153,14 +153,13 @@ to throw, is reported wrapped in a runtime exception: what invoked the callback 
 none.
 
 The specification asks for a definition error wherever a binding reaches a `final` class or a `final` method that is
-neither private nor static. What happens here follows Micronaut's own rules, which come from the proxy being a
-subclass of the bean. A final class is reported when a binding is declared on it or on one of its methods, as
-`Cannot apply AOP advice to final class`. A class carrying a class level binding is reported for a final method it
-declares that is public or package private, which are the methods Micronaut advises for such a binding, as `Public
-method inherits AOP advice but is declared final`. A protected final method of that class, and a public final
-method it inherits from a superclass, compile and are not intercepted. So does a final method that declares a
-binding of its own: the binding is not applied, and the class is not proxied at all when that method is the only
-one bound. See <<conformance,Conformance>>, section 3.3.
+neither private nor static, since the proxy is a subclass of the bean and can override neither. A final class is
+reported when a binding is declared on it or on one of its methods, as `Cannot apply AOP advice to final class`. A
+class that declares or inherits a class level binding is reported for every final method it declares or inherits
+that is neither private nor static, whatever its access, naming the method and the class that declared it final;
+the final methods of `Object` are left out. The one case not reported is a final method that declares a binding of
+its own: the binding is not applied, and the class is not proxied at all when that method is the only one bound.
+See <<conformance,Conformance>>, section 3.3.
 
 == Languages
 

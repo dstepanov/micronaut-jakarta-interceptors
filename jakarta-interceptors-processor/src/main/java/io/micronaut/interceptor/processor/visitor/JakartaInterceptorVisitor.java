@@ -280,6 +280,9 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
                 rejectConflictingBindings(method, "method", context);
             }
         }
+        if (!InterceptorClassScanner.bindingsOf(element).isEmpty()) {
+            rejectFinalMethods(element, methods);
+        }
         if (!classDeclares && !constructorDeclares
             && methods.stream().noneMatch(JakartaInterceptorVisitor::declaresInterception)) {
             return;
@@ -352,6 +355,32 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
             element.annotate(ReflectionConfig.class, builder -> builder
                 .member("type", new AnnotationClassValue<>(binding))
                 .member("accessType", TypeHint.AccessType.DYNAMIC_PROXY));
+        }
+    }
+
+    /**
+     * Reports a final method of a class that declares or inherits a class level binding, which section 3.3 f) of the
+     * specification makes a definition error.
+     *
+     * <p>Micronaut refuses a final method it would have advised, but it advises only the methods a class declares and
+     * does not advise a protected one, so a protected final method, or a final method inherited from a superclass,
+     * would otherwise be passed over in silence. The specification names every non-static, non-private final method.
+     * The final methods of {@code Object} are left out: every class has them, and they are not methods of the class
+     * the specification has in mind.</p>
+     */
+    private static void rejectFinalMethods(ClassElement element, List<MethodElement> methods) {
+        for (MethodElement method : methods) {
+            if (method.isFinal()
+                && !method.isPrivate()
+                && !method.isStatic()
+                && !method.isSynthetic()
+                && !Object.class.getName().equals(method.getDeclaringType().getName())) {
+                throw new ProcessingException(method, "The class [" + element.getName() + "] carries a class level "
+                    + "interceptor binding and has the method [" + method.getName() + "], declared final by ["
+                    + method.getDeclaringType().getName() + "]. A method of a class bound at class level must not be "
+                    + "final unless it is private or static, since it could not be intercepted. Make the method "
+                    + "non-final, or declare the binding on the methods to be intercepted rather than on the class");
+            }
         }
     }
 

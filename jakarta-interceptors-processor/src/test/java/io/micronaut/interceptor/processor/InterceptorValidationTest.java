@@ -452,8 +452,9 @@ class InterceptorValidationTest {
 
     /**
      * Section 3.3 f): a class carrying a class level binding may not be final, and may not declare a non-static
-     * non-private final method. Both are reported, by Micronaut rather than by this module - a class it cannot
-     * generate a proxy of is refused wherever the advice came from.
+     * non-private final method. Both are reported: a final class by Micronaut, which refuses a class it cannot
+     * generate a proxy of wherever the advice came from, and a final method by this module, which also counts the
+     * ones Micronaut would pass over - see {@link FinalElementsTest}.
      */
     @Test
     void aFinalClassCarryingAClassLevelBindingIsReported() {

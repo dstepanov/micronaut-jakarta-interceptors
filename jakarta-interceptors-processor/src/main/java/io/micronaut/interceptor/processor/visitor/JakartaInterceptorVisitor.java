@@ -27,7 +27,9 @@ import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.AnnotationValueBuilder;
 import io.micronaut.core.annotation.Indexed;
 import io.micronaut.core.annotation.Internal;
+import io.micronaut.core.annotation.ReflectionConfig;
 import io.micronaut.core.annotation.ReflectiveAccess;
+import io.micronaut.core.annotation.TypeHint;
 import io.micronaut.inject.ast.ClassElement;
 import io.micronaut.inject.ast.Element;
 import io.micronaut.inject.ast.ElementQuery;
@@ -276,6 +278,42 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         }
         for (MethodElement method : methods) {
             interceptMethod(model, method, classInterceptors, classBindings, classDeclares, context);
+        }
+        permitBindingSynthesis(element, constructor, methods);
+    }
+
+    /**
+     * Permits building the binding annotations of an intercepted class, its constructor and its business methods
+     * as instances.
+     *
+     * <p>{@code getInterceptorBindings()} and the typed accessors beside it return the binding annotations
+     * themselves, which Micronaut builds as a dynamic proxy of the annotation type and
+     * {@code AnnotationValueProvider}. A native image defines such a proxy only when it was told to, and
+     * {@code @ReflectionConfig(accessType = DYNAMIC_PROXY)} on an annotation type declares exactly that pair.
+     * Declaring it here, where the bindings are read anyway, is what spares an application from declaring it by
+     * hand for every binding annotation it has.</p>
+     */
+    private static void permitBindingSynthesis(ClassElement element,
+                                               @Nullable MethodElement constructor,
+                                               List<MethodElement> methods) {
+        Set<String> bindings = new LinkedHashSet<>();
+        for (AnnotationValue<?> binding : InterceptorClassScanner.bindingsOf(element)) {
+            bindings.add(binding.getAnnotationName());
+        }
+        if (constructor != null) {
+            for (AnnotationValue<?> binding : InterceptorClassScanner.bindingsOf(constructor)) {
+                bindings.add(binding.getAnnotationName());
+            }
+        }
+        for (MethodElement method : methods) {
+            for (AnnotationValue<?> binding : InterceptorClassScanner.bindingsOf(method)) {
+                bindings.add(binding.getAnnotationName());
+            }
+        }
+        for (String binding : bindings) {
+            element.annotate(ReflectionConfig.class, builder -> builder
+                .member("type", new AnnotationClassValue<>(binding))
+                .member("accessType", TypeHint.AccessType.DYNAMIC_PROXY));
         }
     }
 

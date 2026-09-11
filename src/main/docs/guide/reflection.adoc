@@ -38,31 +38,17 @@ which `micronaut-graal` turns into the reachability metadata of the image while 
 `getMethod()` and `getConstructor()` therefore answer inside an image as they do on a virtual machine, and an
 application declares nothing for them. Only the members that are actually intercepted are kept.
 
-`getInterceptorBindings()` is the one that is not covered. Micronaut builds an annotation instance as a dynamic
-proxy of the annotation type together with api:core.annotation.AnnotationValueProvider[], and neither
-`@ReflectiveAccess` nor `@ReflectionConfig(accessType = DYNAMIC_PROXY)` can declare a proxy of two interfaces. An
-interceptor that asks for the bindings inside a native image needs the pair declared by hand:
+`getInterceptorBindings()`, and the typed accessors beside it, are covered the same way. Micronaut builds an
+annotation instance as a dynamic proxy of the annotation type together with
+api:core.annotation.AnnotationValueProvider[], and a native image defines that proxy only when it was told to. The
+processor declares `@ReflectionConfig(type = ..., accessType = DYNAMIC_PROXY)` on an intercepted class for every
+binding annotation of the class, its constructor and its business methods, which `micronaut-graal` turns into the
+registration of that pair. This needs Micronaut Core 5.2 or later.
 
-[source,json]
-----
-{
-  "reflection": [
-    {
-      "type": {
-        "proxy": [
-          "com.acme.Logged",
-          "io.micronaut.core.annotation.AnnotationValueProvider"
-        ]
-      }
-    }
-  ]
-}
-----
-
-That is verified rather than asserted. The `test-suite-graalvm` module runs inside a native image through the
-`nativeTest` task, and its interceptors call all three accessors: an interception that reached for reflection the
-image was not told about would fail there rather than pass unnoticed on the JVM. The one entry that module
-declares is the proxy above, which is exactly the gap.
+That is verified rather than asserted. The `test-suite-graalvm` and `test-suite-java` modules run inside a native
+image through the `nativeTest` task, their interceptors call all three accessors, and neither declares any
+reachability metadata: an interception that reached for reflection the image was not told about would fail there
+rather than pass unnoticed on the JVM.
 
 An application whose interceptors call none of the three needs nothing at all. Nothing else of the interception -
 the chains, the bindings, the ordering, the invocation of the interceptor methods, the parameters, the lifecycle

@@ -26,4 +26,4 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
       # the suite declares no reachability metadata: an interception that reached for reflection would fail here
       - name: Run the tests in a native image
-        run: ./gradlew :test-suite-graalvm:nativeTest --no-daemon
+        run: ./gradlew :test-suite-graalvm:nativeTest :test-suite-java:nativeTest --no-daemon

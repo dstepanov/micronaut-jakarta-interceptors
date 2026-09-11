@@ -54,13 +54,13 @@ module stands against every one of them.
 | | Assertions
 
 | Covered by a test of this repository | 130
-| Differs from the specification, deliberately | 4
-| Not applicable to a module without Jakarta Enterprise Beans, a deployment descriptor or a naming context | 28
+| Differs from the specification, deliberately | 5
+| Not applicable to a module without Jakarta Enterprise Beans, a deployment descriptor or a naming context | 27
 | A statement of intent, with nothing to verify | 4
 |===
 
 Everything the specification describes that applies to a module of this kind is covered by a test, apart from the
-4 differences below, each of which is deliberate.
+5 differences below, each of which is deliberate.
 
 == Where this module differs
 |===
@@ -68,6 +68,10 @@ Everything the specification describes that applies to a module of this kind is 
 
 | 2.2 c)
 | An interceptor class is a bean, so it needs no public no-arg constructor and may take injection
+
+| 2.3 dd)
+| An object is injected, and its post-construct callbacks run, before its around-construct interceptor methods
+return rather than after
 
 | 3.3 g)
 | A binding declared on a final method is not reported; a final class, and a final method of a class carrying a
@@ -228,8 +232,11 @@ around-construct method takes no part in construction, and is created as the obj
 
 | dd)
 | Dependency injection on the target instance is not completed until after invocation of all interceptor methods in the AroundConstruct interceptor chain complete successfully. Around-construct lifecycle callback interceptor methods should therefore exercise caution when invoking methods of the target instance since dependency injection on the target instance will not have been completed.
-| Not applicable
-| Micronaut completes injection as part of construction
+| Differs
+| Micronaut injects and initializes an object in the method that constructs it, which is what the last
+around-construct method proceeds to: when `proceed()` returns to an around-construct method, the object has been
+injected and its post-construct callbacks and post-construct interceptor methods have run.
+InjectionInsideAroundConstructTest pins the order
 |===
 
 === Section 2.3.1 - Interceptor Environment

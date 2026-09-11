@@ -31,7 +31,10 @@ import java.lang.annotation.Target;
  * by, so that no interceptor method is looked up reflectively.</p>
  *
  * <p>Each kind names as many methods as the class and its superclasses declare of it, in the order the
- * specification invokes them: the most general superclass first.</p>
+ * specification invokes them: the most general superclass first. A name alone does not tell those methods apart,
+ * since a class and its superclass may each declare a private interceptor method of the same name and signature,
+ * neither of which overrides the other. Every kind is therefore recorded twice, as the names of its methods and, in
+ * the same order, as the classes that declare them.</p>
  *
  * @author Denis Stepanov
  * @since 1.0
@@ -50,11 +53,25 @@ public @interface JakartaInterceptorMethods {
     String[] aroundInvoke() default {};
 
     /**
+     * The classes that declare the {@code jakarta.interceptor.AroundInvoke} methods named by {@link #aroundInvoke()}.
+     *
+     * @return The declaring classes, in the order of the names
+     */
+    Class<?>[] aroundInvokeDeclaringTypes() default {};
+
+    /**
      * The {@code jakarta.interceptor.AroundTimeout} methods the class and its superclasses declare.
      *
      * @return The method names, most general superclass first
      */
     String[] aroundTimeout() default {};
+
+    /**
+     * The classes that declare the {@code jakarta.interceptor.AroundTimeout} methods named by {@link #aroundTimeout()}.
+     *
+     * @return The declaring classes, in the order of the names
+     */
+    Class<?>[] aroundTimeoutDeclaringTypes() default {};
 
     /**
      * The {@code jakarta.interceptor.AroundConstruct} methods the class and its superclasses declare.
@@ -64,6 +81,13 @@ public @interface JakartaInterceptorMethods {
     String[] aroundConstruct() default {};
 
     /**
+     * The classes that declare the {@code jakarta.interceptor.AroundConstruct} methods named by {@link #aroundConstruct()}.
+     *
+     * @return The declaring classes, in the order of the names
+     */
+    Class<?>[] aroundConstructDeclaringTypes() default {};
+
+    /**
      * The {@code jakarta.annotation.PostConstruct} methods the class and its superclasses declare.
      *
      * @return The method names, most general superclass first
@@ -71,11 +95,25 @@ public @interface JakartaInterceptorMethods {
     String[] postConstruct() default {};
 
     /**
+     * The classes that declare the {@code jakarta.annotation.PostConstruct} methods named by {@link #postConstruct()}.
+     *
+     * @return The declaring classes, in the order of the names
+     */
+    Class<?>[] postConstructDeclaringTypes() default {};
+
+    /**
      * The {@code jakarta.annotation.PreDestroy} methods the class and its superclasses declare.
      *
      * @return The method names, most general superclass first
      */
     String[] preDestroy() default {};
+
+    /**
+     * The classes that declare the {@code jakarta.annotation.PreDestroy} methods named by {@link #preDestroy()}.
+     *
+     * @return The declaring classes, in the order of the names
+     */
+    Class<?>[] preDestroyDeclaringTypes() default {};
 
     /**
      * The binding annotations the interceptor class declares, each written out as one string by the processor,

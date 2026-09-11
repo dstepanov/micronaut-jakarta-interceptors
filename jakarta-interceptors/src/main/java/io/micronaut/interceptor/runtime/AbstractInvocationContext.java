@@ -15,6 +15,7 @@
  */
 package io.micronaut.interceptor.runtime;
 
+import io.micronaut.aop.Interceptor;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.core.convert.value.MutableConvertibleValues;
@@ -61,15 +62,18 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     private final io.micronaut.aop.InvocationContext<Object, ?> context;
     private final List<InterceptorReference> chain;
     private final InterceptorInstances instances;
+    private final Interceptor<?, ?> advice;
     private int index;
     private @Nullable Set<Annotation> bindings;
 
     AbstractInvocationContext(io.micronaut.aop.InvocationContext<Object, ?> context,
                               List<InterceptorReference> chain,
-                              InterceptorInstances instances) {
+                              InterceptorInstances instances,
+                              Interceptor<?, ?> advice) {
         this.context = context;
         this.chain = chain;
         this.instances = instances;
+        this.advice = advice;
     }
 
     @Override
@@ -130,10 +134,17 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     /**
      * Hands the invocation over to Micronaut, once every interceptor class of the chain has proceeded.
      *
+     * <p>What it hands over to is whatever Micronaut ordered after the advice, which is not always the intercepted
+     * element: another Micronaut interceptor may come first. The Micronaut chain is proceeded from the position of
+     * the advice rather than from wherever it stands now. An interceptor that proceeds a second time, to recover
+     * from what the rest of the chain threw, finds the Micronaut chain already moved past everything it ran the
+     * first time, and proceeding it from there would run the intercepted element alone, leaving out the Micronaut
+     * interceptors between the two.</p>
+     *
      * @return The result of the invocation
      */
     @Nullable Object proceedTarget() {
-        return context.proceed();
+        return context.proceed(advice);
     }
 
     @Override

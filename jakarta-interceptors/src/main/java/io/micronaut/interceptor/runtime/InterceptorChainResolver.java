@@ -15,8 +15,10 @@
  */
 package io.micronaut.interceptor.runtime;
 
+import io.micronaut.aop.Adapter;
 import io.micronaut.aop.InterceptorKind;
 import io.micronaut.context.BeanContext;
+import io.micronaut.core.annotation.AnnotationClassValue;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
@@ -75,16 +77,35 @@ public final class InterceptorChainResolver {
     /**
      * Resolves the chain of an intercepted element.
      *
-     * @param key      What identifies the element
-     * @param metadata The annotation metadata of the element
+     * <p>A chain is remembered by what it is built from, which is the interception the processor declared on the
+     * element and the kind of interception. Two elements that declare the same interception share one chain, and
+     * the same element declared differently by two beans - a method two beans inherit from one superclass, or a
+     * class two factory methods produce - has a chain for each declaration.</p>
+     *
+     * @param interceptorKind The kind Micronaut intercepts the element as
+     * @param metadata        The annotation metadata of the element
      * @return The interceptors, in the order they are invoked in
      */
-    List<InterceptorReference> resolve(ChainKey key, AnnotationMetadata metadata) {
+    List<InterceptorReference> resolve(InterceptorKind interceptorKind, AnnotationMetadata metadata) {
+        if (interceptorKind == InterceptorKind.INTRODUCTION && metadata.hasAnnotation(Adapter.class)) {
+            // an adapter is introduction advice that carries the metadata of the method it adapts, and invokes that
+            // method on the bean, where it is intercepted. Interposing on the adapter as well would run the chain of
+            // the method twice for one invocation
+            return List.of();
+        }
+        AnnotationValue<JakartaInterception> interception = metadata.getAnnotation(JakartaInterception.class);
+        boolean timeout = interception != null && interception.booleanValue("timeout").orElse(false);
+        InterceptionKind kind = InterceptionKind.of(interceptorKind, timeout);
+        if (kind == null) {
+            return List.of();
+        }
+        ChainKey key = new ChainKey(interception, kind);
         List<InterceptorReference> chain = chains.get(key);
         if (chain == null) {
-            // two threads may build the same chain, and the later put wins; the chains are equal, so nothing is
-            // lost. Building inside a computeIfAbsent would instead hold a lock of the map across the bean context
-            chain = build(metadata, key.kind());
+            // two threads may build the same chain, and the later put wins. The key is everything the chain is
+            // built from, so the two chains are equal and nothing is lost. Building inside a computeIfAbsent would
+            // instead hold a lock of the map across the bean context
+            chain = build(key);
             chains.put(key, chain);
         }
         return chain;
@@ -93,9 +114,8 @@ public final class InterceptorChainResolver {
     /**
      * How many chains have been resolved and remembered.
      *
-     * <p>Exposed so that a test can hold this map to its bounds: it is keyed by what identifies an intercepted
-     * element rather than by the objects an invocation passes through, and must not grow with the beans of the
-     * application.</p>
+     * <p>Exposed so that a test can hold this map to its bounds: it is keyed by what a chain is built from rather
+     * than by the objects an invocation passes through, and must not grow with the beans of the application.</p>
      *
      * @return The number of chains held
      */
@@ -104,24 +124,18 @@ public final class InterceptorChainResolver {
         return chains.size();
     }
 
-    private List<InterceptorReference> build(AnnotationMetadata metadata, InterceptorKind interceptorKind) {
-        AnnotationValue<JakartaInterception> interception = metadata.getAnnotation(JakartaInterception.class);
+    private List<InterceptorReference> build(ChainKey key) {
+        // the chain is built from the key alone, which is what lets it be remembered under the key
+        AnnotationValue<JakartaInterception> interception = key.interception();
+        InterceptionKind kind = key.kind();
         if (interception != null && interception.booleanValue("excluded").orElse(false)) {
-            return List.of();
-        }
-        boolean timeout = interception != null && interception.booleanValue("timeout").orElse(false);
-        InterceptionKind kind = InterceptionKind.of(interceptorKind, timeout);
-        if (kind == null) {
             return List.of();
         }
         // a map keyed by the interceptor class keeps the order while making sure an interceptor class that is both
         // named directly and bound by an annotation is only invoked once, at its first position
         Map<Class<?>, BeanDefinition<?>> ordered = new LinkedHashMap<>();
         for (Class<?> interceptorClass : namedInterceptors(interception)) {
-            BeanDefinition<?> definition = describing(interceptorClass);
-            if (definition != null) {
-                ordered.putIfAbsent(interceptorClass, definition);
-            }
+            ordered.putIfAbsent(interceptorClass, requireDescribing(interceptorClass));
         }
         for (BeanDefinition<?> definition : boundInterceptors(interception)) {
             BeanDefinition<?> describing = describing(definition.getBeanType());
@@ -135,10 +149,7 @@ public final class InterceptorChainResolver {
             chain.addAll(references(definition, kind, false));
         }
         if (self != null) {
-            BeanDefinition<?> definition = describing(self);
-            if (definition != null) {
-                chain.addAll(references(definition, kind, true));
-            }
+            chain.addAll(references(requireDescribing(self), kind, true));
         }
         return List.copyOf(chain);
     }
@@ -199,6 +210,33 @@ public final class InterceptorChainResolver {
             .orElse(null);
     }
 
+    /**
+     * The definition that describes an interceptor class the element names, which has to be there.
+     *
+     * <p>An interceptor class the processor never saw has no recorded interceptor methods, and so nothing the
+     * runtime could invoke: either Micronaut generated no definition of it, or the one it generated says nothing of
+     * its interceptor methods. Leaving it out of the chain would leave the element intercepted by less than it
+     * declares, with nothing to say so, so the chain is not resolved at all. The same goes for the class that
+     * declares interceptor methods on itself, which the processor did see, but whose definition may still be
+     * missing from the context.</p>
+     *
+     * <p>An interceptor class bound by a binding annotation cannot be reported this way. It is found among the
+     * interceptor classes the processor indexed, so one the processor never saw is not found in the first place.</p>
+     *
+     * @param interceptorClass The interceptor class
+     * @return The definition
+     */
+    private BeanDefinition<?> requireDescribing(Class<?> interceptorClass) {
+        BeanDefinition<?> definition = describing(interceptorClass);
+        if (definition == null) {
+            throw new IllegalStateException("The interceptor class [" + interceptorClass.getName() + "] has no bean "
+                + "definition that describes its interceptor methods, so it cannot intercept anything. An interceptor "
+                + "class has to be compiled with micronaut-jakarta-interceptors-processor on the annotation processor "
+                + "path, and its bean must not be disabled");
+        }
+        return definition;
+    }
+
     private @Nullable BeanDefinition<?> describe(Class<?> interceptorClass) {
         BeanDefinition<?> fallback = null;
         for (BeanDefinition<?> definition : beanContext.getBeanDefinitions(interceptorClass)) {
@@ -252,32 +290,60 @@ public final class InterceptorChainResolver {
             key -> referencesOf(definition, kind, self));
     }
 
-    @SuppressWarnings("unchecked")
     private static List<InterceptorReference> referencesOf(BeanDefinition<?> definition, InterceptionKind kind, boolean self) {
         AnnotationValue<JakartaInterceptorMethods> methods =
             definition.getAnnotation(JakartaInterceptorMethods.class);
         if (methods == null) {
             return List.of();
         }
-        String[] names = methods.stringValues(kind.member());
-        if (names.length == 0 && kind == InterceptionKind.AROUND_TIMEOUT) {
+        InterceptionKind recorded = kind;
+        if (kind == InterceptionKind.AROUND_TIMEOUT && methods.stringValues(kind.member()).length == 0) {
             // the specification has an @AroundInvoke method interpose on business methods alone. An interceptor
             // that declares no @AroundTimeout method would then quietly stop intercepting a method the moment it
             // was scheduled, so its @AroundInvoke methods are used instead
-            names = methods.stringValues(InterceptionKind.AROUND_INVOKE.member());
+            recorded = InterceptionKind.AROUND_INVOKE;
         }
+        String[] names = methods.stringValues(recorded.member());
+        AnnotationClassValue<?>[] declaringTypes = methods.annotationClassValues(recorded.declaringTypesMember());
         List<InterceptorReference> references = new ArrayList<>(names.length);
-        for (String name : names) {
-            ExecutableMethod<Object, Object> method = (ExecutableMethod<Object, Object>) definition
-                .findMethod(name, InvocationContext.class)
-                .orElseThrow(() -> new IllegalStateException("The interceptor method [" + name + "] of ["
-                    + definition.getBeanType().getName() + "] has no executable method. The interceptor class has "
-                    + "to be compiled with the Jakarta Interceptors annotation processor"));
-            references.add(new InterceptorReference(definition.getBeanType(), method, self));
+        for (int i = 0; i < names.length; i++) {
+            String declaringType = i < declaringTypes.length ? declaringTypes[i].getName() : null;
+            references.add(new InterceptorReference(definition.getBeanType(),
+                interceptorMethod(definition, names[i], declaringType), self));
         }
         // the list is shared between every chain that includes this interceptor, so it is not one of theirs to
         // change
         return List.copyOf(references);
+    }
+
+    /**
+     * The executable method of one interceptor method.
+     *
+     * <p>It is found by the class that declares it as well as by its name. The executable methods of a class
+     * include the ones it inherits, and a class and its superclass may each declare a private interceptor method of
+     * the same name and signature; looked up by name alone, both would be whichever of them came first.</p>
+     *
+     * @param definition    The definition of the interceptor class
+     * @param name          The name of the method
+     * @param declaringType The name of the class that declares it, or {@code null} where it was not recorded
+     */
+    @SuppressWarnings("unchecked")
+    private static ExecutableMethod<Object, Object> interceptorMethod(BeanDefinition<?> definition,
+                                                                     String name,
+                                                                     @Nullable String declaringType) {
+        for (ExecutableMethod<?, ?> method : definition.getExecutableMethods()) {
+            Class<?>[] argumentTypes = method.getArgumentTypes();
+            if (method.getMethodName().equals(name)
+                && argumentTypes.length == 1
+                && argumentTypes[0] == InvocationContext.class
+                && (declaringType == null || method.getDeclaringType().getName().equals(declaringType))) {
+                return (ExecutableMethod<Object, Object>) method;
+            }
+        }
+        throw new IllegalStateException("The interceptor method [" + name + "] of ["
+            + (declaringType == null ? definition.getBeanType().getName() : declaringType)
+            + "] has no executable method. The interceptor class has to be compiled with "
+            + "micronaut-jakarta-interceptors-processor on the annotation processor path");
     }
 
     /**
@@ -295,18 +361,21 @@ public final class InterceptorChainResolver {
     }
 
     /**
-     * Identifies an intercepted element, so that the chain resolved for it is resolved once.
+     * What a chain is built from, and so what it is remembered by.
      *
-     * <p>What identifies it depends on the kind. A business or timeout method is identified by its executable
-     * method, which compares by its declaring type, its name and its argument types: overloads of one name are
-     * different elements and must not share a chain. A lifecycle event and a constructor are identified by the
-     * class of the bean instead, because a bean has one chain for each of them and because the executable method
-     * of a callback is created anew for every bean, which would make this map grow with them.</p>
+     * <p>It is not the element itself. An executable method compares by its declaring type, its name and its
+     * argument types, so a method two beans inherit from one superclass is one key for both, and so is a class
+     * two factory methods produce, even where each of them binds it to different interceptors; the class of the
+     * intercepted object tells neither apart. The interception the processor declared on the element does: it
+     * carries the interceptor classes the element names, its bindings, its own interceptor methods and whether it
+     * excludes the rest, which with the kind is all a chain is built from. Equal keys therefore build equal chains,
+     * and the map stays as large as the number of different interceptions an application declares rather than
+     * growing with its elements or its beans.</p>
      *
-     * @param element What the chain was resolved for
-     * @param kind    The kind of interception
+     * @param interception The interception declared on the element, or {@code null} where it declares none
+     * @param kind         The kind of interception
      */
-    record ChainKey(Object element, InterceptorKind kind) {
+    record ChainKey(@Nullable AnnotationValue<JakartaInterception> interception, InterceptionKind kind) {
     }
 
     /**

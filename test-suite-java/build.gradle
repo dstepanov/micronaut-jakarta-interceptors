@@ -23,3 +23,23 @@ dependencies {
     testImplementation libs.junit.jupiter
     testRuntimeOnly libs.junit.jupiter.engine
 }
+
+// Interceptor classes compiled without the Jakarta Interceptors processor, with Micronaut's own processor alone, as a
+// module built by someone who left it off would be. They are what an interceptor class the runtime cannot read looks
+// like, and the tests hold the runtime to reporting one rather than leaving it out of a chain
+sourceSets {
+    external {
+        java.srcDir 'src/external/java'
+    }
+}
+
+dependencies {
+    externalAnnotationProcessor platform(libs.micronaut.core)
+    externalAnnotationProcessor mn.micronaut.inject.java
+    externalImplementation platform(libs.micronaut.core)
+    externalImplementation mn.micronaut.inject
+    externalImplementation libs.managed.jakarta.interceptor.api
+    externalImplementation libs.managed.jakarta.annotation.api
+
+    testImplementation sourceSets.external.output
+}

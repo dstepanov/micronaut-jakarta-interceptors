@@ -16,6 +16,7 @@
 package io.micronaut.interceptor.runtime;
 
 import io.micronaut.aop.ConstructorInvocationContext;
+import io.micronaut.aop.Interceptor;
 import io.micronaut.aop.InterceptorKind;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.Internal;
@@ -48,8 +49,9 @@ final class ConstructorInvocationContextAdapter extends AbstractInvocationContex
 
     ConstructorInvocationContextAdapter(ConstructorInvocationContext<Object> context,
                                         List<InterceptorReference> chain,
-                                        InterceptorInstances instances) {
-        super(context, chain, instances);
+                                        InterceptorInstances instances,
+                                        Interceptor<?, ?> advice) {
+        super(context, chain, instances, advice);
         this.context = context;
     }
 
@@ -102,7 +104,7 @@ final class ConstructorInvocationContextAdapter extends AbstractInvocationContex
      */
     @Override
     @Nullable Object proceedTarget() {
-        target = context.proceed();
+        target = super.proceedTarget();
         return null;
     }
 

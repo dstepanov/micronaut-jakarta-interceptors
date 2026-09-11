@@ -33,6 +33,13 @@ A class named by `@Interceptors` need not be annotated `@Interceptor` and need n
 to declare an interceptor method. Such a class is made a bean by the processor, so it too may have its
 dependencies injected.
 
+The interceptor class has to be compiled with `micronaut-jakarta-interceptors-processor` as well, wherever it is
+compiled: the processor is what records its interceptor methods, and without that record they cannot be invoked. A
+named class compiled without it, in a module of its own that left the processor off, is reported when the chain it
+is named in is first resolved, which for a bean is as the bean is created: the `IllegalStateException` names the
+class and the processor. A class bound by a binding annotation instead is only found among the interceptor classes
+the processor recorded, so one compiled without it intercepts nothing.
+
 The same class may be named more than once for one element; the specification invokes it once, at its first
 position.
 

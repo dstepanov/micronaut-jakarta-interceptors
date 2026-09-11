@@ -369,7 +369,8 @@ class level binding, are
 | a)
 | Interceptor methods are allowed to throw runtime exceptions or any checked exceptions that the associated target method allows within its throws clause.
 | Covered
-| ExceptionsTest
+| ExceptionsTest; PrivateInterceptorMethodExceptionsTest for private around-invoke, around-timeout and post-construct
+methods, which are reached reflectively
 
 | ba)
 | Interceptor method is allowed to catch and suppress exceptions.
@@ -379,7 +380,8 @@ class level binding, are
 | bb)
 | Interceptor method is allowed to recover by calling the InvocationContext.proceed method.
 | Covered
-| BindingReplacementTest
+| BindingReplacementTest; RepeatedProceedTest, where more interceptors follow, and
+RepeatedProceedThroughMicronautAdviceTest, where a Micronaut advice follows
 
 | c)
 | The invocation of the InvocationContext.proceed method will throw the same exception as any thrown by the associated target method unless an interceptor further down the Java call stack has caught it and thrown a different exception.
@@ -539,7 +541,8 @@ class level binding, are
 | a)
 | Lifecycle callback interceptor methods may throw runtime exceptions, but not checked exceptions.
 | Covered
-| LifecycleExceptionTest
+| LifecycleExceptionTest; AroundConstructExceptionsTest for an around-construct method, which may throw what the
+constructor declares
 
 | b)
 | A lifecycle callback interceptor method (other than a method on the target class or its superclasses) may catch an exception thrown by another lifecycle callback interceptor method in the invocation chain, and clean up before returning.
@@ -774,7 +777,8 @@ class level binding, are
 | c)
 | The set of interceptor bindings for a method or constructor are those declared at class level combined with those declared at method or constructor level.
 | Covered
-| CdiBindingRulesTest
+| CdiBindingRulesTest; SharedSuperclassBusinessMethodTest, where two classes bound differently inherit one method,
+and FactoryMethodsOfOneClassTest, where two factory methods bind one class differently
 
 | da)
 | Test a constructor.
@@ -982,7 +986,8 @@ method is left out of the proxy, so the binding simply never applies
 | h)
 | If an interceptor class declared using interceptor bindings has superclasses, interceptor methods declared in the interceptor class’s superclasses are invoked before the interceptor method declared in the interceptor class itself, most general superclass first.
 | Covered
-| HierarchyOrderTest
+| HierarchyOrderTest; PrivateInterceptorMethodsOfOneNameTest, where a class and its superclass each declare a private
+interceptor method of one name and signature
 
 | i)
 | If the target class has superclasses, interceptor methods declared in the target class’s superclasses are invoked before an interceptor method declared in the target class itself, most general superclass first.

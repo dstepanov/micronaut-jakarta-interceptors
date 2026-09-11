@@ -23,7 +23,7 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>They are not quite the kinds Micronaut knows: the specification also interposes on the timeout methods a timer
  * service invokes, which Micronaut intercepts as it does any other method. Each kind therefore names both the
- * member of {@link JakartaInterceptorMethods} that records its interceptor method and, where there is one, the
+ * members of {@link JakartaInterceptorMethods} that record its interceptor methods and, where there is one, the
  * Micronaut kind it is intercepted as.</p>
  *
  * @author Denis Stepanov
@@ -34,33 +34,35 @@ public enum InterceptionKind {
     /**
      * A business method of the intercepted bean.
      */
-    AROUND_INVOKE("aroundInvoke", InterceptorKind.AROUND),
+    AROUND_INVOKE("aroundInvoke", "aroundInvokeDeclaringTypes", InterceptorKind.AROUND),
 
     /**
      * A method the scheduler invokes, which is what the specification calls a timeout method.
      */
-    AROUND_TIMEOUT("aroundTimeout", InterceptorKind.AROUND),
+    AROUND_TIMEOUT("aroundTimeout", "aroundTimeoutDeclaringTypes", InterceptorKind.AROUND),
 
     /**
      * The construction of the intercepted bean.
      */
-    AROUND_CONSTRUCT("aroundConstruct", InterceptorKind.AROUND_CONSTRUCT),
+    AROUND_CONSTRUCT("aroundConstruct", "aroundConstructDeclaringTypes", InterceptorKind.AROUND_CONSTRUCT),
 
     /**
      * The post-construct callback of the intercepted bean.
      */
-    POST_CONSTRUCT("postConstruct", InterceptorKind.POST_CONSTRUCT),
+    POST_CONSTRUCT("postConstruct", "postConstructDeclaringTypes", InterceptorKind.POST_CONSTRUCT),
 
     /**
      * The pre-destroy callback of the intercepted bean.
      */
-    PRE_DESTROY("preDestroy", InterceptorKind.PRE_DESTROY);
+    PRE_DESTROY("preDestroy", "preDestroyDeclaringTypes", InterceptorKind.PRE_DESTROY);
 
     private final String member;
+    private final String declaringTypesMember;
     private final InterceptorKind interceptorKind;
 
-    InterceptionKind(String member, InterceptorKind interceptorKind) {
+    InterceptionKind(String member, String declaringTypesMember, InterceptorKind interceptorKind) {
         this.member = member;
+        this.declaringTypesMember = declaringTypesMember;
         this.interceptorKind = interceptorKind;
     }
 
@@ -71,6 +73,16 @@ public enum InterceptionKind {
      */
     public String member() {
         return member;
+    }
+
+    /**
+     * The member of {@link JakartaInterceptorMethods} that records the classes declaring the interceptor methods
+     * {@link #member()} names, in the same order.
+     *
+     * @return The member name
+     */
+    public String declaringTypesMember() {
+        return declaringTypesMember;
     }
 
     /**
@@ -85,13 +97,18 @@ public enum InterceptionKind {
     /**
      * The kind that interposes on an invocation Micronaut intercepts as the given kind.
      *
+     * <p>Micronaut reports the invocation of a method of a bean it implements with introduction advice as an
+     * introduction rather than as around advice, whether the advice implements that method or the method is a
+     * concrete one of the bean. The specification knows no such distinction: either is the invocation of a business
+     * method, or of a timeout method where the scheduler invokes it, and is interposed on as one.</p>
+     *
      * @param interceptorKind The Micronaut kind
      * @param timeout         Whether the intercepted method is one the scheduler invokes
      * @return The kind, or {@code null} when Micronaut intercepts something the specification does not describe
      */
     public static @Nullable InterceptionKind of(InterceptorKind interceptorKind, boolean timeout) {
         return switch (interceptorKind) {
-            case AROUND -> timeout ? AROUND_TIMEOUT : AROUND_INVOKE;
+            case AROUND, INTRODUCTION -> timeout ? AROUND_TIMEOUT : AROUND_INVOKE;
             case AROUND_CONSTRUCT -> AROUND_CONSTRUCT;
             case POST_CONSTRUCT -> POST_CONSTRUCT;
             case PRE_DESTROY -> PRE_DESTROY;

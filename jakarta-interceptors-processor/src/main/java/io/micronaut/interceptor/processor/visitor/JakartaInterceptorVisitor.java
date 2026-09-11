@@ -179,6 +179,11 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
                 builder.member(entry.getKey().member(), entry.getValue().stream()
                     .map(MethodElement::getName)
                     .toArray(String[]::new));
+                // a name is not enough to find the method by: a class and its superclass may each declare a private
+                // interceptor method of the same name and signature, and the specification invokes both
+                builder.member(entry.getKey().declaringTypesMember(), entry.getValue().stream()
+                    .map(method -> new AnnotationClassValue<>(method.getDeclaringType().getName()))
+                    .toArray(AnnotationClassValue<?>[]::new));
             }
             if (bindings.length > 0) {
                 builder.member("bindings", bindings);
@@ -219,9 +224,9 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
                                   InterceptorClassModel model,
                                   boolean declaredAsABean,
                                   VisitorContext context) {
-        List<String> classInterceptors = namedInterceptors(element);
+        List<String> classInterceptors = namedInterceptors(element, context);
         MethodElement constructor = element.getPrimaryConstructor().orElse(null);
-        List<String> constructorInterceptors = constructor == null ? List.of() : namedInterceptors(constructor);
+        List<String> constructorInterceptors = constructor == null ? List.of() : namedInterceptors(constructor, context);
         // an @AroundInvoke method interposes on the business methods of the class that declares it, but only when
         // that class is a bean of its own: a plain class declaring nothing else is an interceptor class, named by
         // @Interceptors somewhere, and intercepting it would be intercepting the interceptor
@@ -365,7 +370,7 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         // the specification hands an @AroundInvoke or @AroundTimeout interceptor method the intercepted method as
         // a java.lang.reflect.Method, which the runtime reads off the executable method Micronaut generated
         permitReflection(method);
-        List<String> methodInterceptors = namedInterceptors(method);
+        List<String> methodInterceptors = namedInterceptors(method, context);
         boolean excludesClassInterceptors = method.hasDeclaredAnnotation(JakartaInterceptors.EXCLUDE_CLASS_INTERCEPTORS);
         List<String> interceptors = new ArrayList<>(classInterceptors.size() + methodInterceptors.size());
         if (!excludesClassInterceptors) {
@@ -557,7 +562,16 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         }
     }
 
-    private static List<String> namedInterceptors(Element element) {
+    /**
+     * The interceptor classes an element names with {@code @Interceptors}.
+     *
+     * <p>A class named there that declares no interceptor method at all - one whose only interceptor method is
+     * overridden by a method that is not one, say - has nothing to interpose with, and is left out. The runtime
+     * requires every class it is handed to have had its interceptor methods recorded, and it cannot tell a class
+     * that has none from one compiled without this processor, whose methods it cannot invoke; here the class itself
+     * is visible, wherever it was compiled, and answers which of the two it is.</p>
+     */
+    private static List<String> namedInterceptors(Element element, VisitorContext context) {
         AnnotationValue<?> interceptors = element.getAnnotationMetadata()
             .getDeclaredAnnotation(JakartaInterceptors.INTERCEPTORS);
         if (interceptors == null) {
@@ -566,7 +580,10 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         // a set keeps the declaration order while ignoring a class named twice, which the specification invokes once
         Set<String> names = new LinkedHashSet<>();
         for (AnnotationClassValue<?> value : interceptors.annotationClassValues(AnnotationMetadata.VALUE_MEMBER)) {
-            names.add(value.getName());
+            ClassElement named = context.getClassElement(value.getName()).orElse(null);
+            if (named == null || InterceptorClassScanner.scan(named).intercepts()) {
+                names.add(value.getName());
+            }
         }
         return List.copyOf(names);
     }

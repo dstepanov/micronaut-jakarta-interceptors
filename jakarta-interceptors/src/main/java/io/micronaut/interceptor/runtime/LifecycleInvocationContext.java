@@ -42,6 +42,7 @@ final class LifecycleInvocationContext extends AbstractInvocationContext
     private final MethodInvocationContext<Object, ?> context;
     private @Nullable Method method;
     private boolean methodResolved;
+    private boolean proceeding;
 
     LifecycleInvocationContext(MethodInvocationContext<Object, ?> context,
                                List<InterceptorReference> chain,
@@ -99,6 +100,34 @@ final class LifecycleInvocationContext extends AbstractInvocationContext
             method = target;
         }
         return method;
+    }
+
+    /**
+     * Runs the chain, and destroys the interceptor instances of the object when its post-construct event fails.
+     *
+     * <p>An exception that leaves the post-construct chain fails the creation of the object, and section 2.3 has the
+     * interceptor instances of an object that fails to be created destroyed. Every interceptor of the chain proceeds
+     * through this same context, so it is the outermost call - the one the advice makes - that decides: an exception
+     * an interceptor catches on the way out fails nothing. A pre-destroy event that fails still ends with the object
+     * destroyed, and its interceptor instances with it, so there is nothing to do for one here.</p>
+     *
+     * @return What the chain returned
+     * @throws Exception What the chain threw
+     */
+    @Override
+    public @Nullable Object proceed() throws Exception {
+        if (proceeding || context.getKind() != InterceptorKind.POST_CONSTRUCT) {
+            return super.proceed();
+        }
+        proceeding = true;
+        try {
+            return super.proceed();
+        } catch (Throwable e) {
+            discardInterceptorInstances();
+            throw e;
+        } finally {
+            proceeding = false;
+        }
     }
 
     /**

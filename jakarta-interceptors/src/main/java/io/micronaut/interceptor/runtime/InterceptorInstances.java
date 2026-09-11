@@ -81,6 +81,21 @@ final class InterceptorInstances {
     }
 
     /**
+     * Creates the instance of every interceptor class of a chain that has none yet.
+     *
+     * @param chain The chain
+     */
+    void createAll(List<InterceptorReference> chain) {
+        for (InterceptorReference reference : chain) {
+            // an interceptor method the intercepted class declares itself runs on the object, and has no instance
+            // of its own to create
+            if (!reference.self()) {
+                get(reference);
+            }
+        }
+    }
+
+    /**
      * Creates the instance of an interceptor class.
      *
      * <p>Resolved by type rather than from one definition: an interceptor class may also be produced by a factory,

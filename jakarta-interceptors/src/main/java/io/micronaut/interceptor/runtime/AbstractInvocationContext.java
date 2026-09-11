@@ -128,6 +128,14 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     }
 
     /**
+     * Creates the instance of every interceptor class of the chain that has none yet, rather than each as the chain
+     * reaches it.
+     */
+    final void createInterceptorInstances() {
+        instances.createAll(chain);
+    }
+
+    /**
      * Destroys the interceptor instances of the object being intercepted, which has failed to be created.
      *
      * <p>Section 2.3 destroys the interceptor instances of an object that fails to be created, as it does those of an

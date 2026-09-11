@@ -47,9 +47,9 @@ to `jakarta.enterprise.inject.Stereotype`, and no rule of another specification 
 names it itself.
 
 A Contexts and Dependency Injection stereotype nevertheless carries its bindings across, because a binding
-annotation declared on another annotation binds through it whatever that annotation is otherwise for. A class
-annotated with a stereotype that declares `@Monitored` declares `@Monitored`, and the interceptors bound to it
-intercept the class. The kit's own resolution scenarios rely on exactly that and are run here; see
+annotation declared on another annotation binds through it whatever that annotation is otherwise for. A class or a
+method annotated with a stereotype that declares `@Monitored` declares `@Monitored`, and the interceptors bound to
+it intercept the class or the method. The kit's own resolution scenarios rely on exactly that and are run here; see
 <<conformance,Conformance>>, sections 3.1.2 a) and 3.3 e). What is not read is the stereotype as such - a
 stereotype that names a scope, a name or an interceptor by any rule of that specification other than declaring the
 binding is read as the annotation it is and no more.

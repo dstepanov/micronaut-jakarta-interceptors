@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -115,7 +116,11 @@ public final class InterceptorClassScanner {
 
     /**
      * Reads the binding annotations of an element: the annotations meta-annotated with
-     * {@code jakarta.interceptor.InterceptorBinding}.
+     * {@code jakarta.interceptor.InterceptorBinding}, and the binding annotations those carry.
+     *
+     * <p>A binding annotation declared on another annotation binds through it whatever that annotation is
+     * otherwise for, so a method declaring an annotation that carries {@code @Logged} is bound by {@code @Logged}
+     * as much as a method declaring {@code @Logged} is.</p>
      *
      * @param element The element
      * @return The binding annotations, in a stable order
@@ -126,11 +131,17 @@ public final class InterceptorClassScanner {
         if (names.isEmpty()) {
             return List.of();
         }
-        // what is wanted of a member is what it declares itself, which its own metadata holds apart from its class.
-        // A class, on the other hand, keeps the bindings it inherits from its superclasses, which is what an
-        // @Inherited binding annotation asks for
+        // what is wanted of a member is what it declares itself, which its own metadata holds apart from its class,
+        // and what the annotations it declares carry. Micronaut holds the second apart from the first, as the
+        // stereotypes of the member, so both are read; an annotation it only inherits from a method it overrides is
+        // neither. A class, on the other hand, keeps the bindings it inherits from its superclasses, which is what
+        // an @Inherited binding annotation asks for
         boolean isClass = element instanceof ClassElement;
-        Set<String> declared = isClass ? Set.of() : Set.copyOf(annotationMetadata.getDeclaredAnnotationNames());
+        Set<String> declared = new HashSet<>();
+        if (!isClass) {
+            declared.addAll(annotationMetadata.getDeclaredAnnotationNames());
+            declared.addAll(annotationMetadata.getDeclaredStereotypeAnnotationNames());
+        }
         // a map keyed by name keeps the bindings distinct while preserving the declaration order
         Map<String, AnnotationValue<?>> bindings = new LinkedHashMap<>(names.size());
         for (String name : names) {

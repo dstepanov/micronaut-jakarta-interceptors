@@ -68,7 +68,9 @@ element declaring more bindings than an interceptor is still intercepted by it.
 
 A binding annotation declared on *another* binding annotation binds transitively: an element declaring
 `@Critical`, itself annotated `@Monitored`, declares `@Monitored` too and is intercepted by the interceptors bound
-to it.
+to it. The other annotation need not be a binding annotation itself. A binding declared on any annotation binds
+through it, on a class or a method alike, so a method declaring an annotation that carries `@Monitored` is
+intercepted by the interceptors bound to `@Monitored` even when nothing else about its class is intercepted.
 
 A binding annotation that is `@Inherited` is inherited by the subclasses of the class declaring it, so a subclass
 of an intercepted class is intercepted without declaring anything of its own.

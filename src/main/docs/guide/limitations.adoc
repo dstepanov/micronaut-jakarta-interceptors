@@ -100,8 +100,11 @@ aspect oriented programming apply:
 
 * the intercepted class must be a bean;
 * an intercepted method must not be `private`, `static` or `final`;
-* a call from one method of a bean to another goes through `this` and is not intercepted, unless the bean is
-proxied with `@Around(proxyTarget = true)`.
+* a call from one method of a bean to another on `this` is intercepted as long as the proxy is the bean, which it
+is by default: the proxy is a subclass of the bean, so `this` is the proxy and the call goes through the method it
+overrides. A bean proxied with `@Around(proxyTarget = true)` is the opposite case. Its proxy delegates to a separate
+instance of the bean, `this` inside a method is that instance, and a call on it is not intercepted. A `private` or
+`final` method is not intercepted in either case, since the proxy cannot override it.
 
 Every one of these, and the whole of the specification besides, is recorded assertion by assertion under
 <<conformance,Conformance>>.

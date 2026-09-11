@@ -135,10 +135,7 @@ public final class InterceptorChainResolver {
         // named directly and bound by an annotation is only invoked once, at its first position
         Map<Class<?>, BeanDefinition<?>> ordered = new LinkedHashMap<>();
         for (Class<?> interceptorClass : namedInterceptors(interception)) {
-            BeanDefinition<?> definition = describing(interceptorClass);
-            if (definition != null) {
-                ordered.putIfAbsent(interceptorClass, definition);
-            }
+            ordered.putIfAbsent(interceptorClass, requireDescribing(interceptorClass));
         }
         for (BeanDefinition<?> definition : boundInterceptors(interception)) {
             BeanDefinition<?> describing = describing(definition.getBeanType());
@@ -152,10 +149,7 @@ public final class InterceptorChainResolver {
             chain.addAll(references(definition, kind, false));
         }
         if (self != null) {
-            BeanDefinition<?> definition = describing(self);
-            if (definition != null) {
-                chain.addAll(references(definition, kind, true));
-            }
+            chain.addAll(references(requireDescribing(self), kind, true));
         }
         return List.copyOf(chain);
     }
@@ -214,6 +208,33 @@ public final class InterceptorChainResolver {
     private @Nullable BeanDefinition<?> describing(Class<?> interceptorClass) {
         return describing.computeIfAbsent(interceptorClass, type -> Optional.ofNullable(describe(type)))
             .orElse(null);
+    }
+
+    /**
+     * The definition that describes an interceptor class the element names, which has to be there.
+     *
+     * <p>An interceptor class the processor never saw has no recorded interceptor methods, and so nothing the
+     * runtime could invoke: either Micronaut generated no definition of it, or the one it generated says nothing of
+     * its interceptor methods. Leaving it out of the chain would leave the element intercepted by less than it
+     * declares, with nothing to say so, so the chain is not resolved at all. The same goes for the class that
+     * declares interceptor methods on itself, which the processor did see, but whose definition may still be
+     * missing from the context.</p>
+     *
+     * <p>An interceptor class bound by a binding annotation cannot be reported this way. It is found among the
+     * interceptor classes the processor indexed, so one the processor never saw is not found in the first place.</p>
+     *
+     * @param interceptorClass The interceptor class
+     * @return The definition
+     */
+    private BeanDefinition<?> requireDescribing(Class<?> interceptorClass) {
+        BeanDefinition<?> definition = describing(interceptorClass);
+        if (definition == null) {
+            throw new IllegalStateException("The interceptor class [" + interceptorClass.getName() + "] has no bean "
+                + "definition that describes its interceptor methods, so it cannot intercept anything. An interceptor "
+                + "class has to be compiled with micronaut-jakarta-interceptors-processor on the annotation processor "
+                + "path, and its bean must not be disabled");
+        }
+        return definition;
     }
 
     private @Nullable BeanDefinition<?> describe(Class<?> interceptorClass) {
@@ -321,8 +342,8 @@ public final class InterceptorChainResolver {
         }
         throw new IllegalStateException("The interceptor method [" + name + "] of ["
             + (declaringType == null ? definition.getBeanType().getName() : declaringType)
-            + "] has no executable method. The interceptor class has to be compiled with the Jakarta Interceptors "
-            + "annotation processor");
+            + "] has no executable method. The interceptor class has to be compiled with "
+            + "micronaut-jakarta-interceptors-processor on the annotation processor path");
     }
 
     /**

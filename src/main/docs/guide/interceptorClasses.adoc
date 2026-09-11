@@ -27,7 +27,8 @@ them accepts a single `jakarta.interceptor.InvocationContext`:
 
 A class may declare several of them, and one interceptor instance then serves them all. A superclass may declare
 its own: the specification invokes every interceptor method of the hierarchy for a kind, the most general
-superclass first, and this module does the same.
+superclass first, and this module does the same. That includes a `private` interceptor method of a superclass with
+the same name and signature as one of its subclass, which the subclass does not override.
 
 The `InvocationContext` parameter is what tells a lifecycle interceptor method from the lifecycle callback of the
 interceptor class itself. A `@PostConstruct` method that takes no parameter is the interceptor's own callback,

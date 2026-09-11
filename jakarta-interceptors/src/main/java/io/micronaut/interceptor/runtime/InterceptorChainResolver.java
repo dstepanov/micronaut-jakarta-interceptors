@@ -18,6 +18,7 @@ package io.micronaut.interceptor.runtime;
 import io.micronaut.aop.Adapter;
 import io.micronaut.aop.InterceptorKind;
 import io.micronaut.context.BeanContext;
+import io.micronaut.core.annotation.AnnotationClassValue;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
@@ -268,32 +269,60 @@ public final class InterceptorChainResolver {
             key -> referencesOf(definition, kind, self));
     }
 
-    @SuppressWarnings("unchecked")
     private static List<InterceptorReference> referencesOf(BeanDefinition<?> definition, InterceptionKind kind, boolean self) {
         AnnotationValue<JakartaInterceptorMethods> methods =
             definition.getAnnotation(JakartaInterceptorMethods.class);
         if (methods == null) {
             return List.of();
         }
-        String[] names = methods.stringValues(kind.member());
-        if (names.length == 0 && kind == InterceptionKind.AROUND_TIMEOUT) {
+        InterceptionKind recorded = kind;
+        if (kind == InterceptionKind.AROUND_TIMEOUT && methods.stringValues(kind.member()).length == 0) {
             // the specification has an @AroundInvoke method interpose on business methods alone. An interceptor
             // that declares no @AroundTimeout method would then quietly stop intercepting a method the moment it
             // was scheduled, so its @AroundInvoke methods are used instead
-            names = methods.stringValues(InterceptionKind.AROUND_INVOKE.member());
+            recorded = InterceptionKind.AROUND_INVOKE;
         }
+        String[] names = methods.stringValues(recorded.member());
+        AnnotationClassValue<?>[] declaringTypes = methods.annotationClassValues(recorded.declaringTypesMember());
         List<InterceptorReference> references = new ArrayList<>(names.length);
-        for (String name : names) {
-            ExecutableMethod<Object, Object> method = (ExecutableMethod<Object, Object>) definition
-                .findMethod(name, InvocationContext.class)
-                .orElseThrow(() -> new IllegalStateException("The interceptor method [" + name + "] of ["
-                    + definition.getBeanType().getName() + "] has no executable method. The interceptor class has "
-                    + "to be compiled with the Jakarta Interceptors annotation processor"));
-            references.add(new InterceptorReference(definition.getBeanType(), method, self));
+        for (int i = 0; i < names.length; i++) {
+            String declaringType = i < declaringTypes.length ? declaringTypes[i].getName() : null;
+            references.add(new InterceptorReference(definition.getBeanType(),
+                interceptorMethod(definition, names[i], declaringType), self));
         }
         // the list is shared between every chain that includes this interceptor, so it is not one of theirs to
         // change
         return List.copyOf(references);
+    }
+
+    /**
+     * The executable method of one interceptor method.
+     *
+     * <p>It is found by the class that declares it as well as by its name. The executable methods of a class
+     * include the ones it inherits, and a class and its superclass may each declare a private interceptor method of
+     * the same name and signature; looked up by name alone, both would be whichever of them came first.</p>
+     *
+     * @param definition    The definition of the interceptor class
+     * @param name          The name of the method
+     * @param declaringType The name of the class that declares it, or {@code null} where it was not recorded
+     */
+    @SuppressWarnings("unchecked")
+    private static ExecutableMethod<Object, Object> interceptorMethod(BeanDefinition<?> definition,
+                                                                     String name,
+                                                                     @Nullable String declaringType) {
+        for (ExecutableMethod<?, ?> method : definition.getExecutableMethods()) {
+            Class<?>[] argumentTypes = method.getArgumentTypes();
+            if (method.getMethodName().equals(name)
+                && argumentTypes.length == 1
+                && argumentTypes[0] == InvocationContext.class
+                && (declaringType == null || method.getDeclaringType().getName().equals(declaringType))) {
+                return (ExecutableMethod<Object, Object>) method;
+            }
+        }
+        throw new IllegalStateException("The interceptor method [" + name + "] of ["
+            + (declaringType == null ? definition.getBeanType().getName() : declaringType)
+            + "] has no executable method. The interceptor class has to be compiled with the Jakarta Interceptors "
+            + "annotation processor");
     }
 
     /**

@@ -983,7 +983,8 @@ method is left out of the proxy, so the binding simply never applies
 | h)
 | If an interceptor class declared using interceptor bindings has superclasses, interceptor methods declared in the interceptor class’s superclasses are invoked before the interceptor method declared in the interceptor class itself, most general superclass first.
 | Covered
-| HierarchyOrderTest
+| HierarchyOrderTest; PrivateInterceptorMethodsOfOneNameTest, where a class and its superclass each declare a private
+interceptor method of one name and signature
 
 | i)
 | If the target class has superclasses, interceptor methods declared in the target class’s superclasses are invoked before an interceptor method declared in the target class itself, most general superclass first.

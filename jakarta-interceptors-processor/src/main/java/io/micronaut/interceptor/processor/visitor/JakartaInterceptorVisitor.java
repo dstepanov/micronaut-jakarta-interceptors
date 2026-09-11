@@ -179,6 +179,11 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
                 builder.member(entry.getKey().member(), entry.getValue().stream()
                     .map(MethodElement::getName)
                     .toArray(String[]::new));
+                // a name is not enough to find the method by: a class and its superclass may each declare a private
+                // interceptor method of the same name and signature, and the specification invokes both
+                builder.member(entry.getKey().declaringTypesMember(), entry.getValue().stream()
+                    .map(method -> new AnnotationClassValue<>(method.getDeclaringType().getName()))
+                    .toArray(AnnotationClassValue<?>[]::new));
             }
             if (bindings.length > 0) {
                 builder.member("bindings", bindings);

@@ -16,9 +16,12 @@
 package io.micronaut.interceptor.runtime;
 
 import io.micronaut.core.annotation.Internal;
+import io.micronaut.core.reflect.exception.InvocationException;
 import io.micronaut.inject.ExecutableMethod;
 import jakarta.interceptor.InvocationContext;
 import org.jspecify.annotations.Nullable;
+
+import java.lang.reflect.InvocationTargetException;
 
 /**
  * One interceptor class of a chain, together with the interceptor method that interposes on the kind of
@@ -40,13 +43,41 @@ record InterceptorReference(Class<?> interceptorClass, ExecutableMethod<Object, 
     /**
      * Invokes the interceptor method.
      *
+     * <p>A private interceptor method is one the executable method cannot call directly, and reaches reflectively
+     * instead, which wraps whatever the method threw in an {@link InvocationException} caused by an
+     * {@code InvocationTargetException}. That envelope is taken off: what the method threw travels on as it was
+     * thrown, to the interceptors before it and to the caller, the same as it would from a method of any other
+     * access. A checked exception is rethrown unchanged too, as it is from an interceptor method called directly;
+     * which checked exceptions are allowed through is decided by the kind of interception, further up.</p>
+     *
      * @param interceptor The interceptor instance
      * @param context     The context to pass to it
      * @return Whatever the interceptor method returned, which is the result of the invocation for an
      * {@code @AroundInvoke} method and nothing for the others
      */
     @Nullable Object invoke(Object interceptor, InvocationContext context) {
-        return method.invoke(interceptor, context);
+        try {
+            return method.invoke(interceptor, context);
+        } catch (InvocationException e) {
+            Throwable thrown = e.getCause() instanceof InvocationTargetException target ? target.getCause() : null;
+            if (thrown == null) {
+                // not the envelope of a reflective call: an exception of its own, which travels as it is
+                throw e;
+            }
+            throw sneakyThrow(thrown);
+        }
     }
 
+    /**
+     * Rethrows an exception as it is, checked or not.
+     *
+     * @param e   The exception
+     * @param <E> The type the exception is rethrown as
+     * @return Never returns; declared so that the call site can be written as a {@code throw}
+     * @throws E The exception
+     */
+    @SuppressWarnings("unchecked")
+    private static <E extends Throwable> RuntimeException sneakyThrow(Throwable e) throws E {
+        throw (E) e;
+    }
 }

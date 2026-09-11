@@ -39,7 +39,8 @@ An interceptor that returns without proceeding keeps the rest of the chain, and 
 running. For a lifecycle callback that is all it does: the bean is neither replaced nor discarded.
 
 An exception thrown by an interceptor method reaches the caller unchanged, checked exceptions included: the
-intercepted method is what the caller sees, and it declares them.
+intercepted method is what the caller sees, and it declares them. That holds for a `private` interceptor method as
+well, which is reached reflectively: the exception the reflective call wraps what it threw in is taken off again.
 
 `getParameters()` shows the arguments the intercepted element declares, and nothing else. A Kotlin suspending
 function is compiled with a continuation of its own after them; that argument belongs to the language and is

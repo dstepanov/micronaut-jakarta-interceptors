@@ -369,7 +369,8 @@ class level binding, are
 | a)
 | Interceptor methods are allowed to throw runtime exceptions or any checked exceptions that the associated target method allows within its throws clause.
 | Covered
-| ExceptionsTest
+| ExceptionsTest; PrivateInterceptorMethodExceptionsTest for private around-invoke, around-timeout and post-construct
+methods, which are reached reflectively
 
 | ba)
 | Interceptor method is allowed to catch and suppress exceptions.

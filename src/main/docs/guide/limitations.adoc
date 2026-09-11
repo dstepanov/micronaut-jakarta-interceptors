@@ -74,7 +74,13 @@ declared where it is compiled, and that is where interceptors are expected to co
 An interceptor class becomes a bean, so an application may also produce it from a `@Factory` method to configure
 the instance itself; the instance the factory produced is then the one that intercepts. The definition this module
 declares for an interceptor class is a secondary one, which is what lets a factory take its place rather than the
-two being ambiguous.
+two being ambiguous. That holds for a class declaring `@Interceptor` as much as for one only named by
+`@Interceptors`.
+
+An interceptor class that declares a scope or a bean annotation of its own, such as `@Singleton`, is a bean the
+application declared rather than one this module declares, and is left as it was declared. A factory producing the
+same class is then as ambiguous with it as with any other bean declared twice, unless one of the two is marked
+`@Primary` or `@Secondary`.
 
 === Interceptor classes named on a superclass
 

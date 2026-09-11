@@ -114,7 +114,7 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         InterceptorClassModel model = InterceptorClassScanner.scan(element);
         // read before anything is declared on the class: an interceptor class is made a bean below, and whether it
         // was one to begin with is what tells a bean interposing on itself from a class written to intercept others
-        boolean declaredAsABean = element.hasStereotype(Bean.class) || element.hasStereotype(AnnotationUtil.SCOPE);
+        boolean declaredAsABean = declaresABean(element);
         boolean isInterceptorClass = element.hasDeclaredAnnotation(JakartaInterceptors.INTERCEPTOR)
             || interposesOnAnotherObject(model);
         if (isInterceptorClass && !model.intercepts()) {
@@ -143,6 +143,37 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
     }
 
     /**
+     * Tells whether the application declares a class a bean of its own, as opposed to the module making it one.
+     *
+     * <p>{@code @Interceptor} is mapped to {@code @Bean}, which is what makes an interceptor class a bean however
+     * little else it declares. That {@code @Bean} is the module's rather than the application's, and it is not told
+     * apart from one the class declares by reading the metadata: both are a declared {@code @Bean}. Counting it
+     * would read every {@code @Interceptor} class as a bean the application declared, and the definition the module
+     * declares for it would never be made the secondary one a factory producing the same class takes the place
+     * of - the two would be ambiguous instead. So on a class declaring {@code @Interceptor}, {@code @Bean} itself
+     * is left out, and what counts is a scope or another annotation that is a bean declaration, such as
+     * {@code @Singleton} or {@code @Prototype}. A plain {@code @Bean} on such a class declares nothing
+     * {@code @Interceptor} does not already declare.</p>
+     *
+     * <p>A class the application does declare a bean is left as it declared it, which is how Micronaut treats any
+     * bean: an {@code @Interceptor} class that is also {@code @Singleton} is a singleton and not a secondary
+     * definition, and a factory producing the same class is as ambiguous with it as with any other bean the
+     * application declares twice.</p>
+     */
+    private static boolean declaresABean(ClassElement element) {
+        if (element.hasStereotype(AnnotationUtil.SCOPE)) {
+            return true;
+        }
+        boolean mapped = element.hasDeclaredAnnotation(JakartaInterceptors.INTERCEPTOR);
+        for (String name : element.getAnnotationNamesByStereotype(Bean.class.getName())) {
+            if (!mapped || !Bean.class.getName().equals(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Tells whether a class can only be an interceptor class.
      *
      * <p>Interposing on the construction of an object, or on its lifecycle callbacks, is something only an
@@ -166,10 +197,10 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
                                                  boolean isInterceptorClass) {
         ClassElement interceptorClass = model.interceptorClass();
         if (!declaredAsABean) {
-            // an interceptor class named directly by @Interceptors need not be a bean of its own; it is made one,
-            // so that the advice can have an instance of it and so that it may have things injected into it. The
-            // definition is a secondary one, so that a factory declaring the same interceptor is what wins rather
-            // than the two of them being ambiguous
+            // an interceptor class need not be a bean of its own, whether it declares @Interceptor or is named
+            // directly by @Interceptors; it is made one, so that the advice can have an instance of it and so that
+            // it may have things injected into it. The definition is a secondary one, so that a factory declaring
+            // the same interceptor is what wins rather than the two of them being ambiguous
             interceptorClass.annotate(Prototype.class);
             interceptorClass.annotate(Secondary.class);
         }

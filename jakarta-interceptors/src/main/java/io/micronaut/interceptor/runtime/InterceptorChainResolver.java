@@ -15,6 +15,7 @@
  */
 package io.micronaut.interceptor.runtime;
 
+import io.micronaut.aop.Adapter;
 import io.micronaut.aop.InterceptorKind;
 import io.micronaut.context.BeanContext;
 import io.micronaut.core.annotation.AnnotationMetadata;
@@ -85,6 +86,12 @@ public final class InterceptorChainResolver {
      * @return The interceptors, in the order they are invoked in
      */
     List<InterceptorReference> resolve(InterceptorKind interceptorKind, AnnotationMetadata metadata) {
+        if (interceptorKind == InterceptorKind.INTRODUCTION && metadata.hasAnnotation(Adapter.class)) {
+            // an adapter is introduction advice that carries the metadata of the method it adapts, and invokes that
+            // method on the bean, where it is intercepted. Interposing on the adapter as well would run the chain of
+            // the method twice for one invocation
+            return List.of();
+        }
         AnnotationValue<JakartaInterception> interception = metadata.getAnnotation(JakartaInterception.class);
         boolean timeout = interception != null && interception.booleanValue("timeout").orElse(false);
         InterceptionKind kind = InterceptionKind.of(interceptorKind, timeout);

@@ -85,13 +85,18 @@ public enum InterceptionKind {
     /**
      * The kind that interposes on an invocation Micronaut intercepts as the given kind.
      *
+     * <p>Micronaut reports the invocation of a method of a bean it implements with introduction advice as an
+     * introduction rather than as around advice, whether the advice implements that method or the method is a
+     * concrete one of the bean. The specification knows no such distinction: either is the invocation of a business
+     * method, or of a timeout method where the scheduler invokes it, and is interposed on as one.</p>
+     *
      * @param interceptorKind The Micronaut kind
      * @param timeout         Whether the intercepted method is one the scheduler invokes
      * @return The kind, or {@code null} when Micronaut intercepts something the specification does not describe
      */
     public static @Nullable InterceptionKind of(InterceptorKind interceptorKind, boolean timeout) {
         return switch (interceptorKind) {
-            case AROUND -> timeout ? AROUND_TIMEOUT : AROUND_INVOKE;
+            case AROUND, INTRODUCTION -> timeout ? AROUND_TIMEOUT : AROUND_INVOKE;
             case AROUND_CONSTRUCT -> AROUND_CONSTRUCT;
             case POST_CONSTRUCT -> POST_CONSTRUCT;
             case PRE_DESTROY -> PRE_DESTROY;

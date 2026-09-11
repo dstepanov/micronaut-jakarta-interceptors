@@ -379,7 +379,8 @@ class level binding, are
 | bb)
 | Interceptor method is allowed to recover by calling the InvocationContext.proceed method.
 | Covered
-| BindingReplacementTest
+| BindingReplacementTest; RepeatedProceedTest, where more interceptors follow, and
+RepeatedProceedThroughMicronautAdviceTest, where a Micronaut advice follows
 
 | c)
 | The invocation of the InvocationContext.proceed method will throw the same exception as any thrown by the associated target method unless an interceptor further down the Java call stack has caught it and thrown a different exception.

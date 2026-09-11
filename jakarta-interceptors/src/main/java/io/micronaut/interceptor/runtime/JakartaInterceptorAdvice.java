@@ -99,7 +99,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
             return context.proceed();
         }
         try {
-            return new BusinessMethodInvocationContext(context, chain, instances).proceed();
+            return new BusinessMethodInvocationContext(context, chain, instances, this).proceed();
         } catch (Exception e) {
             throw sneakyThrow(e);
         }
@@ -118,7 +118,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
             context.proceed();
             return context.getTarget();
         }
-        LifecycleInvocationContext invocation = new LifecycleInvocationContext(context, chain, instances);
+        LifecycleInvocationContext invocation = new LifecycleInvocationContext(context, chain, instances, this);
         try {
             invocation.proceed();
         } catch (Exception e) {
@@ -140,7 +140,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
             return context.proceed();
         }
         ConstructorInvocationContextAdapter invocation =
-            new ConstructorInvocationContextAdapter(context, chain, instances);
+            new ConstructorInvocationContextAdapter(context, chain, instances, this);
         try {
             invocation.proceed();
         } catch (Exception e) {

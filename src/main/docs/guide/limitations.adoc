@@ -59,8 +59,19 @@ binding is read as the annotation it is and no more.
 The interception the specification describes is synchronous. A method that returns a `CompletableFuture`, or any
 other value that completes later, is intercepted as it hands that value back, not as it completes: an interceptor
 that measures time around `proceed()` measures the call, not the work. This is what an interceptor of an ordinary
-Micronaut advice sees as well. Kotlin suspending functions are the exception, and are intercepted for the whole of
-their suspension.
+Micronaut advice sees as well.
+
+A Kotlin suspending function is intercepted the same way. The compiler makes it a method that returns the first time
+the function suspends, returning the marker `COROUTINE_SUSPENDED` rather than a result, and completes it later by
+resuming the continuation it adds after the declared arguments. `proceed()` returns that marker to the interceptor.
+The code after `proceed()`, a `finally` included, therefore runs before the work that follows the suspension, and an
+exception thrown once the function has resumed is thrown after the interceptor has returned, where its `catch` does
+not see it. What an interceptor can rely on is everything up to the first suspension: it sees the arguments the
+function declares and may replace them, the code before `proceed()` runs before the body, and the caller receives
+the value the function completes with, or the exception it fails with, as long as the interceptor returns what
+`proceed()` returned. Work after completion, measuring the time the function takes, and catching an exception thrown
+after it resumes are out of its reach. A suspending function that completes without suspending returns its value
+from the call, and is intercepted through to its completion as any other method is.
 
 === Interceptors registered after the first interception
 
@@ -120,5 +131,6 @@ Java, Groovy and Kotlin are supported, and each has a test suite of its own in t
 reads and writes annotation metadata and generates nothing, which is what lets one implementation serve the
 three.
 
-A Kotlin suspending function is intercepted for the whole of its suspension, and the continuation the compiler adds
-after the arguments it declares is not shown to the interceptor.
+A Kotlin suspending function is intercepted up to the point it first suspends rather than until it completes, as
+described under methods that return a future above, and the continuation the compiler adds after the arguments it
+declares is not shown to the interceptor.

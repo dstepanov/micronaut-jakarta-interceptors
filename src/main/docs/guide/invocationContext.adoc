@@ -44,3 +44,7 @@ intercepted method is what the caller sees, and it declares them.
 `getParameters()` shows the arguments the intercepted element declares, and nothing else. A Kotlin suspending
 function is compiled with a continuation of its own after them; that argument belongs to the language and is
 neither shown nor asked for.
+
+`proceed()` returns what the intercepted method returns from its call. For a suspending function that has
+suspended, that is the marker `COROUTINE_SUSPENDED`, and the function completes after the interceptor has returned.
+See <<limitations,Limitations>>.

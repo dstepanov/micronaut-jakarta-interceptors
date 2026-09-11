@@ -46,7 +46,13 @@ public @interface Cached {
 and still bind to each other.
 
 The value a member defaults to is filled in before the comparison, so `@Cached` and `@Cached(region = "default")`
-are the same binding.
+are the same binding. A default of an empty string or an empty array is no exception: `@Region("")` and `@Region`
+are the same binding when `value` defaults to `""`.
+
+A binding annotation declared in Groovy is the one exception. Micronaut records the default of one of its members
+only when the default is a single constant - a string, a number, a boolean or a character - so a member defaulting
+to an array, an enum constant or a class is a different binding spelt out than left out. Spell such a member out on
+both sides, or leave it out on both, or declare the annotation in Java or Kotlin.
 
 A method declaring a binding annotation its class declares as well replaces the class's declaration as a whole.
 On a class declaring `@Cached(region = "users")`, a method declaring `@Cached` is bound to the region `default`,

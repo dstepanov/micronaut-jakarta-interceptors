@@ -24,6 +24,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -152,16 +153,50 @@ public final class InterceptorBindingValues {
         // the keys are read as strings so that two bindings compare by the names of their members, which a
         // CharSequence does not promise to do
         Map<String, Object> values = new LinkedHashMap<>();
+        Set<String> defaulted = new HashSet<>();
         Map<CharSequence, Object> defaults = annotation.getDefaultValues();
         if (defaults != null) {
-            defaults.forEach((member, value) -> values.put(member.toString(), normalize(value)));
+            defaults.forEach((member, value) -> {
+                values.put(member.toString(), normalize(value));
+                defaulted.add(member.toString());
+            });
         }
         annotation.getValues().forEach((member, value) -> values.put(member.toString(), normalize(value)));
+        // an empty string no default was recorded for is left out, which is what makes a default of "" compare
+        // equal whether it is declared or not; see isEmptyString
+        values.entrySet().removeIf(entry -> !defaulted.contains(entry.getKey()) && isEmptyString(entry.getValue()));
         for (String nonBinding : annotation.stringValues(AnnotationUtil.NON_BINDING_ATTRIBUTE)) {
             values.remove(nonBinding);
         }
         values.remove(AnnotationUtil.NON_BINDING_ATTRIBUTE);
         return new Binding(annotation.getAnnotationName(), values);
+    }
+
+    /**
+     * Tells whether a member value is the empty string, which is the one default that Micronaut leaves out of
+     * the defaults it records for an annotation compiled from Java or Kotlin.
+     *
+     * <p>A default is filled in before two bindings are compared, and that only works for a default Micronaut
+     * recorded. Leaving out a member that defaults to {@code ""} means {@code @Region("")} carries a
+     * {@code value} that {@code @Region} does not, and the two would never bind to each other, although they are
+     * the same binding.</p>
+     *
+     * <p>The member values are what is left to go by, and an empty string declared for a member with no recorded
+     * default is left out of the comparison. That is exactly right for each member it can happen to: one whose
+     * default is {@code ""} reads the same whether the value is declared or not, and one without any default is
+     * declared by every declaration of the binding, so leaving the empty value out on both sides of the comparison
+     * changes nothing about whether they are equal. A member whose default Micronaut did record keeps an empty
+     * string, which differs from that default.</p>
+     *
+     * <p>Reading the defaults off the annotation type instead does not work for every language: what the visitor
+     * context offers for it answers all of them for Java, none for Kotlin, and for Groovy only the ones that are
+     * a single constant.</p>
+     *
+     * @param value The normalized value of a member
+     * @return Whether the value is an empty string
+     */
+    private static boolean isEmptyString(@Nullable Object value) {
+        return value instanceof String string && string.isEmpty();
     }
 
     /**

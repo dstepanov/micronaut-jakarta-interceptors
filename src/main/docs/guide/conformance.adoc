@@ -774,7 +774,8 @@ class level binding, are
 | c)
 | The set of interceptor bindings for a method or constructor are those declared at class level combined with those declared at method or constructor level.
 | Covered
-| CdiBindingRulesTest
+| CdiBindingRulesTest; SharedSuperclassBusinessMethodTest, where two classes bound differently inherit one method,
+and FactoryMethodsOfOneClassTest, where two factory methods bind one class differently
 
 | da)
 | Test a constructor.

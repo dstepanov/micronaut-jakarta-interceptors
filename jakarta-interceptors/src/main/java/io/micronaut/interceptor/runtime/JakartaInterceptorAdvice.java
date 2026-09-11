@@ -94,7 +94,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         if (kind == InterceptorKind.POST_CONSTRUCT || kind == InterceptorKind.PRE_DESTROY) {
             return interceptLifecycle(context, kind);
         }
-        List<InterceptorReference> chain = resolver.resolve(keyOf(context, kind), context.getAnnotationMetadata());
+        List<InterceptorReference> chain = resolver.resolve(kind, context.getAnnotationMetadata());
         if (chain.isEmpty()) {
             return context.proceed();
         }
@@ -113,7 +113,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      * not proceed keeps all of them from running.</p>
      */
     private @Nullable Object interceptLifecycle(MethodInvocationContext<Object, Object> context, InterceptorKind kind) {
-        List<InterceptorReference> chain = resolver.resolve(keyOf(context, kind), context.getAnnotationMetadata());
+        List<InterceptorReference> chain = resolver.resolve(kind, context.getAnnotationMetadata());
         if (chain.isEmpty()) {
             context.proceed();
             return context.getTarget();
@@ -132,11 +132,10 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
     @Override
     public Object intercept(ConstructorInvocationContext<Object> context) {
         BeanConstructor<Object> constructor = context.getConstructor();
-        InterceptorChainResolver.ChainKey key = new InterceptorChainResolver.ChainKey(
-            constructor.getDeclaringBeanType(), InterceptorKind.AROUND_CONSTRUCT);
         // the annotation metadata of a constructor invocation is carried by the constructor rather than by the
         // context, which has none of its own
-        List<InterceptorReference> chain = resolver.resolve(key, constructor.getAnnotationMetadata());
+        List<InterceptorReference> chain =
+            resolver.resolve(InterceptorKind.AROUND_CONSTRUCT, constructor.getAnnotationMetadata());
         if (chain.isEmpty()) {
             return context.proceed();
         }
@@ -170,50 +169,29 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      * @param definition The definition of the object
      */
     void createInterceptorInstances(BeanDefinition<?> definition) {
-        Class<?> targetType = definition.getBeanType();
         AnnotationMetadata classMetadata = definition.getAnnotationMetadata();
         // only what this module intercepts is asked for: an element it does not intercept has no chain, and
         // resolving one would put an empty chain in the resolver's map for nothing
         if (classMetadata.hasAnnotation(JakartaInterception.class)) {
-            createInstancesOf(new InterceptorChainResolver.ChainKey(targetType, InterceptorKind.POST_CONSTRUCT), classMetadata);
-            createInstancesOf(new InterceptorChainResolver.ChainKey(targetType, InterceptorKind.PRE_DESTROY), classMetadata);
+            createInstancesOf(InterceptorKind.POST_CONSTRUCT, classMetadata);
+            createInstancesOf(InterceptorKind.PRE_DESTROY, classMetadata);
         }
         for (ExecutableMethod<?, ?> method : definition.getExecutableMethods()) {
             AnnotationMetadata methodMetadata = method.getAnnotationMetadata();
             if (methodMetadata.hasAnnotation(JakartaInterception.class)) {
-                createInstancesOf(new InterceptorChainResolver.ChainKey(method, InterceptorKind.AROUND), methodMetadata);
+                createInstancesOf(InterceptorKind.AROUND, methodMetadata);
             }
         }
     }
 
-    private void createInstancesOf(InterceptorChainResolver.ChainKey key, AnnotationMetadata metadata) {
-        for (InterceptorReference reference : resolver.resolve(key, metadata)) {
+    private void createInstancesOf(InterceptorKind kind, AnnotationMetadata metadata) {
+        for (InterceptorReference reference : resolver.resolve(kind, metadata)) {
             // an interceptor method the intercepted class declares itself runs on the object, and has no
             // instance of its own to create
             if (!reference.self()) {
                 instances.get(reference);
             }
         }
-    }
-
-    private static InterceptorChainResolver.ChainKey keyOf(MethodInvocationContext<Object, Object> context,
-                                                           InterceptorKind kind) {
-        return switch (kind) {
-            // a lifecycle chain belongs to the bean, which has one of each kind. It is not identified by the
-            // callback the chain is run for: two beans bound to different interceptors may inherit the callback
-            // the chain starts at from the same superclass
-            case POST_CONSTRUCT, PRE_DESTROY -> new InterceptorChainResolver.ChainKey(targetTypeOf(context), kind);
-            default -> new InterceptorChainResolver.ChainKey(context.getExecutableMethod(), kind);
-        };
-    }
-
-    /**
-     * The class of the object being intercepted, which for a bean Micronaut also generated a proxy of is that
-     * proxy. Either way it is one class for one bean, which is what a lifecycle chain is resolved for.
-     */
-    private static Class<?> targetTypeOf(MethodInvocationContext<Object, Object> context) {
-        Object target = context.getTarget();
-        return target == null ? context.getExecutableMethod().getDeclaringType() : target.getClass();
     }
 
     /**

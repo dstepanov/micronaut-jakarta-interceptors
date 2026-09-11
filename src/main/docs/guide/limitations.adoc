@@ -82,6 +82,16 @@ two being ambiguous.
 classes its superclass names. Declare it on the class that is the bean, or use a binding annotation that is
 `@Inherited`, which is inherited as the specification describes.
 
+=== Interceptor state on a lazy or swappable proxy target
+
+A bean proxied with a separate target is two objects to Micronaut, and one instance of each interceptor class
+serves both; see <<lifecycle,Lifecycle and Constructor Interception>>. A proxy that resolves its target only when
+it is first invoked - `@Around(proxyTarget = true, lazy = true)`, and so the scoped proxies - or whose target may be
+swapped - `hotswap = true` - is the exception. Its business methods are intercepted by interceptor instances of its
+own, not by the ones that intercepted the construction and lifecycle of its target, so a field an interceptor sets
+in a `@PostConstruct` or `@AroundConstruct` method is not seen by its `@AroundInvoke` method there. Both sets of
+instances are still destroyed.
+
 == What Micronaut requires
 
 An element is intercepted through the proxy Micronaut generates for its bean, so the ordinary rules of Micronaut

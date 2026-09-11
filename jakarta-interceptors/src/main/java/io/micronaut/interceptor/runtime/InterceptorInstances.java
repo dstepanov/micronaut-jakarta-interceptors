@@ -21,6 +21,7 @@ import io.micronaut.context.BeanResolutionContext;
 import io.micronaut.context.DefaultBeanContext;
 import io.micronaut.context.DefaultBeanResolutionContext;
 import io.micronaut.core.annotation.Internal;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -40,11 +41,22 @@ import java.util.Map;
  * tells it which instances those are: each is created the way Micronaut creates a dependency of a bean, and the
  * registrations Micronaut then reports as dependents are kept, to be destroyed with the object.</p>
  *
+ * <p>A bean proxied with a separate target is one object to the specification and two to Micronaut: the proxy, whose
+ * advice interposes on the business methods, and the target, whose own advice interposes on its construction and
+ * lifecycle. The proxy then {@linkplain #share shares} the instances of the target, so that one interceptor instance
+ * serves both, and they stay the target's, destroyed by the pre-destroy event of the target.</p>
+ *
  * @author Denis Stepanov
  * @since 1.0
  */
 @Internal
 final class InterceptorInstances {
+
+    /**
+     * The object whose post-construct event this thread intercepted last, until a proxy of it takes its instances or
+     * it turns out to have no proxy.
+     */
+    private static final ThreadLocal<@Nullable PostConstructed> POST_CONSTRUCTED = new ThreadLocal<>();
 
     private final BeanContext beanContext;
     private final Map<Class<?>, Object> instances = new HashMap<>(4);
@@ -59,6 +71,11 @@ final class InterceptorInstances {
      * the destruction of the advice, what ends these instances.
      */
     private volatile boolean lifecycleIntercepted;
+    /**
+     * The instances of the target this proxy was created for, which are the ones to intercept with, or {@code null}
+     * where these are the instances of the object itself.
+     */
+    private volatile @Nullable InterceptorInstances shared;
 
     InterceptorInstances(BeanContext beanContext) {
         this.beanContext = beanContext;
@@ -70,14 +87,38 @@ final class InterceptorInstances {
      * @param reference The interceptor
      * @return The instance
      */
-    synchronized Object get(InterceptorReference reference) {
-        Class<?> interceptorClass = reference.interceptorClass();
-        Object instance = instances.get(interceptorClass);
-        if (instance == null) {
-            instance = create(interceptorClass);
-            instances.put(interceptorClass, instance);
+    Object get(InterceptorReference reference) {
+        InterceptorInstances target = shared;
+        if (target != null) {
+            return target.get(reference);
         }
-        return instance;
+        synchronized (this) {
+            Class<?> interceptorClass = reference.interceptorClass();
+            Object instance = instances.get(interceptorClass);
+            if (instance == null) {
+                instance = create(interceptorClass);
+                instances.put(interceptorClass, instance);
+            }
+            return instance;
+        }
+    }
+
+    /**
+     * Makes these the instances of a proxy whose target has the given instances, so that every interception of the
+     * proxy uses the instances of the target.
+     *
+     * <p>Called as the proxy is created, before it has intercepted anything. The instances of the target stay the
+     * target's: the advice of the proxy destroys none of them as it is destroyed, and the pre-destroy event of the
+     * target does.</p>
+     *
+     * @param target The instances of the target
+     */
+    @SuppressWarnings("ReferenceEquality")
+    void share(InterceptorInstances target) {
+        // the instances of a proxy are never those of its own target; this only keeps a lookup from going round
+        if (target != this) {
+            shared = target;
+        }
     }
 
     /**
@@ -120,18 +161,29 @@ final class InterceptorInstances {
     }
 
     /**
-     * Records that the post-construct event of the object is being intercepted with these instances.
+     * Records that the post-construct event of an object has been intercepted with these instances.
+     *
+     * <p>The object is also handed to the proxy Micronaut may be creating around it, as its target: see
+     * {@link #takePostConstructed}.</p>
+     *
+     * @param target The object
      */
-    void postConstructed() {
+    void postConstructed(Object target) {
         lifecycleIntercepted = true;
+        POST_CONSTRUCTED.set(new PostConstructed(target, this));
     }
 
     /**
-     * Destroys these instances once the pre-destroy event of the object has been intercepted, which is where section
-     * 2.3 destroys them: after the pre-destroy interceptor methods, and with the object.
+     * Destroys the instances in use once the pre-destroy event of the object has been intercepted, which is where
+     * section 2.3 destroys them: after the pre-destroy interceptor methods, and with the object.
+     *
+     * <p>The instances in use are those of the target, for a proxy that shares them. Micronaut destroys a proxy and
+     * its target together, and where it has lost track of the advice of the target it intercepts the pre-destroy
+     * event of the target with the advice of the proxy.</p>
      */
     void preDestroyed() {
-        destroy();
+        InterceptorInstances target = shared;
+        (target == null ? this : target).destroy();
     }
 
     /**
@@ -145,7 +197,8 @@ final class InterceptorInstances {
      * created. The object is alive, and its pre-destroy event is intercepted with this same advice later, so for an
      * object whose post-construct event was intercepted it is that event that destroys the instances. An object
      * whose lifecycle is not intercepted - one bound only on its methods - has no such event, and its instances go
-     * with the advice.</p>
+     * with the advice. The advice of a proxy that shares the instances of its target has none of its own to
+     * destroy.</p>
      */
     void adviceDestroyed() {
         if (!lifecycleIntercepted) {
@@ -174,6 +227,65 @@ final class InterceptorInstances {
         // outside of the lock: what an interceptor does as it is destroyed is its own code
         for (int i = destroyed.size() - 1; i >= 0; i--) {
             beanContext.destroyBean(destroyed.get(i));
+        }
+    }
+
+    /**
+     * Returns the instances the post-construct event of the given object was intercepted with, when it is the last
+     * such event this thread intercepted, and forgets them.
+     *
+     * <p>A proxy with a separate target resolves its target as the proxy is constructed, so on the thread creating
+     * the proxy the post-construct event of the target is intercepted just before the proxy is complete. Reading it
+     * back once the proxy is complete is how the proxy finds the instances of its target. Nothing else links the
+     * two: the advice of the target is a dependent of the target, and Micronaut does not expose the dependents of a
+     * bean to a proxy being created around it; for a bean a factory produced it does not even keep that advice as
+     * one, taking it for the factory instead. Holding one object per thread, and only until the next bean is
+     * created, links them without a map that would outlive them.</p>
+     *
+     * @param target The target of the proxy being created
+     * @return The instances of that target, or {@code null} when its post-construct event was not the last one this
+     * thread intercepted
+     */
+    static @Nullable InterceptorInstances takePostConstructed(Object target) {
+        PostConstructed last = POST_CONSTRUCTED.get();
+        if (last == null || !last.is(target)) {
+            return null;
+        }
+        POST_CONSTRUCTED.remove();
+        return last.instances();
+    }
+
+    /**
+     * Forgets the object whose post-construct event this thread intercepted last, unless it is the given target of a
+     * proxy that is still to be completed.
+     *
+     * <p>Called as each bean is created. The target of a proxy is created as the proxy is constructed, and the proxy
+     * is complete right after it, so any other bean completed in between means the proxy will not come for the
+     * instances; nothing is held for longer than that.</p>
+     *
+     * @param proxyTarget The bean just created, when it is the target of a proxy, otherwise {@code null}
+     */
+    static void forgetPostConstructedExcept(@Nullable Object proxyTarget) {
+        PostConstructed last = POST_CONSTRUCTED.get();
+        if (last != null && (proxyTarget == null || !last.is(proxyTarget))) {
+            POST_CONSTRUCTED.remove();
+        }
+    }
+
+    /**
+     * An object whose post-construct event was intercepted, and the instances it was intercepted with.
+     *
+     * @param target    The object
+     * @param instances The instances
+     */
+    private record PostConstructed(Object target, InterceptorInstances instances) {
+
+        /**
+         * Whether this is the given object itself, rather than one equal to it.
+         */
+        @SuppressWarnings("ReferenceEquality")
+        boolean is(Object bean) {
+            return target == bean;
         }
     }
 }

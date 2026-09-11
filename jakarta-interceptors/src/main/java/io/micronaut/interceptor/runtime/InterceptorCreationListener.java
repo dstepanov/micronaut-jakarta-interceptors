@@ -15,13 +15,19 @@
  */
 package io.micronaut.interceptor.runtime;
 
+import io.micronaut.aop.HotSwappableInterceptedProxy;
 import io.micronaut.aop.Intercepted;
+import io.micronaut.aop.InterceptedProxy;
 import io.micronaut.aop.Interceptor;
 import io.micronaut.context.BeanRegistration;
 import io.micronaut.context.event.BeanCreatedEvent;
 import io.micronaut.context.event.BeanCreatedEventListener;
 import io.micronaut.core.annotation.Internal;
+import io.micronaut.inject.BeanDefinition;
+import io.micronaut.inject.BeanDefinitionReference;
+import io.micronaut.inject.DelegatingBeanDefinition;
 import jakarta.inject.Singleton;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Creates the interceptor instances of an object as the object is created.
@@ -34,6 +40,11 @@ import jakarta.inject.Singleton;
  * <p>The instances belong to the advice Micronaut bound to the object, which the generated proxy carries and hands
  * over here. Creating them through that advice is what makes them the same instances the interceptions of the
  * object go on to use, rather than a second set nobody reads.</p>
+ *
+ * <p>A proxy with a separate target - {@code @Around(proxyTarget = true)}, or any bean a factory produces - carries
+ * advice of its own, and the target was created, and had its construction and lifecycle intercepted, with another.
+ * The advice of the proxy is made to use the interceptor instances of the target before it creates any, so that one
+ * instance of an interceptor class serves the whole of the one object the specification sees.</p>
  *
  * @author Denis Stepanov
  * @since 1.0
@@ -48,12 +59,49 @@ final class InterceptorCreationListener implements BeanCreatedEventListener<Obje
         // only a bean Micronaut generated a proxy of carries advice, and only that advice holds interceptor
         // instances; anything else is not intercepted at all
         if (bean instanceof Intercepted intercepted) {
+            InterceptorInstances targetInstances = instancesOfTarget(bean);
             for (BeanRegistration<Interceptor<?, ?>> registration : intercepted.$interceptorRegistrations()) {
                 if (registration.getBean() instanceof JakartaInterceptorAdvice advice) {
+                    if (targetInstances != null) {
+                        advice.shareInterceptorInstances(targetInstances);
+                    }
                     advice.createInterceptorInstances(event.getBeanDefinition());
                 }
             }
         }
+        // what was not taken by now is nobody's to take, except the instances of a target whose proxy comes next
+        InterceptorInstances.forgetPostConstructedExcept(isProxyTarget(event.getBeanDefinition()) ? bean : null);
         return bean;
+    }
+
+    /**
+     * Finds the interceptor instances the construction and lifecycle of the target of a proxy were intercepted with.
+     *
+     * <p>Only a proxy that already holds its target is looked at: that target was resolved as the proxy was
+     * constructed, on this thread, just now. A proxy that resolves its target lazily has none yet, and asking for it
+     * here would create it early; one whose target may be swapped would go on sharing the instances of a target it
+     * no longer has.</p>
+     *
+     * @param proxy The proxy being created
+     * @return The instances, or {@code null} when the proxy has no target yet or its target has none
+     */
+    private static @Nullable InterceptorInstances instancesOfTarget(Object proxy) {
+        if (proxy instanceof InterceptedProxy<?> interceptedProxy
+            && !(proxy instanceof HotSwappableInterceptedProxy<?>)
+            && interceptedProxy.hasCachedInterceptedTarget()) {
+            return InterceptorInstances.takePostConstructed(interceptedProxy.interceptedTarget());
+        }
+        return null;
+    }
+
+    /**
+     * Whether a bean is created to be the target of a proxy, which is then created around it.
+     */
+    private static boolean isProxyTarget(BeanDefinition<?> definition) {
+        BeanDefinition<?> target = definition;
+        while (target instanceof DelegatingBeanDefinition<?> delegating) {
+            target = delegating.getTarget();
+        }
+        return target instanceof BeanDefinitionReference<?> reference && reference.isProxyTarget();
     }
 }

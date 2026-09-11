@@ -173,7 +173,8 @@ class level binding, are
 | a)
 | The lifecycle of an interceptor instance is the same as that of the target class instance with which it is associated.
 | Covered
-| InterceptorStateTest
+| InterceptorStateTest; TargetProxyStateTest for a bean proxied with a separate target, whose proxy and target
+share one instance of each interceptor class from the post-construct event to the pre-destroy event
 
 | ba)
 | Except as noted below, when the target instance is created, a corresponding interceptor instance is created for each associated interceptor class.
@@ -641,7 +642,8 @@ InjectionInsideAroundConstructTest pins the order
 | e)
 | The applicability of a method-level interceptor to more than one method of an associated target class does not affect the relationship between the interceptor instance and the target class - only a single instance of the interceptor class is created per target class instance.
 | Covered
-| StructuralConformanceTest
+| StructuralConformanceTest; TargetProxyStateTest for a bean proxied with a separate target, including one a
+factory produced
 |===
 
 === Section 2.10 - Default Interceptors

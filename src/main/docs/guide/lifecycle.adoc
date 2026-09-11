@@ -68,6 +68,12 @@ interceptor's own `@PreDestroy` callback, the one that takes no `InvocationConte
 that is removed, after the pre-destroy interception of that object - and whatever was injected into the
 interceptor for it alone is destroyed as well.
 
+A bean proxied with a separate target, declared `@Around(proxyTarget = true)` or produced by a `@Factory` method,
+is two objects to Micronaut - the proxy its business methods are invoked on, and the target whose construction and
+lifecycle are intercepted - and one object to the specification. It has one instance of each interceptor class,
+so what an interceptor keeps in a `@PostConstruct` method is there in its `@AroundInvoke` method, unless the proxy
+resolves its target lazily; see <<limitations,Limitations>>.
+
 An interceptor declared `@Singleton` is shared by every object it intercepts and belongs to none of them, so it
 is destroyed with the context, as any other singleton is. The interceptor instances of a prototype that is never
 destroyed are never destroyed either, as nothing else Micronaut created for that prototype is.

@@ -89,6 +89,16 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         instances.adviceDestroyed();
     }
 
+    /**
+     * Has this advice, bound to a proxy, intercept with the interceptor instances of the target of that proxy.
+     * Called by {@link InterceptorCreationListener} as the proxy is created.
+     *
+     * @param targetInstances The interceptor instances of the target
+     */
+    void shareInterceptorInstances(InterceptorInstances targetInstances) {
+        instances.share(targetInstances);
+    }
+
     // implementing both MethodInterceptor and ConstructorInterceptor inherits two declarations of this method,
     // of which the constructor one returns a non-null instance; an intercepted method may return null
     @SuppressWarnings("NullAway")
@@ -107,8 +117,9 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
     public @Nullable Object intercept(MethodInvocationContext<Object, Object> context) {
         InterceptorKind kind = context.getKind();
         if (kind == InterceptorKind.POST_CONSTRUCT) {
-            instances.postConstructed();
-            return interceptLifecycle(context, kind);
+            Object bean = interceptLifecycle(context, kind);
+            instances.postConstructed(context.getTarget());
+            return bean;
         }
         if (kind == InterceptorKind.PRE_DESTROY) {
             try {

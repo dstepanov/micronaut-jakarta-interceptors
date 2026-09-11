@@ -64,11 +64,10 @@ class InterceptorDestructionTest {
 
             assertEquals(List.of("post-construct on interceptor 1"), Destructions.RECORDED);
         }
-        // the proxy of the bean has an instance of its own, which is not what this is about
         assertEquals(List.of(
             "post-construct on interceptor 1",
             "pre-destroy on interceptor 1",
-            "interceptor 1 destroyed"), Destructions.RECORDED.stream().filter(e -> e.contains("interceptor 1")).toList());
+            "interceptor 1 destroyed"), Destructions.RECORDED);
     }
 
     /**

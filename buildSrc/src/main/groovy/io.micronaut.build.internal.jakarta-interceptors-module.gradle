@@ -2,6 +2,7 @@ plugins {
     id 'io.micronaut.build.internal.jakarta-interceptors-base'
     id 'io.micronaut.build.internal.module'
     id 'io.micronaut.build.internal.convention-nullaway'
+    id 'io.micronaut.errorprone.no-reflection'
 }
 
 micronautBuild {
@@ -9,6 +10,19 @@ micronautBuild {
     binaryCompatibility {
         enabled = false
     }
+}
+
+// The interception never reflects, and the NoReflection check of micronaut-projects/errorprone-no-reflection holds
+// what this module publishes to that. It is a check rather than a Checkstyle rule because the rule is about types
+// rather than spelling: getAnnotation names both java.lang.Class.getAnnotation, which asks the platform, and
+// AnnotationMetadata.getAnnotation, which reads what Micronaut compiled. A regular expression sees one name; the
+// check sees the receiver.
+//
+// Only the main sources are checked. The tests are free to reflect: a test that proves an interception reached a
+// member without reflecting has to reach it somehow.
+noReflection {
+    // the ErrorProne the check runs in is the one NullAway runs in
+    errorProneVersion = libs.versions.error.prone.core
 }
 
 dependencies {

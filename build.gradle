@@ -2,31 +2,3 @@ plugins {
     id "io.micronaut.build.internal.jakarta-interceptors-base"
     id "io.micronaut.build.internal.parent"
 }
-
-// The interception never reflects, and an ErrorProne check of its own holds it to that. It lives in
-// reflection-errorprone, which is a build tool rather than a module of the library.
-//
-// It is a check rather than a Checkstyle rule because the rule is about types rather than spelling: getAnnotation
-// names both java.lang.Class.getAnnotation, which asks the platform, and AnnotationMetadata.getAnnotation, which
-// reads what Micronaut compiled and is what the resolver and the processor are built on. A regular expression sees
-// one name; the check sees the receiver.
-//
-// Applied to what this module publishes. The test suites are free to reflect: a test that proves an interception
-// reached a member without reflecting has to reach it somehow.
-configure([project(':micronaut-jakarta-interceptors'), project(':micronaut-jakarta-interceptors-processor')]) {
-    plugins.withId('net.ltgt.errorprone') {
-        dependencies {
-            errorprone project(':micronaut-reflection-errorprone')
-        }
-        tasks.withType(JavaCompile).configureEach {
-            options.errorprone {
-                check("NoReflection", net.ltgt.gradle.errorprone.CheckSeverity.ERROR)
-            }
-            if (name.toLowerCase().contains("test")) {
-                options.errorprone {
-                    disable("NoReflection")
-                }
-            }
-        }
-    }
-}

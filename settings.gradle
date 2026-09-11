@@ -14,13 +14,6 @@ enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 dependencyResolutionManagement {
     repositories {
         mavenCentral()
-        // the 5.2 snapshot of Micronaut Core, whose version catalog is imported below; remove once 5.2 is released
-        maven {
-            url = 'https://central.sonatype.com/repository/maven-snapshots/'
-            mavenContent {
-                snapshotsOnly()
-            }
-        }
     }
 }
 
@@ -29,7 +22,6 @@ rootProject.name = 'jakarta-interceptors-parent'
 include 'jakarta-interceptors'
 include 'jakarta-interceptors-bom'
 include 'jakarta-interceptors-processor'
-include 'reflection-errorprone'
 include 'test-suite-groovy'
 include 'cdi-tck-interceptors'
 include 'cdi-tck-support'

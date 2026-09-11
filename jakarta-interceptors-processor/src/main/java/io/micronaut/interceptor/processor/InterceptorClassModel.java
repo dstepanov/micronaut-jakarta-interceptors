@@ -20,7 +20,8 @@ import io.micronaut.inject.ast.ClassElement;
 import io.micronaut.inject.ast.MethodElement;
 import io.micronaut.interceptor.annotation.InterceptionKind;
 
-import java.util.EnumMap;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -29,7 +30,7 @@ import java.util.Map;
  *
  * <p>There may be more than one of a kind: a class declares at most one, but the classes it inherits from declare
  * their own, and the specification invokes all of them, the most general superclass first. The methods of each
- * kind are held in that order.</p>
+ * kind are held in that order, and the kinds in the order {@link InterceptionKind} declares them.</p>
  *
  * @param interceptorClass The class
  * @param methods          The interceptor methods of each kind, most general superclass first
@@ -41,7 +42,15 @@ public record InterceptorClassModel(ClassElement interceptorClass,
                                     Map<InterceptionKind, List<MethodElement>> methods) {
 
     public InterceptorClassModel {
-        methods = methods.isEmpty() ? Map.of() : new EnumMap<>(methods);
+        // an EnumMap would keep the kinds in order too, but it takes the constants of the enum reflectively
+        Map<InterceptionKind, List<MethodElement>> ordered = new LinkedHashMap<>();
+        for (InterceptionKind kind : InterceptionKind.values()) {
+            List<MethodElement> methodsOfAKind = methods.get(kind);
+            if (methodsOfAKind != null) {
+                ordered.put(kind, methodsOfAKind);
+            }
+        }
+        methods = ordered.isEmpty() ? Map.of() : Collections.unmodifiableMap(ordered);
     }
 
     /**

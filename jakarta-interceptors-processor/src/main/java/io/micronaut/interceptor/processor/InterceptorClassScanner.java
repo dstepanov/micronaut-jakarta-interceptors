@@ -29,7 +29,7 @@ import io.micronaut.interceptor.annotation.InterceptionKind;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -67,11 +67,11 @@ public final class InterceptorClassScanner {
      * no interceptor method
      */
     public static InterceptorClassModel scan(ClassElement element) {
-        Map<InterceptionKind, List<MethodElement>> methods = new EnumMap<>(InterceptionKind.class);
+        Map<InterceptionKind, List<MethodElement>> methods = new HashMap<>();
         // a class declares at most one interceptor method of a kind, but its superclasses declare their own, and
         // the specification invokes all of them with the most general superclass first
         List<String> hierarchy = hierarchyOf(element);
-        Map<InterceptionKind, Map<String, MethodElement>> byDeclaringClass = new EnumMap<>(InterceptionKind.class);
+        Map<InterceptionKind, Map<String, MethodElement>> byDeclaringClass = new HashMap<>();
         for (MethodElement method : element.getEnclosedElements(ElementQuery.ALL_METHODS)) {
             for (Map.Entry<String, InterceptionKind> entry : INTERCEPTOR_METHODS.entrySet()) {
                 if (!method.hasDeclaredAnnotation(entry.getKey()) || !acceptsInvocationContext(method)) {

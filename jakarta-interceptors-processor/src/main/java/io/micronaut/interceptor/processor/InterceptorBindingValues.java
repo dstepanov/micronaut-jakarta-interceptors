@@ -209,13 +209,6 @@ public final class InterceptorBindingValues {
     public record Binding(String name, Map<String, Object> values) {
 
         /**
-         * The characters {@link #canonical()} punctuates a binding with, which are written with a backslash
-         * before them wherever they occur in a value. The backslash itself is escaped too, so that a value
-         * ending in one cannot escape the punctuation that follows it.
-         */
-        private static final String PUNCTUATION = "\\,=()[]";
-
-        /**
          * Writes the binding out as one string, so that two of them can be compared without reading either
          * annotation again.
          *
@@ -223,15 +216,31 @@ public final class InterceptorBindingValues {
          * that an interceptor and the element it intercepts produce the same string for the same binding however
          * either of them wrote it.</p>
          *
-         * <p>The characters the string is punctuated with are escaped wherever they occur in a value, so that no
-         * two bindings that differ can be written the same way. Without that, a member whose value contains a
-         * comma or an equals sign would read as two members, and {@code @Sized(a = "1,b=2")} would be
-         * indistinguishable from {@code @Sized(a = "1", b = "2")}.</p>
+         * <p>No two bindings that differ are written the same way. Every value that is not an array or an
+         * annotation is written between double quotes, with a backslash before a double quote or a backslash it
+         * holds, so a value is read back as exactly the characters between its quotes whatever punctuation it
+         * carries. Without the quotes, a value holding a comma or an equals sign would read as two members -
+         * {@code @Sized(a = "1,b=2")} as {@code @Sized(a = "1", b = "2")} - and an empty string would be written as
+         * nothing at all, which made {@code @Tags({""})}, an array of one empty string, read as {@code @Tags({})},
+         * an empty one. Names are written as they are: the name of an annotation or of a member is made of
+         * identifiers, which hold no quote, comma, parenthesis or bracket, so whether a value is a string, an
+         * array, an annotation or {@code null} is told by the character it starts with.</p>
+         *
+         * <p>A class and its name, and an enum constant and its name, are written alike, as are a character and
+         * the string of that one character. A member has one type, so none of those pairs can tell two bindings
+         * of the same member apart, and Micronaut records a class or an enum constant by its name in some places
+         * and as itself in others.</p>
          *
          * @return The binding as a string
          */
         public String canonical() {
-            StringBuilder builder = new StringBuilder(name).append('(');
+            StringBuilder builder = new StringBuilder();
+            write(builder);
+            return builder.toString();
+        }
+
+        private void write(StringBuilder builder) {
+            builder.append(name).append('(');
             boolean first = true;
             for (Map.Entry<String, Object> entry : new TreeMap<>(values).entrySet()) {
                 if (!first) {
@@ -241,16 +250,16 @@ public final class InterceptorBindingValues {
                 builder.append(entry.getKey()).append('=');
                 render(builder, entry.getValue());
             }
-            return builder.append(')').toString();
+            builder.append(')');
         }
 
         private static void render(StringBuilder builder, @Nullable Object value) {
             switch (value) {
                 case null -> builder.append("null");
-                case AnnotationClassValue<?> classValue -> builder.append(classValue.getName());
-                case Class<?> type -> builder.append(type.getName());
-                case AnnotationValue<?> annotation -> builder.append(of(annotation).canonical());
-                case Enum<?> constant -> builder.append(constant.name());
+                case AnnotationClassValue<?> classValue -> quote(builder, classValue.getName());
+                case Class<?> type -> quote(builder, type.getName());
+                case AnnotationValue<?> annotation -> of(annotation).write(builder);
+                case Enum<?> constant -> quote(builder, constant.name());
                 case List<?> list -> {
                     builder.append('[');
                     for (int i = 0; i < list.size(); i++) {
@@ -261,22 +270,20 @@ public final class InterceptorBindingValues {
                     }
                     builder.append(']');
                 }
-                // a member of any other type is written as it reads, which for a string or a character is
-                // whatever the source wrote. That is the one value that can carry the punctuation of the
-                // string it is being written into, so it is the one that is escaped. A name - of an
-                // annotation, of a member, of a class or of an enum constant - cannot
-                default -> escape(builder, value.toString());
+                default -> quote(builder, value.toString());
             }
         }
 
-        private static void escape(StringBuilder builder, String text) {
+        private static void quote(StringBuilder builder, String text) {
+            builder.append('"');
             for (int i = 0; i < text.length(); i++) {
                 char character = text.charAt(i);
-                if (PUNCTUATION.indexOf(character) >= 0) {
+                if (character == '"' || character == '\\') {
                     builder.append('\\');
                 }
                 builder.append(character);
             }
+            builder.append('"');
         }
     }
 }

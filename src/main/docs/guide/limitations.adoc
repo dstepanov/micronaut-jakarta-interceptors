@@ -99,6 +99,16 @@ same class is then as ambiguous with it as with any other bean declared twice, u
 classes its superclass names. Declare it on the class that is the bean, or use a binding annotation that is
 `@Inherited`, which is inherited as the specification describes.
 
+=== Interceptor state on a lazy or swappable proxy target
+
+A bean proxied with a separate target is two objects to Micronaut, and one instance of each interceptor class
+serves both; see <<lifecycle,Lifecycle and Constructor Interception>>. A proxy that resolves its target only when
+it is first invoked - `@Around(proxyTarget = true, lazy = true)`, and so the scoped proxies - or whose target may be
+swapped - `hotswap = true` - is the exception. Its business methods are intercepted by interceptor instances of its
+own, not by the ones that intercepted the construction and lifecycle of its target, so a field an interceptor sets
+in a `@PostConstruct` or `@AroundConstruct` method is not seen by its `@AroundInvoke` method there. Both sets of
+instances are still destroyed.
+
 == What Micronaut requires
 
 An element is intercepted through the proxy Micronaut generates for its bean, so the ordinary rules of Micronaut
@@ -119,6 +129,17 @@ Every one of these, and the whole of the specification besides, is recorded asse
 
 `jakarta.interceptor.AroundTimeout` interposes on the methods of a timer service that does not exist here; a
 method the Micronaut scheduler invokes stands in for one. See <<timeout,Timeout Methods>>.
+
+An object with `@AroundConstruct` interceptors is injected and initialized inside the around-construct chain
+rather than after it. Micronaut constructs, injects and initializes an object in one generated method, and that
+method is what the last around-construct method proceeds to; the specification completes injection only once
+every around-construct method has returned. So when `proceed()` returns to an around-construct method, the fields
+and methods of the object have been injected and its `@PostConstruct` callbacks - with any `@PostConstruct`
+interceptor methods around them - have run. What an around-construct method does after proceeding happens after
+all of that, and an exception it throws then fails an object whose post-construct callbacks have already run. The
+object is still not handed to anything else until the whole chain has returned. Doing it in the order the
+specification describes needs Micronaut to separate construction from injection, which this module cannot do from
+outside.
 
 A class declaring nothing but an `@AroundInvoke` method is read as an interceptor class rather than as a class
 interposing on its own business methods, unless the class is a bean of its own. See

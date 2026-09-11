@@ -53,14 +53,14 @@ module stands against every one of them.
 |===
 | | Assertions
 
-| Covered by a test of this repository | 129
-| Differs from the specification, deliberately | 4
-| Not applicable to a module without Jakarta Enterprise Beans, a deployment descriptor or a naming context | 29
+| Covered by a test of this repository | 130
+| Differs from the specification, deliberately | 5
+| Not applicable to a module without Jakarta Enterprise Beans, a deployment descriptor or a naming context | 27
 | A statement of intent, with nothing to verify | 4
 |===
 
 Everything the specification describes that applies to a module of this kind is covered by a test, apart from the
-4 differences below, each of which is deliberate.
+5 differences below, each of which is deliberate.
 
 == Where this module differs
 |===
@@ -68,6 +68,10 @@ Everything the specification describes that applies to a module of this kind is 
 
 | 2.2 c)
 | An interceptor class is a bean, so it needs no public no-arg constructor and may take injection
+
+| 2.3 dd)
+| An object is injected, and its post-construct callbacks run, before its around-construct interceptor methods
+return rather than after
 
 | 3.3 g)
 | A binding declared on a final method is not reported; a final class, and a final method of a class carrying a
@@ -169,7 +173,8 @@ class level binding, are
 | a)
 | The lifecycle of an interceptor instance is the same as that of the target class instance with which it is associated.
 | Covered
-| InterceptorStateTest
+| InterceptorStateTest; TargetProxyStateTest for a bean proxied with a separate target, whose proxy and target
+share one instance of each interceptor class from the post-construct event to the pre-destroy event
 
 | ba)
 | Except as noted below, when the target instance is created, a corresponding interceptor instance is created for each associated interceptor class.
@@ -178,8 +183,11 @@ class level binding, are
 
 | bb)
 | These interceptor instances are destroyed if the target instance fails to be created or when it is removed.
-| Not applicable
-| Destruction of an instance cannot be observed
+| Covered
+| InterceptorDestructionTest: the instances of an interceptor class without a scope of its own, and what they were
+injected with, are destroyed with a singleton as the context closes, with an object passed to `destroyBean`, and
+with an object whose constructor or post-construct callback throws; a `@Singleton` interceptor is left to the
+context
 
 | c)
 | An interceptor instance may be the target of dependency injection. Dependency injection is performed when the interceptor instance is created, using the naming context of the associated target class.
@@ -204,7 +212,9 @@ class level binding, are
 | da)
 | Around-construct lifecycle callback interceptor methods are invoked after dependency injection has been completed on the instances of all interceptor classes associated with the target class.
 | Covered
-| InterceptorInjectionTest, AroundConstructTest
+| AroundConstructInstancesTest: every interceptor class of the around-construct chain is created and injected
+before the first around-construct method runs. An interceptor class the object is bound to that declares no
+around-construct method takes no part in construction, and is created as the object finishes being created
 
 | daz)
 | Injection of the target component into interceptor instances that are invoked during the AroundConstruct lifecycle callback is not supported.
@@ -223,8 +233,11 @@ class level binding, are
 
 | dd)
 | Dependency injection on the target instance is not completed until after invocation of all interceptor methods in the AroundConstruct interceptor chain complete successfully. Around-construct lifecycle callback interceptor methods should therefore exercise caution when invoking methods of the target instance since dependency injection on the target instance will not have been completed.
-| Not applicable
-| Micronaut completes injection as part of construction
+| Differs
+| Micronaut injects and initializes an object in the method that constructs it, which is what the last
+around-construct method proceeds to: when `proceed()` returns to an around-construct method, the object has been
+injected and its post-construct callbacks and post-construct interceptor methods have run.
+InjectionInsideAroundConstructTest pins the order
 |===
 
 === Section 2.3.1 - Interceptor Environment
@@ -632,7 +645,8 @@ constructor declares
 | e)
 | The applicability of a method-level interceptor to more than one method of an associated target class does not affect the relationship between the interceptor instance and the target class - only a single instance of the interceptor class is created per target class instance.
 | Covered
-| StructuralConformanceTest
+| StructuralConformanceTest; TargetProxyStateTest for a bean proxied with a separate target, including one a
+factory produced
 |===
 
 === Section 2.10 - Default Interceptors

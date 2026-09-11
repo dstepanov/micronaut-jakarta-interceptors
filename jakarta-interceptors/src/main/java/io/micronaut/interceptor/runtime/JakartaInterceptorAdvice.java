@@ -30,6 +30,7 @@ import io.micronaut.core.beans.BeanConstructor;
 import io.micronaut.inject.BeanDefinition;
 import io.micronaut.inject.ExecutableMethod;
 import io.micronaut.interceptor.annotation.JakartaInterception;
+import jakarta.annotation.PreDestroy;
 import jakarta.interceptor.Interceptor;
 import org.jspecify.annotations.Nullable;
 
@@ -74,6 +75,30 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         return Interceptor.Priority.APPLICATION;
     }
 
+    /**
+     * Destroys the interceptor instances of the object this advice was created for, unless the pre-destroy event of
+     * that object is what destroys them.
+     *
+     * <p>Micronaut destroys this advice together with that object, as a dependent created for it alone, and the
+     * interceptor instances go with it: section 2.3 gives them the life of the object they intercept. See
+     * {@link InterceptorInstances#adviceDestroyed()} for the objects whose instances wait for their pre-destroy
+     * event instead.</p>
+     */
+    @PreDestroy
+    void destroyInterceptorInstances() {
+        instances.adviceDestroyed();
+    }
+
+    /**
+     * Has this advice, bound to a proxy, intercept with the interceptor instances of the target of that proxy.
+     * Called by {@link InterceptorCreationListener} as the proxy is created.
+     *
+     * @param targetInstances The interceptor instances of the target
+     */
+    void shareInterceptorInstances(InterceptorInstances targetInstances) {
+        instances.share(targetInstances);
+    }
+
     // implementing both MethodInterceptor and ConstructorInterceptor inherits two declarations of this method,
     // of which the constructor one returns a non-null instance; an intercepted method may return null
     @SuppressWarnings("NullAway")
@@ -91,8 +116,18 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
     @Override
     public @Nullable Object intercept(MethodInvocationContext<Object, Object> context) {
         InterceptorKind kind = context.getKind();
-        if (kind == InterceptorKind.POST_CONSTRUCT || kind == InterceptorKind.PRE_DESTROY) {
-            return interceptLifecycle(context, kind);
+        if (kind == InterceptorKind.POST_CONSTRUCT) {
+            Object bean = interceptLifecycle(context, kind);
+            instances.postConstructed(context.getTarget());
+            return bean;
+        }
+        if (kind == InterceptorKind.PRE_DESTROY) {
+            try {
+                return interceptLifecycle(context, kind);
+            } finally {
+                // 2.3 cc): the interceptor instances are destroyed once the pre-destroy interception is over
+                instances.preDestroyed();
+            }
         }
         List<InterceptorReference> chain = resolver.resolve(kind, context.getAnnotationMetadata());
         if (chain.isEmpty()) {

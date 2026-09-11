@@ -26,6 +26,12 @@ public class ConstructInterceptor {
 
 An `@AroundConstruct` method that returns without proceeding leaves the bean unconstructed, which is an error.
 
+Every interceptor instance of the chain is created and injected before the first `@AroundConstruct` method runs.
+The bean itself is injected, and its `@PostConstruct` callbacks run, inside `proceed()`: Micronaut injects and
+initializes a bean in the same step that constructs it, so by the time `proceed()` returns the bean is complete.
+The specification completes injection only after every around-construct method has returned; see
+<<limitations,Limitations>>.
+
 == Lifecycle callbacks
 
 A `@PostConstruct` or `@PreDestroy` interceptor method interposes on the matching callback of the bean:
@@ -51,3 +57,23 @@ interceptor's own callback.
 fails, as the specification prescribes; `getTarget()` is the bean throughout. Micronaut interposes on the lifecycle
 of a bean rather than on one callback of it, so the callback shown is the one the class itself declares, and the
 chain runs once around every callback of the hierarchy.
+
+== The life of an interceptor instance
+
+An interceptor class without a scope of its own has an instance for each object it intercepts. The instance is
+created as that object is created, and destroyed together with it: when the context closes, for a singleton; when
+the object is passed to `destroyBean`; and when the object fails to be created, because its constructor, an
+`@AroundConstruct` or `@PostConstruct` interceptor method, or its own post-construct callback threw. The
+interceptor's own `@PreDestroy` callback, the one that takes no `InvocationContext`, runs then - for an object
+that is removed, after the pre-destroy interception of that object - and whatever was injected into the
+interceptor for it alone is destroyed as well.
+
+A bean proxied with a separate target, declared `@Around(proxyTarget = true)` or produced by a `@Factory` method,
+is two objects to Micronaut - the proxy its business methods are invoked on, and the target whose construction and
+lifecycle are intercepted - and one object to the specification. It has one instance of each interceptor class,
+so what an interceptor keeps in a `@PostConstruct` method is there in its `@AroundInvoke` method, unless the proxy
+resolves its target lazily; see <<limitations,Limitations>>.
+
+An interceptor declared `@Singleton` is shared by every object it intercepts and belongs to none of them, so it
+is destroyed with the context, as any other singleton is. The interceptor instances of a prototype that is never
+destroyed are never destroyed either, as nothing else Micronaut created for that prototype is.

@@ -46,6 +46,7 @@ final class ConstructorInvocationContextAdapter extends AbstractInvocationContex
     private @Nullable Object target;
     private @Nullable Constructor<?> constructor;
     private boolean constructorResolved;
+    private boolean proceeding;
 
     ConstructorInvocationContextAdapter(ConstructorInvocationContext<Object> context,
                                         List<InterceptorReference> chain,
@@ -93,6 +94,47 @@ final class ConstructorInvocationContextAdapter extends AbstractInvocationContex
     @Override
     public void setParameters(@Nullable Object[] params) {
         writeParameters(params);
+    }
+
+    /**
+     * Runs the chain once every interceptor instance of it exists, and destroys the interceptor instances of the
+     * object when the object is not created.
+     *
+     * <p>Every interceptor of the chain proceeds through this same context, so only the outermost call - the one the
+     * advice makes - starts and ends the construction.</p>
+     *
+     * <p>It starts by creating the instance of every interceptor class of the chain. Section 2.3 runs an
+     * {@code @AroundConstruct} method only after injection has completed on the interceptor instances of the object,
+     * and the rest of the chain would otherwise create the instance of each interceptor as the one before it
+     * proceeds, after that one has already begun.</p>
+     *
+     * <p>It ends by looking at how the construction went. An exception that reaches it, or a chain that returns
+     * without any interceptor having proceeded to the constructor, leaves no object, and section 2.3 has the
+     * interceptor instances of an object that fails to be created destroyed. An exception an interceptor catches on
+     * the way out does not reach it, and neither discards anything.</p>
+     *
+     * @return What the chain returned
+     * @throws Exception What the chain threw
+     */
+    @Override
+    public @Nullable Object proceed() throws Exception {
+        if (proceeding) {
+            return super.proceed();
+        }
+        proceeding = true;
+        try {
+            createInterceptorInstances();
+            Object result = super.proceed();
+            if (target == null) {
+                discardInterceptorInstances();
+            }
+            return result;
+        } catch (Throwable e) {
+            discardInterceptorInstances();
+            throw e;
+        } finally {
+            proceeding = false;
+        }
     }
 
     /**

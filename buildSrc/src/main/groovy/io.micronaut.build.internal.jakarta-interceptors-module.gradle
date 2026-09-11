@@ -13,10 +13,7 @@ micronautBuild {
 }
 
 // The interception never reflects, and the NoReflection check of micronaut-projects/errorprone-no-reflection holds
-// what this module publishes to that. It is a check rather than a Checkstyle rule because the rule is about types
-// rather than spelling: getAnnotation names both java.lang.Class.getAnnotation, which asks the platform, and
-// AnnotationMetadata.getAnnotation, which reads what Micronaut compiled. A regular expression sees one name; the
-// check sees the receiver.
+// what this module publishes to that.
 //
 // Only the main sources are checked. The tests are free to reflect: a test that proves an interception reached a
 // member without reflecting has to reach it somehow.

@@ -18,13 +18,14 @@
  * {@code InvocationContext} implementations it hands to the interceptor methods.
  *
  * <p>Nothing here is reflective. An interceptor method is invoked through the executable method Micronaut
- * generated for it at compilation time, which calls it directly unless it is private, the chain that applies to an
+ * generated for it at compilation time, which calls it directly unless generated code cannot reach it, the chain that applies to an
  * element is read from the annotations the processor left on it, and the interceptor instances come from the bean
  * context. Three accessors of {@code InvocationContext} do reach for the reflection of the platform, because the
  * types the specification has them return leave no choice: {@code getMethod()} and {@code getConstructor()} return
  * a {@code java.lang.reflect} member, and {@code getInterceptorBindings()} returns annotation instances. All three
  * are resolved only when an interceptor asks for them, and remembered afterwards, so an application whose
- * interceptors do not use them, and declare no private interceptor method, never reflects at all.
+ * interceptors do not use them, and declare no interceptor method out of reach of generated code, never reflects
+ * at all.
  *
  * @author Denis Stepanov
  * @since 1.0

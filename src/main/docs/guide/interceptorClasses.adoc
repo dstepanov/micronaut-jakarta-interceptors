@@ -46,9 +46,11 @@ The processor reports a declaration the specification does not allow while it is
 
 An interceptor method may have any access level, which the specification requires in sections 2.6 cb) to cd) and
 2.7 jb) to jd). A `private` one is reached reflectively, because the executable method Micronaut generates cannot
-call it directly; the processor annotates it with `@ReflectiveAccess`, which is what permits that call and what
+call it directly, and so is a `protected` or package private one declared by a superclass in another package; the
+processor annotates such a method with `@ReflectiveAccess`, which is what permits that call and what
 `micronaut-graal` turns into the reachability metadata a native image needs. Prefer at least package private
-access where you can, so that the call stays a direct one.
+access where you can, and `public` for an interceptor method of a superclass in another package, so that the call
+stays a direct one.
 
 == Injection
 

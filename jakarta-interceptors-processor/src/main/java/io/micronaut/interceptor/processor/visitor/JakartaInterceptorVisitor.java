@@ -223,9 +223,11 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         for (Map.Entry<InterceptionKind, List<MethodElement>> entry : model.methods().entrySet()) {
             for (MethodElement method : entry.getValue()) {
                 method.annotate(Executable.class);
-                if (method.isPrivate()) {
-                    // the specification allows a private interceptor method. Micronaut generates an executable
-                    // method that reaches it reflectively once it is told that reflection is permitted
+                if (method.isReflectionRequired(interceptorClass)) {
+                    // the specification allows an interceptor method any access level. Micronaut generates the
+                    // executable method beside the interceptor class, which cannot reach a private method, nor a
+                    // protected or package private one declared by a superclass in another package; it reaches
+                    // those reflectively once it is told that reflection is permitted
                     method.annotate(ReflectiveAccess.class);
                 }
                 if (entry.getKey() == InterceptionKind.POST_CONSTRUCT) {

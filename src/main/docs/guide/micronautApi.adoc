@@ -2,7 +2,7 @@
 three places means the reflection of the platform: `getMethod()` returns a `java.lang.reflect.Method`,
 `getConstructor()` a `java.lang.reflect.Constructor`, and `getInterceptorBindings()` instances of the binding
 annotations. The types leave no way around it, and resolving one is the only reflection an interception performs
-apart from invoking an interceptor method declared `private`, see <<reflection,When Reflection Is Used>>.
+apart from invoking an interceptor method generated code cannot call, such as a `private` one, see <<reflection,When Reflection Is Used>>.
 
 Everything those three describe, Micronaut worked out while the application was compiled. Every context this module
 hands an interceptor method also implements api:interceptor.MicronautInvocationContext[], which offers it:

@@ -35,6 +35,10 @@ import java.util.List;
  * interceptor class declares itself wins; without one, the specification's own rule applies and a new interceptor
  * instance is created for every object it intercepts.</p>
  *
+ * <p>The {@code @Bean} this adds is the module's, not a bean the application declared, and the visitor reads it as
+ * such: the definition of an interceptor class that declares no scope or bean annotation of its own is made a
+ * secondary one there, so that a factory producing the same class takes its place.</p>
+ *
  * @author Denis Stepanov
  * @since 1.0
  */

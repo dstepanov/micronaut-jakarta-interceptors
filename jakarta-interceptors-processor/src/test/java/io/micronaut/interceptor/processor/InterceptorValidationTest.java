@@ -250,6 +250,44 @@ class InterceptorValidationTest {
         assertTrue(error.contains("The method") && error.contains("is bound by") && error.contains("Baz"), error);
     }
 
+    /**
+     * An annotation that is not a binding itself still carries the bindings declared on it, so two of them may
+     * disagree on a method as two binding annotations may.
+     */
+    @Test
+    void aBindingReachingAMethodThroughTwoPlainAnnotationsWithDifferentValuesIsReported() {
+        String error = compile("""
+            @Retention(RetentionPolicy.RUNTIME)
+            @Target({ElementType.TYPE, ElementType.METHOD, ElementType.ANNOTATION_TYPE})
+            @InterceptorBinding
+            @interface Baz {
+                String value();
+            }
+
+            @Retention(RetentionPolicy.RUNTIME)
+            @Target(ElementType.METHOD)
+            @Baz("yes")
+            @interface Foo {
+            }
+
+            @Retention(RetentionPolicy.RUNTIME)
+            @Target(ElementType.METHOD)
+            @Baz("no")
+            @interface Bar {
+            }
+
+            @Singleton
+            public class Subject {
+                @Foo
+                @Bar
+                public String greet() {
+                    return "hello";
+                }
+            }
+            """);
+        assertTrue(error.contains("The method") && error.contains("is bound by") && error.contains("Baz"), error);
+    }
+
     @Test
     void aBindingReachingAConstructorTwiceWithDifferentValuesIsReported() {
         String error = compile("""

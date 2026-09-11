@@ -47,9 +47,9 @@ to `jakarta.enterprise.inject.Stereotype`, and no rule of another specification 
 names it itself.
 
 A Contexts and Dependency Injection stereotype nevertheless carries its bindings across, because a binding
-annotation declared on another annotation binds through it whatever that annotation is otherwise for. A class
-annotated with a stereotype that declares `@Monitored` declares `@Monitored`, and the interceptors bound to it
-intercept the class. The kit's own resolution scenarios rely on exactly that and are run here; see
+annotation declared on another annotation binds through it whatever that annotation is otherwise for. A class or a
+method annotated with a stereotype that declares `@Monitored` declares `@Monitored`, and the interceptors bound to
+it intercept the class or the method. The kit's own resolution scenarios rely on exactly that and are run here; see
 <<conformance,Conformance>>, sections 3.1.2 a) and 3.3 e). What is not read is the stereotype as such - a
 stereotype that names a scope, a name or an interceptor by any rule of that specification other than declaring the
 binding is read as the annotation it is and no more.
@@ -85,7 +85,13 @@ declared where it is compiled, and that is where interceptors are expected to co
 An interceptor class becomes a bean, so an application may also produce it from a `@Factory` method to configure
 the instance itself; the instance the factory produced is then the one that intercepts. The definition this module
 declares for an interceptor class is a secondary one, which is what lets a factory take its place rather than the
-two being ambiguous.
+two being ambiguous. That holds for a class declaring `@Interceptor` as much as for one only named by
+`@Interceptors`.
+
+An interceptor class that declares a scope or a bean annotation of its own, such as `@Singleton`, is a bean the
+application declared rather than one this module declares, and is left as it was declared. A factory producing the
+same class is then as ambiguous with it as with any other bean declared twice, unless one of the two is marked
+`@Primary` or `@Secondary`.
 
 === Interceptor classes named on a superclass
 

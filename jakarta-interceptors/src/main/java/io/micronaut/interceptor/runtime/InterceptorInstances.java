@@ -240,8 +240,47 @@ final class InterceptorInstances {
      * event of the target with the advice of the proxy.</p>
      */
     void preDestroyed() {
+        inUse().destroy();
+    }
+
+    /**
+     * Destroys the instances in use because the object they were created for will not exist: its construction or its
+     * post-construct event failed, or an interceptor instance it still needed could not be created.
+     *
+     * <p>Section 2.3 destroys the interceptor instances of an object that fails to be created, as it does those of an
+     * object that is removed. Nothing else would: Micronaut only destroys the advice holding them together with a bean
+     * that exists.</p>
+     */
+    void discard() {
+        // nothing is going to come for an object that will not exist, so the entry held for a proxy of it goes too
+        forgetPostConstructed();
+        inUse().destroy();
+    }
+
+    /**
+     * Destroys the instances in use once the object they were created for has been destroyed, whatever ran or did not
+     * run on the way.
+     *
+     * <p>This is the last word on the instances of an object, rather than the one that usually has it. The pre-destroy
+     * event is where section 2.3 destroys them, and interposing on that event is how they normally go; but an ordinary
+     * Micronaut interceptor of the same event, ordered before this one, may return without proceeding, and then no
+     * Jakarta pre-destroy interceptor method runs at all. The object is destroyed regardless, so its instances are
+     * destroyed here.</p>
+     *
+     * <p>Only the instances of this object, never the shared instances of the target of a proxy: Micronaut destroys a
+     * proxy by destroying its target, and the target is destroyed as an object in its own right, which brings it
+     * here.</p>
+     */
+    void beanDestroyed() {
+        destroy();
+    }
+
+    /**
+     * The instances every interception of the object uses, which are those of the target for a proxy that shares them.
+     */
+    private InterceptorInstances inUse() {
         InterceptorInstances target = shared;
-        (target == null ? this : target).destroy();
+        return target == null ? this : target;
     }
 
     /**
@@ -271,10 +310,11 @@ final class InterceptorInstances {
      * <p>The instances are forgotten as well, so that nothing goes on to intercept with an instance that has been
      * destroyed.</p>
      *
+     * <p>One of them failing to be destroyed does not keep the rest alive. They are separate objects, and the list is
+     * already emptied, so a loop that gave up would leave instances nothing could ever come back for. Every one of
+     * them is destroyed and the first failure is then reported, carrying any later one as a suppressed exception.</p>
      */
-    void destroy() {
-        // nothing is going to come for an object whose instances are gone, so the entry held for a proxy of it goes too
-        forgetPostConstructed();
+    private void destroy() {
         List<BeanRegistration<?>> destroyed;
         synchronized (this) {
             if (owned.isEmpty()) {
@@ -285,9 +325,21 @@ final class InterceptorInstances {
             owned.clear();
             instances.clear();
         }
+        RuntimeException failure = null;
         // outside of the lock: what an interceptor does as it is destroyed is its own code
         for (int i = destroyed.size() - 1; i >= 0; i--) {
-            beanContext.destroyBean(destroyed.get(i));
+            try {
+                beanContext.destroyBean(destroyed.get(i));
+            } catch (RuntimeException e) {
+                if (failure == null) {
+                    failure = e;
+                } else {
+                    failure.addSuppressed(e);
+                }
+            }
+        }
+        if (failure != null) {
+            throw failure;
         }
     }
 
@@ -330,7 +382,7 @@ final class InterceptorInstances {
      *
      * <p>Matched by these instances rather than by the object, which is not what the caller has: the failure of a
      * construction is seen by the advice, and the object whose post-construct event it intercepted on the way is the
-     * one whose instances are being destroyed.</p>
+     * one being discarded.</p>
      */
     @SuppressWarnings("ReferenceEquality")
     private void forgetPostConstructed() {

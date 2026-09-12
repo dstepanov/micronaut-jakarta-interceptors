@@ -147,7 +147,7 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
      * only destroyed together with a bean that exists.</p>
      */
     final void discardInterceptorInstances() {
-        instances.destroy();
+        instances.discard();
     }
 
     /**

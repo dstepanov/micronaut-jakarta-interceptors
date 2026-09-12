@@ -208,19 +208,43 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      * @param definition The definition of the object
      */
     void createInterceptorInstances(BeanDefinition<?> definition) {
-        AnnotationMetadata classMetadata = definition.getAnnotationMetadata();
-        // only what this module intercepts is asked for: an element it does not intercept has no chain, and
-        // resolving one would put an empty chain in the resolver's map for nothing
-        if (classMetadata.hasAnnotation(JakartaInterception.class)) {
-            createInstancesOf(InterceptorKind.POST_CONSTRUCT, classMetadata);
-            createInstancesOf(InterceptorKind.PRE_DESTROY, classMetadata);
-        }
-        for (ExecutableMethod<?, ?> method : definition.getExecutableMethods()) {
-            AnnotationMetadata methodMetadata = method.getAnnotationMetadata();
-            if (methodMetadata.hasAnnotation(JakartaInterception.class)) {
-                createInstancesOf(InterceptorKind.AROUND, methodMetadata);
+        try {
+            AnnotationMetadata classMetadata = definition.getAnnotationMetadata();
+            // only what this module intercepts is asked for: an element it does not intercept has no chain, and
+            // resolving one would put an empty chain in the resolver's map for nothing
+            if (classMetadata.hasAnnotation(JakartaInterception.class)) {
+                createInstancesOf(InterceptorKind.POST_CONSTRUCT, classMetadata);
+                createInstancesOf(InterceptorKind.PRE_DESTROY, classMetadata);
             }
+            for (ExecutableMethod<?, ?> method : definition.getExecutableMethods()) {
+                AnnotationMetadata methodMetadata = method.getAnnotationMetadata();
+                if (methodMetadata.hasAnnotation(JakartaInterception.class)) {
+                    createInstancesOf(InterceptorKind.AROUND, methodMetadata);
+                }
+            }
+        } catch (Throwable e) {
+            // an interceptor class that cannot be created fails the creation of the object, and the instances
+            // created before it are then those of an object that fails to be created: 2.3 bb) destroys them.
+            // Nothing else would - Micronaut has no registration of this object yet to hang them on
+            try {
+                instances.discard();
+            } catch (RuntimeException discardFailure) {
+                e.addSuppressed(discardFailure);
+            }
+            throw e;
         }
+    }
+
+    /**
+     * Destroys the interceptor instances of the object this advice was created for, now that the object has been
+     * destroyed. Called by {@link InterceptorDestructionListener}.
+     *
+     * <p>The pre-destroy event is where section 2.3 destroys them, and interposing on that event is how they normally
+     * go. This is what happens when that interception never runs, which an ordinary Micronaut interceptor of the same
+     * event ordered before this advice can arrange by returning without proceeding.</p>
+     */
+    void beanDestroyed() {
+        instances.beanDestroyed();
     }
 
     private void createInstancesOf(InterceptorKind kind, AnnotationMetadata metadata) {

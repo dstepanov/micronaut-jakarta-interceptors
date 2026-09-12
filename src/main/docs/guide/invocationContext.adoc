@@ -35,6 +35,12 @@ the types are checked.
 | The binding annotations in effect on the intercepted element, as annotation instances.
 |===
 
+The bindings these accessors answer with are the ones the interception was resolved from. A binding a method
+declares replaces the one of the same type its class declares, the whole of it, so a method that declares the
+binding again and leaves a member to its default is bound by that default, and that is the value the accessors
+report. Where a binding member is itself an evaluated expression it is reported unevaluated, as the comparison that
+bound the interceptor read it.
+
 An interceptor that returns without proceeding keeps the rest of the chain, and the intercepted element, from
 running. For a lifecycle callback that is all it does: the bean is neither replaced nor discarded.
 

@@ -99,15 +99,25 @@ same class is then as ambiguous with it as with any other bean declared twice, u
 classes its superclass names. Declare it on the class that is the bean, or use a binding annotation that is
 `@Inherited`, which is inherited as the specification describes.
 
-=== Interceptor state on a lazy or swappable proxy target
+=== Interceptor state on a proxy whose target it does not find
 
 A bean proxied with a separate target is two objects to Micronaut, and one instance of each interceptor class
-serves both; see <<lifecycle,Lifecycle and Constructor Interception>>. A proxy that resolves its target only when
-it is first invoked - `@Around(proxyTarget = true, lazy = true)`, and so the scoped proxies - or whose target may be
-swapped - `hotswap = true` - is the exception. Its business methods are intercepted by interceptor instances of its
-own, not by the ones that intercepted the construction and lifecycle of its target, so a field an interceptor sets
-in a `@PostConstruct` or `@AroundConstruct` method is not seen by its `@AroundInvoke` method there. Both sets of
-instances are still destroyed.
+serves both; see <<lifecycle,Lifecycle and Constructor Interception>>. The proxy finds the instances of its target
+among the objects whose post-construct event the thread building the proxy has intercepted, because nothing in
+Micronaut links a proxy to the advice of the target it was created around. There are cases where the proxy
+consequently finds nothing and intercepts its business methods with interceptor instances of its own, so that a
+field an interceptor sets in a `@PostConstruct` or `@AroundConstruct` method is not seen by its `@AroundInvoke`
+method there. Both sets of instances are still destroyed. They are:
+
+* a proxy that resolves its target only when it is first invoked - `@Around(proxyTarget = true, lazy = true)`, and
+so the scoped proxies - since it has no target to ask about while it is being created, and asking for one would
+create it early;
+* a proxy whose target may be swapped - `hotswap = true` - since it would otherwise go on using the instances of a
+target it no longer has;
+* a proxy created around a target that already existed, which is a singleton target that another resolution of the
+same bean created first, possibly on another thread.
+
+Closing these needs Micronaut to carry the interception state of a target with the target, which it does not yet do.
 
 == What Micronaut requires
 

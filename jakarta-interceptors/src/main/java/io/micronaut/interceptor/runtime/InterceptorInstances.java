@@ -25,8 +25,11 @@ import io.micronaut.core.annotation.Internal;
 import io.micronaut.inject.BeanDefinition;
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -55,10 +58,19 @@ import java.util.Map;
 final class InterceptorInstances {
 
     /**
-     * The object whose post-construct event this thread intercepted last, until a proxy of it takes its instances or
-     * it turns out to have no proxy.
+     * The objects whose post-construct event this thread has intercepted and not yet accounted for, latest last. An
+     * entry is taken by the proxy created around the object, and dropped once the object turns out to have no proxy,
+     * which is what keeps this to the handful of entries one creation in progress needs.
      */
-    private static final ThreadLocal<@Nullable PostConstructed> POST_CONSTRUCTED = new ThreadLocal<>();
+    private static final ThreadLocal<@Nullable Deque<PostConstructed>> POST_CONSTRUCTED = new ThreadLocal<>();
+
+    /**
+     * How many entries one thread holds at most. Nothing ordinary reaches it: an entry lives from the post-construct
+     * event of an object to the creation of the object being completed, and those nest no deeper than the creations
+     * that are in progress. It is the bound on what is held when an object is left without either - a proxy whose
+     * construction fails after its target was created - rather than a size anything is expected to need.
+     */
+    private static final int POST_CONSTRUCTED_LIMIT = 8;
 
     /**
      * The annotation that makes a bean of a custom scope resolve to a proxy over a target the scope keeps. Named
@@ -198,14 +210,25 @@ final class InterceptorInstances {
     /**
      * Records that the post-construct event of an object has been intercepted with these instances.
      *
-     * <p>The object is also handed to the proxy Micronaut may be creating around it, as its target: see
-     * {@link #takePostConstructed}.</p>
+     * <p>The object is also held for the proxy Micronaut may be creating around it, as its target, until that proxy
+     * takes it or it turns out to have no proxy: see {@link #takePostConstructed} and {@link #forgetPostConstructed}.
+     * </p>
      *
      * @param target The object
      */
     void postConstructed(Object target) {
         lifecycleIntercepted = true;
-        POST_CONSTRUCTED.set(new PostConstructed(target, this));
+        Deque<PostConstructed> pending = POST_CONSTRUCTED.get();
+        if (pending == null) {
+            pending = new ArrayDeque<>(4);
+            POST_CONSTRUCTED.set(pending);
+        }
+        if (pending.size() >= POST_CONSTRUCTED_LIMIT) {
+            // nothing came for the oldest of them, and nothing is going to: a proxy comes for its target within the
+            // creation that is building it, and that many creations are not in progress
+            pending.removeFirst();
+        }
+        pending.addLast(new PostConstructed(target, this));
     }
 
     /**
@@ -247,8 +270,11 @@ final class InterceptorInstances {
      *
      * <p>The instances are forgotten as well, so that nothing goes on to intercept with an instance that has been
      * destroyed.</p>
+     *
      */
     void destroy() {
+        // nothing is going to come for an object whose instances are gone, so the entry held for a proxy of it goes too
+        forgetPostConstructed();
         List<BeanRegistration<?>> destroyed;
         synchronized (this) {
             if (owned.isEmpty()) {
@@ -266,45 +292,80 @@ final class InterceptorInstances {
     }
 
     /**
-     * Returns the instances the post-construct event of the given object was intercepted with, when it is the last
-     * such event this thread intercepted, and forgets them.
+     * Returns the instances the post-construct event of the given object was intercepted with, and forgets them.
      *
-     * <p>A proxy with a separate target resolves its target as the proxy is constructed, so on the thread creating
-     * the proxy the post-construct event of the target is intercepted just before the proxy is complete. Reading it
-     * back once the proxy is complete is how the proxy finds the instances of its target. Nothing else links the
-     * two: the advice of the target is a dependent of the target, and Micronaut does not expose the dependents of a
-     * bean to a proxy being created around it; for a bean a factory produced it does not even keep that advice as
-     * one, taking it for the factory instead. Holding one object per thread, and only until the next bean is
-     * created, links them without a map that would outlive them.</p>
+     * <p>A proxy with a separate target resolves its target as the proxy is constructed, so on the thread creating the
+     * proxy the post-construct event of the target is intercepted while the proxy is being built. Reading it back once
+     * the proxy is complete is how the proxy finds the instances of its target. Nothing else links the two: the advice
+     * of the target is a dependent of the target, and Micronaut does not expose the dependents of a bean to a proxy
+     * being created around it; for a bean a factory produced it does not even keep that advice as one, taking it for
+     * the factory instead.</p>
+     *
+     * <p>What the thread holds is every such object not yet accounted for, and the one asked for is looked up among
+     * them, because the construction of the proxy does not end with its target: it goes on to resolve the advice of the
+     * proxy itself, and whatever else the proxy takes. Each of those is a bean created in between, and the entry of the
+     * target has to survive them.</p>
      *
      * @param target The target of the proxy being created
-     * @return The instances of that target, or {@code null} when its post-construct event was not the last one this
-     * thread intercepted
+     * @return The instances of that target, or {@code null} when this thread holds no entry for it
      */
     static @Nullable InterceptorInstances takePostConstructed(Object target) {
-        PostConstructed last = POST_CONSTRUCTED.get();
-        if (last == null || !last.is(target)) {
-            return null;
-        }
-        POST_CONSTRUCTED.remove();
-        return last.instances();
+        return removePostConstructed(target);
     }
 
     /**
-     * Forgets the object whose post-construct event this thread intercepted last, unless it is the given target of a
-     * proxy that is still to be completed.
+     * Forgets the entry of an object no proxy will be created around, which is nobody's to take.
      *
-     * <p>Called as each bean is created. The target of a proxy is created as the proxy is constructed, and the proxy
-     * is complete right after it, so any other bean completed in between means the proxy will not come for the
-     * instances; nothing is held for longer than that.</p>
+     * <p>Called as the object is created, which is right after its post-construct event. Only the entry of that one
+     * object goes: the entries of the objects whose creation this one is part of are still to be taken.</p>
      *
-     * @param proxyTarget The bean just created, when it is the target of a proxy, otherwise {@code null}
+     * @param bean The object
      */
-    static void forgetPostConstructedExcept(@Nullable Object proxyTarget) {
-        PostConstructed last = POST_CONSTRUCTED.get();
-        if (last != null && (proxyTarget == null || !last.is(proxyTarget))) {
+    static void forgetPostConstructed(Object bean) {
+        removePostConstructed(bean);
+    }
+
+    /**
+     * Forgets the entry of the object these instances were created for, wherever this thread holds one.
+     *
+     * <p>Matched by these instances rather than by the object, which is not what the caller has: the failure of a
+     * construction is seen by the advice, and the object whose post-construct event it intercepted on the way is the
+     * one whose instances are being destroyed.</p>
+     */
+    @SuppressWarnings("ReferenceEquality")
+    private void forgetPostConstructed() {
+        Deque<PostConstructed> pending = POST_CONSTRUCTED.get();
+        if (pending == null) {
+            return;
+        }
+        pending.removeIf(entry -> entry.instances() == this);
+        if (pending.isEmpty()) {
             POST_CONSTRUCTED.remove();
         }
+    }
+
+    /**
+     * Takes the entry of the given object out of what this thread holds, and returns the instances it held.
+     *
+     * <p>Searched latest first, and by the identity of the object rather than by equality: two beans of a class that
+     * compares by value are still two objects with interceptor instances of their own.</p>
+     */
+    private static @Nullable InterceptorInstances removePostConstructed(Object bean) {
+        Deque<PostConstructed> pending = POST_CONSTRUCTED.get();
+        if (pending == null) {
+            return null;
+        }
+        for (Iterator<PostConstructed> i = pending.descendingIterator(); i.hasNext();) {
+            PostConstructed entry = i.next();
+            if (entry.is(bean)) {
+                i.remove();
+                if (pending.isEmpty()) {
+                    POST_CONSTRUCTED.remove();
+                }
+                return entry.instances();
+            }
+        }
+        return null;
     }
 
     /**

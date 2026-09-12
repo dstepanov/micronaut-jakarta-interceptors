@@ -17,6 +17,7 @@ package io.micronaut.interceptor.processor.visitor;
 
 import io.micronaut.context.annotation.Bean;
 import io.micronaut.context.annotation.Executable;
+import io.micronaut.context.annotation.Factory;
 import io.micronaut.context.annotation.NonBinding;
 import io.micronaut.context.annotation.Prototype;
 import io.micronaut.context.annotation.Secondary;
@@ -33,8 +34,10 @@ import io.micronaut.core.annotation.TypeHint;
 import io.micronaut.inject.ast.ClassElement;
 import io.micronaut.inject.ast.Element;
 import io.micronaut.inject.ast.ElementQuery;
+import io.micronaut.inject.ast.MemberElement;
 import io.micronaut.inject.ast.MethodElement;
 import io.micronaut.inject.ast.ParameterElement;
+import io.micronaut.inject.ast.PropertyElement;
 import io.micronaut.inject.processing.ProcessingException;
 import io.micronaut.inject.visitor.TypeElementVisitor;
 import io.micronaut.inject.visitor.VisitorContext;
@@ -164,6 +167,11 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         if (element.hasStereotype(AnnotationUtil.SCOPE)) {
             return true;
         }
+        if (isFactory(element)) {
+            // a factory is a bean of its own, and a singleton at that, although it declares its scope as the default
+            // of the annotation rather than as a scope annotation of its own
+            return true;
+        }
         boolean mapped = element.hasDeclaredAnnotation(JakartaInterceptors.INTERCEPTOR);
         for (String name : element.getAnnotationNamesByStereotype(Bean.class.getName())) {
             if (!mapped || !Bean.class.getName().equals(name)) {
@@ -269,7 +277,13 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         // a constructor may be bound on its own, which intercepts the construction of the bean and nothing else
         boolean constructorDeclares = constructor != null
             && (!constructorInterceptors.isEmpty() || !InterceptorClassScanner.bindingsOf(constructor).isEmpty());
-        List<MethodElement> methods = element.getEnclosedElements(ElementQuery.ALL_METHODS.onlyInstance());
+        // a member of a factory that declares another bean is not a business method of the factory: what it declares
+        // belongs to the bean it produces, and is worked out with that bean as the owner
+        boolean factory = isFactory(element);
+        List<Producer> producers = producersOf(element);
+        List<MethodElement> methods = methodsOf(element).stream()
+            .filter(method -> !factory || !declaresAnotherBean(method))
+            .toList();
         // a binding that disagrees with itself is a definition error wherever it is declared, so the members that
         // can be bound are checked as the class was, before anything is read from their bindings
         if (constructor != null) {
@@ -280,8 +294,14 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
                 rejectConflictingBindings(method, "method", context);
             }
         }
+        for (Producer producer : producers) {
+            rejectConflictingBindings(producer.element(), "factory member", context);
+        }
         if (!InterceptorClassScanner.bindingsOf(element).isEmpty()) {
             rejectFinalMethods(element, methods);
+        }
+        for (Producer producer : producers) {
+            interceptProduced(producer, context);
         }
         if (!classDeclares && !constructorDeclares
             && methods.stream().noneMatch(JakartaInterceptorVisitor::declaresInterception)) {
@@ -320,7 +340,83 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         for (MethodElement method : methods) {
             interceptMethod(model, method, classInterceptors, classBindings, classDeclares, context);
         }
-        permitBindingSynthesis(element, constructor, methods);
+        permitBindingSynthesis(element, constructor, methods, producers);
+    }
+
+    /**
+     * Tells whether a class is a factory, which is the one kind of class whose members declare beans of other types.
+     *
+     * <p>An abstract class is left out, as Micronaut leaves it out: no bean is produced from it.</p>
+     */
+    private static boolean isFactory(ClassElement element) {
+        return !element.isAbstract() && element.hasStereotype(Factory.class);
+    }
+
+    /**
+     * The methods of a factory that declare beans of other types.
+     *
+     * <p>Both a static method and an instance method may produce a bean, which is why the whole of the method list
+     * is read here rather than the instance methods the business methods are taken from.</p>
+     */
+    private static List<Producer> producersOf(ClassElement element) {
+        if (!isFactory(element)) {
+            return List.of();
+        }
+        List<Producer> producers = new ArrayList<>();
+        for (MethodElement method : element.getEnclosedElements(ElementQuery.ALL_METHODS)) {
+            if (declaresAnotherBean(method)) {
+                producers.add(new Producer(method, method.getGenericReturnType()));
+            }
+        }
+        return List.copyOf(producers);
+    }
+
+    /**
+     * Tells whether a method of a factory declares a bean of the type it returns, which Micronaut reads from a bean
+     * annotation or a scope the method declares.
+     */
+    private static boolean declaresAnotherBean(MethodElement method) {
+        AnnotationMetadata own = InterceptorClassScanner.ownMetadataOf(method);
+        return own.hasDeclaredStereotype(Bean.class.getName())
+            || own.hasDeclaredStereotype(AnnotationUtil.SCOPE);
+    }
+
+    /**
+     * Declares, on a member of a factory that produces a bean, the interception of the bean it produces.
+     *
+     * <p>Micronaut carries the metadata of such a member over to the bean it declares, so the interception written
+     * here is the interception of the produced bean and is worked out with the produced type as the owner: the
+     * bindings and the interceptor classes of the produced type, with the ones the member declares over them. What
+     * the factory itself is bound by, and the interceptor methods the factory declares on itself, belong to the
+     * factory and are deliberately left out - an interceptor method of the factory invoked on the produced object
+     * would be invoked on the wrong receiver.</p>
+     *
+     * <p>The whole of the effective interception is written even where the produced type declares part of it,
+     * because Micronaut merges the metadata of the member over the metadata of the type member by member: a member
+     * the producer declares replaces the one of the type rather than adding to it.</p>
+     */
+    private static void interceptProduced(Producer producer, VisitorContext context) {
+        MethodElement member = producer.element();
+        if (!declaresInterception(member)) {
+            // the produced type carries whatever it declares on itself, as any other bean does
+            return;
+        }
+        ClassElement producedType = producer.producedType();
+        completeBindings(producedType, context);
+        completeBindings(member, context);
+        List<String> interceptors = new ArrayList<>(namedInterceptors(producedType, context));
+        interceptors.addAll(namedInterceptors(member, context));
+        String[] bindings = bindingsOf(member, producedType);
+        member.annotate(JakartaInterception.class, builder -> {
+            interceptorMembers(builder, interceptors);
+            // Micronaut reads the metadata of a produced bean together with the metadata of the factory that
+            // produced it, and the member the producer declares is the one that wins. Every member is therefore
+            // written out, the empty ones included, so that nothing the factory declares for itself - its own
+            // bindings, or the interceptor method it declares on itself, which would be invoked on the produced
+            // object rather than on the factory - reaches the bean it produces
+            builder.member("self", new AnnotationClassValue<>(void.class));
+            builder.member("bindings", bindings);
+        });
     }
 
     /**
@@ -336,7 +432,8 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
      */
     private static void permitBindingSynthesis(ClassElement element,
                                                @Nullable MethodElement constructor,
-                                               List<MethodElement> methods) {
+                                               List<MethodElement> methods,
+                                               List<Producer> producers) {
         Set<String> bindings = new LinkedHashSet<>();
         for (AnnotationValue<?> binding : InterceptorClassScanner.bindingsOf(element)) {
             bindings.add(binding.getAnnotationName());
@@ -348,6 +445,11 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         }
         for (MethodElement method : methods) {
             for (AnnotationValue<?> binding : InterceptorClassScanner.bindingsOf(method)) {
+                bindings.add(binding.getAnnotationName());
+            }
+        }
+        for (Producer producer : producers) {
+            for (AnnotationValue<?> binding : InterceptorClassScanner.bindingsOf(producer.element())) {
                 bindings.add(binding.getAnnotationName());
             }
         }
@@ -367,6 +469,13 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
      * would otherwise be passed over in silence. The specification names every non-static, non-private final method.
      * The final methods of {@code Object} are left out: every class has them, and they are not methods of the class
      * the specification has in mind.</p>
+     *
+     * <p>A method the compiler generated is left out as well, and with it the accessor of a Kotlin property. The
+     * accessor is an ordinary method of the class and is intercepted as one, but the language model answers whether
+     * it is final from the source alone, without the allowance it makes for a function of a class the all-open
+     * compiler plugin opens; an accessor the plugin opened is therefore not told apart from one that is really final,
+     * and reporting it would refuse a class that is perfectly proxyable. A property that is not open is left
+     * uninterceptable rather than reported, as Micronaut leaves it.</p>
      */
     private static void rejectFinalMethods(ClassElement element, List<MethodElement> methods) {
         for (MethodElement method : methods) {
@@ -388,7 +497,7 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
      * Reports a binding annotation that reaches a method or a constructor along two paths, carrying different
      * member values, which the specification makes a definition error there as it does on a class.
      */
-    private static void rejectConflictingBindings(MethodElement member, String noun, VisitorContext context) {
+    private static void rejectConflictingBindings(MemberElement member, String noun, VisitorContext context) {
         String conflict = BindingConflicts.declaredConflictOf(member, context);
         if (conflict != null) {
             throw new ProcessingException(member, "The " + noun + " [" + member.getDeclaringType().getName() + "."
@@ -446,7 +555,13 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         // a binding the method declares replaces the one of the class, so the method carries a declaration of its
         // own as soon as what it is bound by differs from what its class is bound by
         boolean replacesBindings = !Arrays.equals(classBindings, methodBindings);
-        if (timeout || replacesBindings || !classDeclares || excludesClassInterceptors || !methodInterceptors.isEmpty()) {
+        // Micronaut applies the advice a class declares to the public and package private methods of the class, and
+        // leaves a protected one alone, although it is able to override it: the proxy is a subclass. The
+        // specification intercepts every non-static, non-private business method, so a protected one carries the
+        // interception it inherits from its class itself, which is what makes Micronaut advise it
+        boolean advisedOnlyWhenDeclaredOnTheMethod = method.isProtected();
+        if (timeout || replacesBindings || !classDeclares || excludesClassInterceptors
+            || !methodInterceptors.isEmpty() || advisedOnlyWhenDeclaredOnTheMethod) {
             // the list of the method replaces the one it would otherwise inherit from the class
             method.annotate(JakartaInterception.class, builder -> {
                 interceptorMembers(builder, interceptors);
@@ -650,9 +765,59 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         return List.copyOf(names);
     }
 
-    private static boolean declaresInterception(MethodElement method) {
-        return method.hasDeclaredAnnotation(JakartaInterceptors.INTERCEPTORS)
-            || !InterceptorClassScanner.bindingsOf(method).isEmpty();
+    private static boolean declaresInterception(MemberElement member) {
+        return InterceptorClassScanner.ownMetadataOf(member).hasDeclaredAnnotation(JakartaInterceptors.INTERCEPTORS)
+            || !InterceptorClassScanner.bindingsOf(member).isEmpty();
+    }
+
+    /**
+     * Every instance method of a class the interception may reach, the accessors of its properties included.
+     *
+     * <p>A method query answers the methods a class declares as methods. Kotlin declares a property rather than a
+     * pair of methods, and the accessors of that property are methods of the class on the virtual machine like any
+     * other - they can be bound, and class level advice reaches them - but the language model answers them only as
+     * the accessors of the property, so they are taken from the properties and added to the methods. A language that
+     * answers an accessor as a method as well, which Java and Groovy do, answers the same method twice, and the
+     * second answer is dropped.</p>
+     */
+    private static List<MethodElement> methodsOf(ClassElement element) {
+        List<MethodElement> methods = new ArrayList<>(
+            element.getEnclosedElements(ElementQuery.ALL_METHODS.onlyInstance()));
+        for (PropertyElement property : element.getSyntheticBeanProperties()) {
+            addAccessor(methods, property.getReadMethod().orElse(null));
+            addAccessor(methods, property.getWriteMethod().orElse(null));
+        }
+        return List.copyOf(methods);
+    }
+
+    /**
+     * Adds the accessor of a property to the methods of a class, unless the class answered it as a method already or
+     * it is no instance method.
+     */
+    private static void addAccessor(List<MethodElement> methods, @Nullable MethodElement accessor) {
+        if (accessor == null || accessor.isStatic()) {
+            return;
+        }
+        for (MethodElement method : methods) {
+            if (method.getName().equals(accessor.getName()) && sameParameters(method, accessor)) {
+                return;
+            }
+        }
+        methods.add(accessor);
+    }
+
+    private static boolean sameParameters(MethodElement one, MethodElement other) {
+        ParameterElement[] ours = one.getParameters();
+        ParameterElement[] theirs = other.getParameters();
+        if (ours.length != theirs.length) {
+            return false;
+        }
+        for (int i = 0; i < ours.length; i++) {
+            if (!ours[i].getType().getName().equals(theirs[i].getType().getName())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -685,5 +850,18 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
                 && Object.class.getName().equals(parameters[0].getType().getName());
             default -> false;
         };
+    }
+
+    /**
+     * A method of a factory that declares another bean, together with the type of the bean it declares.
+     *
+     * <p>A field of a factory declares a bean as well, and is left out: an interceptor binding annotation, and
+     * {@code jakarta.interceptor.Interceptors}, are declared on a type, a method or a constructor, so a field can
+     * carry no Jakarta interception for its bean to be given.</p>
+     *
+     * @param element      The factory method
+     * @param producedType The type of the bean it produces
+     */
+    private record Producer(MethodElement element, ClassElement producedType) {
     }
 }

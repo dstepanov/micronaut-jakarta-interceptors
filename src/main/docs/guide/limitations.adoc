@@ -93,6 +93,17 @@ application declared rather than one this module declares, and is left as it was
 same class is then as ambiguous with it as with any other bean declared twice, unless one of the two is marked
 `@Primary` or `@Secondary`.
 
+=== What a factory method binds
+
+A method of a `@Factory` class that declares another bean is not a business method of the factory but the
+declaration of that bean, so what it binds, and the interceptor classes it names, belong to the bean it produces and
+are combined with whatever the produced type declares on itself. A static factory method produces a bean the same
+way and binds it the same way. The factory is a bean of its own besides, and is intercepted in its own right when it
+carries a binding or declares an `@AroundInvoke` method: an interceptor method the factory declares on itself
+interposes on the business methods of the factory and is never invoked on the object it produced, which is another
+object of another type. A factory that is intercepted in its own right also has Micronaut intercept the producer
+method, so producing the bean is intercepted once, by what the method binds, before the bean itself is.
+
 === Interceptor classes named on a superclass
 
 `jakarta.interceptor.Interceptors` is not declared `@Inherited`, so a subclass does not pick up the interceptor
@@ -155,7 +166,8 @@ An element is intercepted through the proxy Micronaut generates for its bean, so
 aspect oriented programming apply:
 
 * the intercepted class must be a bean;
-* an intercepted method must not be `private`, `static` or `final`;
+* an intercepted method must not be `private`, `static` or `final`. Every other access level is intercepted, a
+`protected` method included: the proxy is a subclass of the bean and overrides it as it overrides a public one;
 * a call from one method of a bean to another on `this` is intercepted as long as the proxy is the bean, which it
 is by default: the proxy is a subclass of the bean, so `this` is the proxy and the call goes through the method it
 overrides. A bean proxied with `@Around(proxyTarget = true)` is the opposite case. Its proxy delegates to a separate
@@ -210,3 +222,12 @@ three.
 A Kotlin suspending function is intercepted up to the point it first suspends rather than until it completes, as
 described under methods that return a future above, and the continuation the compiler adds after the arguments it
 declares is not shown to the interceptor.
+
+The accessors of a Kotlin property are methods of the class on the virtual machine, and are intercepted as its
+functions are: a binding on the accessor - `@get:Guarded`, `@set:Guarded` - binds that accessor, and a binding on the
+class binds both. A property has to be `open` to be intercepted, as a function does, because the proxy overrides its
+accessors; one that is not open is left uninterceptable rather than reported, since a property the all-open compiler
+plugin opens cannot be told from one that is really final.
+
+A Groovy method whose name begins with `$` is not part of the class as far as Micronaut is concerned - the name is
+reserved for what the compiler generates - so it is neither intercepted nor reported when it is final.

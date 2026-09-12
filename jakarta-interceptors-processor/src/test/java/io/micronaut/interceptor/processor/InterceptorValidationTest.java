@@ -212,6 +212,87 @@ class InterceptorValidationTest {
     }
 
     /**
+     * Two paths carrying the binding with different values of a member that is excluded from the binding, which is
+     * no conflict: the two occurrences bind by the same thing, since the member they differ in takes no part in the
+     * binding. Micronaut records an excluded member only where a value was supplied for it, so one of the two
+     * occurrences said nothing about the exclusion and the values were compared as declared.
+     */
+    @Test
+    void aBindingReachingAClassTwiceDifferingOnlyInAnExcludedMemberIsAccepted() {
+        compileSuccessfully("""
+            @Retention(RetentionPolicy.RUNTIME)
+            @InterceptorBinding
+            @interface Baz {
+                String value() default "shared";
+
+                @io.micronaut.context.annotation.NonBinding
+                String label() default "x";
+            }
+
+            @Retention(RetentionPolicy.RUNTIME)
+            @InterceptorBinding
+            @Baz
+            @interface Foo {
+            }
+
+            @Retention(RetentionPolicy.RUNTIME)
+            @InterceptorBinding
+            @Baz(label = "y")
+            @interface Bar {
+            }
+
+            @Foo
+            @Bar
+            @Singleton
+            public class Subject {
+                public String greet() {
+                    return "hello";
+                }
+            }
+            """);
+    }
+
+    /**
+     * The same two paths differing in a member that does take part in the binding, which is the conflict the
+     * specification reports: the exclusion of one member says nothing about the rest.
+     */
+    @Test
+    void aBindingReachingAClassTwiceDifferingInABindingMemberBesideAnExcludedOneIsReported() {
+        String error = compile("""
+            @Retention(RetentionPolicy.RUNTIME)
+            @InterceptorBinding
+            @interface Baz {
+                String value() default "shared";
+
+                @io.micronaut.context.annotation.NonBinding
+                String label() default "x";
+            }
+
+            @Retention(RetentionPolicy.RUNTIME)
+            @InterceptorBinding
+            @Baz(value = "one", label = "x")
+            @interface Foo {
+            }
+
+            @Retention(RetentionPolicy.RUNTIME)
+            @InterceptorBinding
+            @Baz(value = "two", label = "y")
+            @interface Bar {
+            }
+
+            @Foo
+            @Bar
+            @Singleton
+            public class Subject {
+                public String greet() {
+                    return "hello";
+                }
+            }
+            """);
+        assertTrue(error.contains("is bound by") && error.contains("Baz"), error);
+    }
+
+    /**
      * The conflict the specification reports on a class is one wherever a binding is declared. A method carries
      * its own bindings, and two of its annotations may disagree there just as they may on a class.
      */

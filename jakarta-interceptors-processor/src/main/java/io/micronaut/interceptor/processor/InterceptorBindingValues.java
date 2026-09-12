@@ -15,15 +15,21 @@
  */
 package io.micronaut.interceptor.processor;
 
+import io.micronaut.context.annotation.NonBinding;
 import io.micronaut.core.annotation.AnnotationClassValue;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationUtil;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
+import io.micronaut.inject.ast.ClassElement;
+import io.micronaut.inject.ast.ElementQuery;
+import io.micronaut.inject.ast.MethodElement;
+import io.micronaut.inject.visitor.VisitorContext;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -60,16 +66,24 @@ public final class InterceptorBindingValues {
      * another declaration of it. The specification leaves such a member to an extension to define; reading it as
      * the list of its elements is what makes it behave as any other member does.</p>
      *
+     * <p>An annotation held as the value of a member is reduced to what it binds by, exactly as the binding that
+     * holds it is: the members it defaults to filled in and the ones excluded from it left out. It is reduced here
+     * rather than where a binding is written out, so that a binding is canonicalized once, by one function, however
+     * deeply its members nest.</p>
+     *
      * <p>The array types are listed out rather than read through {@code java.lang.reflect.Array}, so that
      * comparing bindings stays as free of the reflection of the platform as the rest of the interception.</p>
      *
-     * @param value The value of a member
-     * @return The value, or a list of its elements when it is an array
+     * @param value    The value of a member
+     * @param excluded The members excluded from a binding annotation, by its name
+     * @return The value, a list of its elements when it is an array, or the binding it is reduced to when it is an
+     * annotation
      */
-    private static @Nullable Object normalize(@Nullable Object value) {
+    private static @Nullable Object normalize(@Nullable Object value, ExcludedMembers excluded) {
         return switch (value) {
             case null -> null;
-            case Object[] array -> Arrays.stream(array).map(InterceptorBindingValues::normalize).toList();
+            case AnnotationValue<?> annotation -> of(annotation, excluded);
+            case Object[] array -> Arrays.stream(array).map(element -> normalize(element, excluded)).toList();
             case int[] array -> Arrays.stream(array).boxed().toList();
             case long[] array -> Arrays.stream(array).boxed().toList();
             case double[] array -> Arrays.stream(array).boxed().toList();
@@ -129,19 +143,34 @@ public final class InterceptorBindingValues {
      * @return The bindings
      */
     public static Set<Binding> of(AnnotationMetadata annotationMetadata) {
+        return of(annotationMetadata, ExcludedMembers.AS_RECORDED);
+    }
+
+    /**
+     * Reads the bindings an element declares, with the members excluded from each of them left out however the
+     * element declared it.
+     *
+     * @param annotationMetadata The metadata of the element
+     * @param excluded           The members excluded from a binding annotation, by its name
+     * @return The bindings
+     */
+    public static Set<Binding> of(AnnotationMetadata annotationMetadata, ExcludedMembers excluded) {
         List<String> names = annotationMetadata.getAnnotationNamesByStereotype(JakartaInterceptors.INTERCEPTOR_BINDING);
         if (names.isEmpty()) {
             return Set.of();
         }
         Set<Binding> bindings = new LinkedHashSet<>(names.size());
         for (String name : names) {
-            annotationMetadata.findAnnotation(name).map(InterceptorBindingValues::of).ifPresent(bindings::add);
+            annotationMetadata.findAnnotation(name)
+                .map(annotation -> of(annotation, excluded))
+                .ifPresent(bindings::add);
         }
         return bindings;
     }
 
     /**
-     * Reduces one binding annotation to what it binds by.
+     * Reduces one binding annotation to what it binds by, going by the members it records as excluded from the
+     * binding.
      *
      * <p>Used at compilation time as well, so that the conflict between two declarations of a binding is decided
      * by exactly what decides whether an interceptor is bound at runtime.</p>
@@ -150,6 +179,23 @@ public final class InterceptorBindingValues {
      * @return The binding
      */
     public static Binding of(AnnotationValue<?> annotation) {
+        return of(annotation, ExcludedMembers.AS_RECORDED);
+    }
+
+    /**
+     * Reduces one binding annotation to what it binds by.
+     *
+     * <p>Micronaut records a member excluded from a binding only on an occurrence of the annotation that supplied a
+     * value for that member, so an occurrence that left every excluded member to its default records none of them
+     * and would otherwise be compared by values that take no part in the binding. The members excluded from the
+     * annotation type are therefore supplied as well, and this is the one place a binding is reduced, so that two
+     * occurrences are compared by the same members wherever either of them is read from.</p>
+     *
+     * @param annotation The binding annotation
+     * @param excluded   The members excluded from a binding annotation, by its name
+     * @return The binding
+     */
+    public static Binding of(AnnotationValue<?> annotation, ExcludedMembers excluded) {
         // the keys are read as strings so that two bindings compare by the names of their members, which a
         // CharSequence does not promise to do
         Map<String, Object> values = new LinkedHashMap<>();
@@ -157,19 +203,45 @@ public final class InterceptorBindingValues {
         Map<CharSequence, Object> defaults = annotation.getDefaultValues();
         if (defaults != null) {
             defaults.forEach((member, value) -> {
-                values.put(member.toString(), normalize(value));
+                values.put(member.toString(), normalize(value, excluded));
                 defaulted.add(member.toString());
             });
         }
-        annotation.getValues().forEach((member, value) -> values.put(member.toString(), normalize(value)));
+        annotation.getValues().forEach((member, value) -> values.put(member.toString(), normalize(value, excluded)));
         // an empty string no default was recorded for is left out, which is what makes a default of "" compare
         // equal whether it is declared or not; see isEmptyString
         values.entrySet().removeIf(entry -> !defaulted.contains(entry.getKey()) && isEmptyString(entry.getValue()));
         for (String nonBinding : annotation.stringValues(AnnotationUtil.NON_BINDING_ATTRIBUTE)) {
             values.remove(nonBinding);
         }
+        for (String nonBinding : excluded.of(annotation.getAnnotationName())) {
+            values.remove(nonBinding);
+        }
         values.remove(AnnotationUtil.NON_BINDING_ATTRIBUTE);
         return new Binding(annotation.getAnnotationName(), values);
+    }
+
+    /**
+     * Reads the members excluded from a binding annotation off the annotation type itself, remembering what it read:
+     * the same annotation is reached as often as it is declared, and it is the same annotation every time.
+     *
+     * @param context The visitor context, which resolves the annotation types
+     * @return The excluded members of any binding annotation the compilation can see
+     */
+    public static ExcludedMembers excludedMembersOf(VisitorContext context) {
+        Map<String, List<String>> read = new HashMap<>();
+        return name -> read.computeIfAbsent(name, annotationName -> {
+            ClassElement annotationType = context.getClassElement(annotationName).orElse(null);
+            if (annotationType == null) {
+                return List.of();
+            }
+            return annotationType.getEnclosedElements(ElementQuery.ALL_METHODS)
+                .stream()
+                .filter(member -> member.hasAnnotation(JakartaInterceptors.NONBINDING)
+                    || member.hasAnnotation(NonBinding.class))
+                .map(MethodElement::getName)
+                .toList();
+        });
     }
 
     /**
@@ -197,6 +269,30 @@ public final class InterceptorBindingValues {
      */
     private static boolean isEmptyString(@Nullable Object value) {
         return value instanceof String string && string.isEmpty();
+    }
+
+    /**
+     * The members excluded from a binding annotation, answered by the name of the annotation.
+     *
+     * <p>What an occurrence of an annotation records is not the whole of it: Micronaut records an excluded member
+     * only where a value was supplied for it. The complete set is a property of the annotation type, which the
+     * compilation can read and the runtime cannot, so it is supplied to wherever a binding is reduced.</p>
+     */
+    public interface ExcludedMembers {
+
+        /**
+         * What an occurrence of an annotation records itself, which is all there is to go by once the binding has
+         * been written out.
+         */
+        ExcludedMembers AS_RECORDED = name -> List.of();
+
+        /**
+         * The members excluded from a binding annotation.
+         *
+         * @param annotationName The name of the annotation
+         * @return The names of the excluded members, which is empty for an annotation excluding none
+         */
+        List<String> of(String annotationName);
     }
 
     /**
@@ -258,7 +354,7 @@ public final class InterceptorBindingValues {
                 case null -> builder.append("null");
                 case AnnotationClassValue<?> classValue -> quote(builder, classValue.getName());
                 case Class<?> type -> quote(builder, type.getName());
-                case AnnotationValue<?> annotation -> of(annotation).write(builder);
+                case Binding binding -> binding.write(builder);
                 case Enum<?> constant -> quote(builder, constant.name());
                 case List<?> list -> {
                     builder.append('[');

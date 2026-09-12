@@ -17,7 +17,6 @@ package io.micronaut.interceptor.processor.visitor;
 
 import io.micronaut.context.annotation.Bean;
 import io.micronaut.context.annotation.Executable;
-import io.micronaut.context.annotation.NonBinding;
 import io.micronaut.context.annotation.Prototype;
 import io.micronaut.context.annotation.Secondary;
 import io.micronaut.core.annotation.AnnotationClassValue;
@@ -511,8 +510,9 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
      * compared, whether or not either of them declares a value for them.</p>
      */
     private static void completeBindings(Element element, VisitorContext context) {
+        InterceptorBindingValues.ExcludedMembers members = InterceptorBindingValues.excludedMembersOf(context);
         for (AnnotationValue<?> binding : InterceptorClassScanner.bindingsOf(element)) {
-            List<String> excluded = excludedMembers(binding.getAnnotationName(), context);
+            List<String> excluded = members.of(binding.getAnnotationName());
             if (excluded.isEmpty()) {
                 continue;
             }
@@ -521,19 +521,6 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
                 .members(values)
                 .member(AnnotationUtil.NON_BINDING_ATTRIBUTE, excluded.toArray(String[]::new)));
         }
-    }
-
-    private static List<String> excludedMembers(String annotationName, VisitorContext context) {
-        ClassElement annotationType = context.getClassElement(annotationName).orElse(null);
-        if (annotationType == null) {
-            return List.of();
-        }
-        return annotationType.getEnclosedElements(ElementQuery.ALL_METHODS)
-            .stream()
-            .filter(member -> member.hasAnnotation(JakartaInterceptors.NONBINDING)
-                || member.hasAnnotation(NonBinding.class))
-            .map(MethodElement::getName)
-            .toList();
     }
 
     /**

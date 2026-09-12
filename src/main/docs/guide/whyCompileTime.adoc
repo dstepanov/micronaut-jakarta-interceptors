@@ -20,4 +20,8 @@ bean. There is no agent, no bytecode manipulation at startup and nothing to conf
 
 What is left to runtime is only what cannot be known earlier: which interceptor classes of the classpath match the
 binding annotations of an element, since an interceptor class and the beans it intercepts need not be compiled
-together. That is resolved from the bean context the first time an element is intercepted, and remembered.
+together. That is resolved from the bean context the first time an element is intercepted, and remembered under what
+the element declares - the interceptor classes it names, what its bindings are compared by, the interceptor methods
+its own class declares - rather than under the element or the object being intercepted. Two elements declaring the
+same interception therefore share one chain, and what is held grows with the interceptions an application declares
+rather than with its beans or its invocations.

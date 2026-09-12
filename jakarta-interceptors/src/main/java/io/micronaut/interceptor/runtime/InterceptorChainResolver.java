@@ -99,7 +99,7 @@ public final class InterceptorChainResolver {
         if (kind == null) {
             return List.of();
         }
-        ChainKey key = new ChainKey(interception, kind);
+        ChainKey key = ChainKey.of(kind, interception);
         List<InterceptorReference> chain = chains.get(key);
         if (chain == null) {
             // two threads may build the same chain, and the later put wins. The key is everything the chain is
@@ -126,24 +126,22 @@ public final class InterceptorChainResolver {
 
     private List<InterceptorReference> build(ChainKey key) {
         // the chain is built from the key alone, which is what lets it be remembered under the key
-        AnnotationValue<JakartaInterception> interception = key.interception();
         InterceptionKind kind = key.kind();
-        if (interception != null && interception.booleanValue("excluded").orElse(false)) {
+        if (key.excluded()) {
             return List.of();
         }
         // a map keyed by the interceptor class keeps the order while making sure an interceptor class that is both
         // named directly and bound by an annotation is only invoked once, at its first position
         Map<Class<?>, BeanDefinition<?>> ordered = new LinkedHashMap<>();
-        for (Class<?> interceptorClass : namedInterceptors(interception)) {
+        for (Class<?> interceptorClass : key.interceptors()) {
             ordered.putIfAbsent(interceptorClass, requireDescribing(interceptorClass));
         }
-        for (BeanDefinition<?> definition : boundInterceptors(interception)) {
+        for (BeanDefinition<?> definition : boundInterceptors(key.bindings())) {
             BeanDefinition<?> describing = describing(definition.getBeanType());
             ordered.putIfAbsent(definition.getBeanType(), describing == null ? definition : describing);
         }
         // the interceptor methods a class declares on itself are invoked after every interceptor class
-        Class<?> self = interception == null ? null
-            : interception.classValue("self").filter(type -> type != void.class).orElse(null);
+        Class<?> self = key.self();
         List<InterceptorReference> chain = new ArrayList<>(ordered.size() + 1);
         for (BeanDefinition<?> definition : ordered.values()) {
             chain.addAll(references(definition, kind, false));
@@ -155,30 +153,17 @@ public final class InterceptorChainResolver {
     }
 
     /**
-     * Reads the interceptor classes the processor resolved for the element at compilation time.
-     */
-    private static List<Class<?>> namedInterceptors(@Nullable AnnotationValue<JakartaInterception> interception) {
-        if (interception == null) {
-            return List.of();
-        }
-        return List.of(interception.classValues("interceptors"));
-    }
-
-    /**
      * Finds the interceptor classes whose binding annotations the element declares as well. The specification binds
      * an interceptor to an element when every binding of the interceptor is a binding of the element.
      *
      * <p>What a binding is compared by was worked out by the processor and written out on both of them, so what is
      * compared here are the strings it wrote rather than the annotations themselves.</p>
      */
-    private List<BeanDefinition<?>> boundInterceptors(@Nullable AnnotationValue<JakartaInterception> interception) {
-        if (interception == null) {
+    private List<BeanDefinition<?>> boundInterceptors(List<String> bindingsOfElement) {
+        if (bindingsOfElement.isEmpty()) {
             return List.of();
         }
-        Set<String> declared = Set.of(interception.stringValues("bindings"));
-        if (declared.isEmpty()) {
-            return List.of();
-        }
+        Set<String> declared = Set.copyOf(bindingsOfElement);
         List<BeanDefinition<?>> matching = new ArrayList<>();
         for (BeanDefinition<?> definition : allInterceptorClasses()) {
             AnnotationValue<JakartaInterceptorMethods> methods =
@@ -366,16 +351,51 @@ public final class InterceptorChainResolver {
      * <p>It is not the element itself. An executable method compares by its declaring type, its name and its
      * argument types, so a method two beans inherit from one superclass is one key for both, and so is a class
      * two factory methods produce, even where each of them binds it to different interceptors; the class of the
-     * intercepted object tells neither apart. The interception the processor declared on the element does: it
-     * carries the interceptor classes the element names, its bindings, its own interceptor methods and whether it
-     * excludes the rest, which with the kind is all a chain is built from. Equal keys therefore build equal chains,
-     * and the map stays as large as the number of different interceptions an application declares rather than
-     * growing with its elements or its beans.</p>
+     * intercepted object tells neither apart. What does tell them apart is the interception the processor declared
+     * on the element: the interceptor classes the element names, its bindings, its own interceptor methods and
+     * whether it excludes the rest, which with the kind is all a chain is built from. Equal keys therefore build
+     * equal chains, and the map stays as large as the number of different interceptions an application declares
+     * rather than growing with its elements or its beans.</p>
      *
-     * @param interception The interception declared on the element, or {@code null} where it declares none
+     * <p>Those members are read out into this key rather than the annotation itself being held, for two reasons.
+     * {@code AnnotationValue.equals} compares the sizes of the two member maps and then skips a member the other
+     * map does not have, so an element declaring {@code self} and an element declaring {@code bindings} compare
+     * equal - and, for the right class name, hash alike - while naming entirely different interceptor methods; one
+     * of them would then be intercepted by the chain of the other. And an annotation read from metadata that
+     * contains an evaluated expression is handed back wrapped around the evaluation context of the invocation,
+     * which holds the object being invoked and its arguments; holding that as a key would keep them alive for as
+     * long as this resolver. What is held here is what the processor wrote: class objects and strings, which belong
+     * to no invocation.</p>
+     *
      * @param kind         The kind of interception
+     * @param interceptors The interceptor classes the element names, in the order they are invoked in
+     * @param bindings     What the binding annotations of the element are compared by
+     * @param self         The class whose own interceptor methods interpose on the element, or {@code null}
+     * @param excluded     Whether the element is not intercepted at all
      */
-    record ChainKey(@Nullable AnnotationValue<JakartaInterception> interception, InterceptionKind kind) {
+    record ChainKey(InterceptionKind kind,
+                    List<Class<?>> interceptors,
+                    List<String> bindings,
+                    @Nullable Class<?> self,
+                    boolean excluded) {
+
+        /**
+         * Reads the key of an element out of the interception the processor declared on it.
+         *
+         * @param kind         The kind of interception
+         * @param interception The interception, or {@code null} where the element declares none
+         * @return The key
+         */
+        static ChainKey of(InterceptionKind kind, @Nullable AnnotationValue<JakartaInterception> interception) {
+            if (interception == null) {
+                return new ChainKey(kind, List.of(), List.of(), null, false);
+            }
+            return new ChainKey(kind,
+                List.of(interception.classValues("interceptors")),
+                List.of(interception.stringValues("bindings")),
+                interception.classValue("self").filter(type -> type != void.class).orElse(null),
+                interception.booleanValue("excluded").orElse(false));
+        }
     }
 
     /**

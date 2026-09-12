@@ -42,6 +42,9 @@ The processor reports a declaration the specification does not allow while it is
 * an interceptor method must not be `static` or `final`;
 * a class must not declare two interceptor methods of the same kind;
 * an `@AroundInvoke` or `@AroundTimeout` method must return `Object`;
+* an interceptor method must accept a single `InvocationContext`, so a declaration that accepts anything else is
+reported rather than left out of the chains in silence - a `@PostConstruct` or `@PreDestroy` method of an
+interceptor class that accepts nothing at all is that class's own callback and is not one of them;
 * a class annotated `@Interceptor` must declare at least one interceptor method.
 
 An interceptor method may have any access level, which the specification requires in sections 2.6 cb) to cd) and

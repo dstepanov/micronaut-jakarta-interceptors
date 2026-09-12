@@ -90,8 +90,12 @@ public final class BindingConflicts {
     private static @Nullable String conflictOf(AnnotationMetadata metadata,
                                                Collection<String> names,
                                                VisitorContext context) {
-        Set<String> conflicts = resolve(metadata, names, context, new HashMap<>(), new HashSet<>(), new ArrayList<>())
-            .conflicts();
+        // two occurrences of a binding disagree when what they bind by differs, which is what reducing each of them
+        // to its binding says - the members excluded from the annotation type left out of both, whether or not the
+        // occurrence that was read happens to record them
+        InterceptorBindingValues.ExcludedMembers excluded = InterceptorBindingValues.excludedMembersOf(context);
+        Set<String> conflicts = resolve(metadata, names, context, excluded,
+            new HashMap<>(), new HashSet<>(), new ArrayList<>()).conflicts();
         return conflicts.isEmpty() ? null : conflicts.iterator().next();
     }
 
@@ -102,6 +106,7 @@ public final class BindingConflicts {
      * @param names      The annotations of the metadata to follow, which for a member are only the ones it
      *                   declares itself
      * @param context    The visitor context
+     * @param excluded   The members excluded from a binding annotation, which take no part in what it binds by
      * @param resolved   What has already been worked out for an annotation type, which is the same wherever it is
      *                   declared
      * @param resolving  The annotation types being worked out further up, which is what ends a cycle
@@ -111,6 +116,7 @@ public final class BindingConflicts {
     private static Bindings resolve(AnnotationMetadata metadata,
                                     Collection<String> names,
                                     VisitorContext context,
+                                    InterceptorBindingValues.ExcludedMembers excluded,
                                     Map<String, Bindings> resolved,
                                     Set<String> resolving,
                                     List<String> cuts) {
@@ -134,10 +140,10 @@ public final class BindingConflicts {
             if (declaredNames.contains(name) && type.hasDeclaredAnnotation(JakartaInterceptors.INTERCEPTOR_BINDING)) {
                 AnnotationValue<?> value = metadata.findAnnotation(name).orElse(null);
                 if (value != null) {
-                    declared.put(name, InterceptorBindingValues.of(value));
+                    declared.put(name, InterceptorBindingValues.of(value, excluded));
                 }
             }
-            Bindings carried = of(name, type, context, resolved, resolving, cuts);
+            Bindings carried = of(name, type, context, excluded, resolved, resolving, cuts);
             conflicts.addAll(carried.conflicts());
             carried.bindings().forEach((carriedName, binding) -> {
                 InterceptorBindingValues.Binding existing = passed.putIfAbsent(carriedName, binding);
@@ -168,6 +174,7 @@ public final class BindingConflicts {
     private static Bindings of(String name,
                                ClassElement type,
                                VisitorContext context,
+                               InterceptorBindingValues.ExcludedMembers excluded,
                                Map<String, Bindings> resolved,
                                Set<String> resolving,
                                List<String> cuts) {
@@ -185,7 +192,8 @@ public final class BindingConflicts {
         int before = cuts.size();
         try {
             AnnotationMetadata metadata = type.getAnnotationMetadata();
-            Bindings bindings = resolve(metadata, metadata.getAnnotationNames(), context, resolved, resolving, cuts);
+            Bindings bindings = resolve(metadata, metadata.getAnnotationNames(), context, excluded,
+                resolved, resolving, cuts);
             // a cycle closed on this annotation is complete now that it is done; one closed on an annotation further
             // up is not, and stays recorded for that one to settle
             List<String> beneath = cuts.subList(before, cuts.size());

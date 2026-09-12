@@ -18,7 +18,6 @@ package io.micronaut.interceptor.processor.visitor;
 import io.micronaut.context.annotation.Bean;
 import io.micronaut.context.annotation.Executable;
 import io.micronaut.context.annotation.Factory;
-import io.micronaut.context.annotation.NonBinding;
 import io.micronaut.context.annotation.Prototype;
 import io.micronaut.context.annotation.Secondary;
 import io.micronaut.core.annotation.AnnotationClassValue;
@@ -589,26 +588,36 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
      * the bindings are looked for by their stereotype rather than among the annotations the element declares
      * itself.</p>
      *
+     * <p>A repeatable binding is as many bindings as the element carries occurrences of it, so the bindings are kept
+     * by type as a list rather than as one: what a member declares of a type replaces every occurrence of that type
+     * its class declares, and the occurrences of a type the member says nothing about are all inherited.</p>
+     *
      * @param element The element
      * @param owner   The class the element belongs to, or {@code null} when the element is the class
      * @return The bindings, as strings, in a stable order
      */
     private static String[] bindingsOf(Element element, @Nullable ClassElement owner) {
-        Map<String, InterceptorBindingValues.Binding> bindings = new LinkedHashMap<>();
+        Map<String, List<InterceptorBindingValues.Binding>> bindings = new LinkedHashMap<>();
         if (owner != null) {
-            for (InterceptorBindingValues.Binding binding : InterceptorBindingValues.of(owner.getAnnotationMetadata())) {
-                bindings.put(binding.name(), binding);
-            }
+            groupByType(InterceptorBindingValues.of(owner.getAnnotationMetadata()), bindings);
         }
         AnnotationMetadata own = InterceptorClassScanner.ownMetadataOf(element);
-        for (InterceptorBindingValues.Binding binding : InterceptorBindingValues.of(own)) {
-            bindings.put(binding.name(), binding);
-        }
+        Map<String, List<InterceptorBindingValues.Binding>> declared = new LinkedHashMap<>();
+        groupByType(InterceptorBindingValues.of(own), declared);
+        bindings.putAll(declared);
         return bindings.values()
             .stream()
+            .flatMap(List::stream)
             .map(InterceptorBindingValues.Binding::canonical)
             .sorted()
             .toArray(String[]::new);
+    }
+
+    private static void groupByType(Set<InterceptorBindingValues.Binding> read,
+                                    Map<String, List<InterceptorBindingValues.Binding>> into) {
+        for (InterceptorBindingValues.Binding binding : read) {
+            into.computeIfAbsent(binding.name(), name -> new ArrayList<>()).add(binding);
+        }
     }
 
     private static void bindingsMember(AnnotationValueBuilder<JakartaInterception> builder, String[] bindings) {
@@ -626,8 +635,9 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
      * compared, whether or not either of them declares a value for them.</p>
      */
     private static void completeBindings(Element element, VisitorContext context) {
+        InterceptorBindingValues.ExcludedMembers members = InterceptorBindingValues.excludedMembersOf(context);
         for (AnnotationValue<?> binding : InterceptorClassScanner.bindingsOf(element)) {
-            List<String> excluded = excludedMembers(binding.getAnnotationName(), context);
+            List<String> excluded = members.of(binding.getAnnotationName());
             if (excluded.isEmpty()) {
                 continue;
             }
@@ -636,19 +646,6 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
                 .members(values)
                 .member(AnnotationUtil.NON_BINDING_ATTRIBUTE, excluded.toArray(String[]::new)));
         }
-    }
-
-    private static List<String> excludedMembers(String annotationName, VisitorContext context) {
-        ClassElement annotationType = context.getClassElement(annotationName).orElse(null);
-        if (annotationType == null) {
-            return List.of();
-        }
-        return annotationType.getEnclosedElements(ElementQuery.ALL_METHODS)
-            .stream()
-            .filter(member -> member.hasAnnotation(JakartaInterceptors.NONBINDING)
-                || member.hasAnnotation(NonBinding.class))
-            .map(MethodElement::getName)
-            .toList();
     }
 
     /**
@@ -758,7 +755,7 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         Set<String> names = new LinkedHashSet<>();
         for (AnnotationClassValue<?> value : interceptors.annotationClassValues(AnnotationMetadata.VALUE_MEMBER)) {
             ClassElement named = context.getClassElement(value.getName()).orElse(null);
-            if (named == null || InterceptorClassScanner.scan(named).intercepts()) {
+            if (named == null || declaresAnInterceptorMethod(named)) {
                 names.add(value.getName());
             }
         }
@@ -818,6 +815,60 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
             }
         }
         return true;
+    }
+
+    /**
+     * Tells whether a class named by {@code @Interceptors} has an interceptor method to interpose with.
+     *
+     * <p>Reading the class again does not answer it on its own. An interceptor method that interposes on a
+     * lifecycle callback has the annotation that would make Micronaut invoke it as a callback of its own class
+     * taken off it once it has been recorded, and the metadata of a method is the same metadata wherever it is read
+     * from, so a class already visited in this compilation reads as declaring nothing. What it declared is recorded
+     * on it as {@code @JakartaInterceptorMethods} before that happens, which is what is read here: the descriptor
+     * of the class and of its superclasses, whether it was written while they were visited or while they were
+     * compiled before.</p>
+     *
+     * <p>A recorded method counts only while the class still has it. An interceptor method overridden by a method
+     * that is not one is no longer a method of the class - that is what the descriptor of its superclass records
+     * and the class itself no longer has - and a class left with nothing to interpose with is the one this filter
+     * is for.</p>
+     *
+     * @param named The class the element names
+     * @return Whether it declares an interceptor method
+     */
+    private static boolean declaresAnInterceptorMethod(ClassElement named) {
+        if (InterceptorClassScanner.scan(named).intercepts()) {
+            return true;
+        }
+        for (ClassElement type = named; type != null; type = type.getSuperType().orElse(null)) {
+            AnnotationValue<?> recorded = type.getAnnotationMetadata()
+                .getDeclaredAnnotation(JakartaInterceptorMethods.class);
+            if (recorded == null) {
+                continue;
+            }
+            for (InterceptionKind kind : InterceptionKind.values()) {
+                String[] recordedNames = recorded.stringValues(kind.member());
+                AnnotationClassValue<?>[] declaringTypes = recorded.annotationClassValues(kind.declaringTypesMember());
+                for (int i = 0; i < recordedNames.length && i < declaringTypes.length; i++) {
+                    if (stillDeclares(named, declaringTypes[i].getName(), recordedNames[i])) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Tells whether a class still has the method one of its classes declared, which it does not when a subclass
+     * overrides it: the methods of a class are the ones in effect on it, and an override takes the place of the
+     * method it overrides.
+     */
+    private static boolean stillDeclares(ClassElement element, String declaringType, String name) {
+        return element.getEnclosedElements(ElementQuery.ALL_METHODS)
+            .stream()
+            .anyMatch(method -> method.getName().equals(name)
+                && method.getDeclaringType().getName().equals(declaringType));
     }
 
     /**

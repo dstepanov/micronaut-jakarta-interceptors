@@ -27,6 +27,7 @@ import io.micronaut.inject.processing.ProcessingException;
 import io.micronaut.interceptor.annotation.InterceptionKind;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -35,6 +36,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Finds and validates the interceptor methods a class declares.
@@ -73,9 +75,19 @@ public final class InterceptorClassScanner {
         // the specification invokes all of them with the most general superclass first
         List<String> hierarchy = hierarchyOf(element);
         Map<InterceptionKind, Map<String, MethodElement>> byDeclaringClass = new HashMap<>();
+        // a declaration that does not accept an InvocationContext is not passed over: it is reported, once it is
+        // known who declared it. Which of them are reported depends on what the class turned out to be, so they are
+        // collected while the class is read and reported after
+        Map<MethodElement, String> malformed = new LinkedHashMap<>();
         for (MethodElement method : element.getEnclosedElements(ElementQuery.ALL_METHODS)) {
             for (Map.Entry<String, InterceptionKind> entry : INTERCEPTOR_METHODS.entrySet()) {
-                if (!method.hasDeclaredAnnotation(entry.getKey()) || !acceptsInvocationContext(method)) {
+                if (!method.hasDeclaredAnnotation(entry.getKey())) {
+                    continue;
+                }
+                if (!acceptsInvocationContext(method)) {
+                    if (!isOwnLifecycleCallback(method, entry.getValue())) {
+                        malformed.put(method, entry.getKey());
+                    }
                     continue;
                 }
                 validate(element, method, entry.getKey(), entry.getValue());
@@ -90,12 +102,77 @@ public final class InterceptorClassScanner {
                 }
             }
         }
+        reportMalformed(element, byDeclaringClass.keySet(), malformed);
         byDeclaringClass.forEach((kind, declarations) -> methods.put(kind, declarations.entrySet()
             .stream()
             .sorted(Comparator.comparingInt(declaration -> hierarchy.indexOf(declaration.getKey())))
             .map(Map.Entry::getValue)
             .toList()));
         return new InterceptorClassModel(element, methods);
+    }
+
+    /**
+     * Tells whether a lifecycle annotation on a method that accepts no {@code InvocationContext} is the class
+     * declaring a callback of its own lifecycle, which any class may do - an interceptor class included.
+     *
+     * <p>Such a callback takes no argument at all. One declared by an interceptor class is invoked when the
+     * interceptor itself is created or destroyed, rather than when the objects it intercepts are, and the
+     * specification says as much of it in section 2.7.</p>
+     */
+    private static boolean isOwnLifecycleCallback(MethodElement method, InterceptionKind kind) {
+        boolean lifecycle = kind == InterceptionKind.POST_CONSTRUCT || kind == InterceptionKind.PRE_DESTROY;
+        return lifecycle && method.getParameters().length == 0;
+    }
+
+    /**
+     * Reports a declaration the specification gives a signature that this one does not have.
+     *
+     * <p>Sections 2.6 and 2.7 give every interceptor method one parameter, an {@code InvocationContext}. A
+     * declaration with any other parameters interposes on nothing, and a class that declares one beside a valid
+     * interceptor method would otherwise satisfy every check there is and have that declaration left out of its
+     * chains without a word. The reference implementation refuses to deploy such a class, and this refuses to
+     * compile it.</p>
+     *
+     * <p>A lifecycle annotation is the one that says something else as well. Micronaut invokes a
+     * {@code @PostConstruct} or {@code @PreDestroy} method of a bean with whatever it asks to have injected into it,
+     * which is a callback of the class rather than a malformed interceptor method, so one is reported only where the
+     * class it belongs to is an interceptor class: where it declares {@code @Interceptor}, or where it interposes on
+     * the construction or the lifecycle of another object and its lifecycle callbacks are therefore read as
+     * interposing too.</p>
+     *
+     * @param element    The class
+     * @param interposes The kinds of interception the class was found to interpose on
+     * @param malformed  The declarations that accept no {@code InvocationContext}, by the annotation naming each
+     */
+    private static void reportMalformed(ClassElement element,
+                                        Set<InterceptionKind> interposes,
+                                        Map<MethodElement, String> malformed) {
+        if (malformed.isEmpty()) {
+            return;
+        }
+        boolean interceptorClass = element.hasDeclaredAnnotation(JakartaInterceptors.INTERCEPTOR)
+            || interposes.stream().anyMatch(kind -> kind != InterceptionKind.AROUND_INVOKE
+                && kind != InterceptionKind.AROUND_TIMEOUT);
+        for (Map.Entry<MethodElement, String> entry : malformed.entrySet()) {
+            MethodElement method = entry.getKey();
+            String annotation = entry.getValue();
+            InterceptionKind kind = INTERCEPTOR_METHODS.get(annotation);
+            boolean lifecycle = kind == InterceptionKind.POST_CONSTRUCT || kind == InterceptionKind.PRE_DESTROY;
+            if (lifecycle && !interceptorClass) {
+                continue;
+            }
+            throw new ProcessingException(method, "The @" + simpleName(annotation) + " method [" + method.getName()
+                + "] of [" + method.getDeclaringType().getName() + "] must accept a single "
+                + JakartaInterceptors.INVOCATION_CONTEXT + (lifecycle ? ", or no parameter at all, which is how a "
+                + "class declares a callback of its own lifecycle" : "") + ", but it accepts ["
+                + parameterTypesOf(method) + "]");
+        }
+    }
+
+    private static String parameterTypesOf(MethodElement method) {
+        return Arrays.stream(method.getParameters())
+            .map(parameter -> parameter.getType().getName())
+            .collect(Collectors.joining(", "));
     }
 
     /**

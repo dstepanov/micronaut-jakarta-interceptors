@@ -212,6 +212,87 @@ class InterceptorValidationTest {
     }
 
     /**
+     * Two paths carrying the binding with different values of a member that is excluded from the binding, which is
+     * no conflict: the two occurrences bind by the same thing, since the member they differ in takes no part in the
+     * binding. Micronaut records an excluded member only where a value was supplied for it, so one of the two
+     * occurrences said nothing about the exclusion and the values were compared as declared.
+     */
+    @Test
+    void aBindingReachingAClassTwiceDifferingOnlyInAnExcludedMemberIsAccepted() {
+        compileSuccessfully("""
+            @Retention(RetentionPolicy.RUNTIME)
+            @InterceptorBinding
+            @interface Baz {
+                String value() default "shared";
+
+                @io.micronaut.context.annotation.NonBinding
+                String label() default "x";
+            }
+
+            @Retention(RetentionPolicy.RUNTIME)
+            @InterceptorBinding
+            @Baz
+            @interface Foo {
+            }
+
+            @Retention(RetentionPolicy.RUNTIME)
+            @InterceptorBinding
+            @Baz(label = "y")
+            @interface Bar {
+            }
+
+            @Foo
+            @Bar
+            @Singleton
+            public class Subject {
+                public String greet() {
+                    return "hello";
+                }
+            }
+            """);
+    }
+
+    /**
+     * The same two paths differing in a member that does take part in the binding, which is the conflict the
+     * specification reports: the exclusion of one member says nothing about the rest.
+     */
+    @Test
+    void aBindingReachingAClassTwiceDifferingInABindingMemberBesideAnExcludedOneIsReported() {
+        String error = compile("""
+            @Retention(RetentionPolicy.RUNTIME)
+            @InterceptorBinding
+            @interface Baz {
+                String value() default "shared";
+
+                @io.micronaut.context.annotation.NonBinding
+                String label() default "x";
+            }
+
+            @Retention(RetentionPolicy.RUNTIME)
+            @InterceptorBinding
+            @Baz(value = "one", label = "x")
+            @interface Foo {
+            }
+
+            @Retention(RetentionPolicy.RUNTIME)
+            @InterceptorBinding
+            @Baz(value = "two", label = "y")
+            @interface Bar {
+            }
+
+            @Foo
+            @Bar
+            @Singleton
+            public class Subject {
+                public String greet() {
+                    return "hello";
+                }
+            }
+            """);
+        assertTrue(error.contains("is bound by") && error.contains("Baz"), error);
+    }
+
+    /**
      * The conflict the specification reports on a class is one wherever a binding is declared. A method carries
      * its own bindings, and two of its annotations may disagree there just as they may on a class.
      */
@@ -447,7 +528,122 @@ class InterceptorValidationTest {
                 }
             }
             """);
-        assertTrue(error.contains("declares no interceptor method"), error);
+        assertTrue(error.contains("The @AroundInvoke method [intercept]")
+            && error.contains("must accept a single jakarta.interceptor.InvocationContext"), error);
+    }
+
+    /**
+     * Sections 2.6 and 2.7 give every interceptor method one parameter, an {@code InvocationContext}. A second
+     * declaration that does not have it interposes on nothing, and the class satisfies every other check there is,
+     * so it was left out of the chains of the interceptor without a word. The reference implementation refuses to
+     * deploy such a class: Weld 7.0.0.CR1 reports WELD-001449, that the method "is not defined according to the
+     * specification", for exactly this shape.
+     */
+    @Test
+    void aMalformedInterceptorMethodBesideAValidOneIsReported() {
+        String error = compile("""
+            @Interceptor
+            public class Subject {
+                @AroundInvoke
+                public Object intercept(InvocationContext context) throws Exception {
+                    return context.proceed();
+                }
+
+                @AroundInvoke
+                public Object bad(String value) {
+                    return value;
+                }
+            }
+            """);
+        assertTrue(error.contains("The @AroundInvoke method [bad]")
+            && error.contains("must accept a single jakarta.interceptor.InvocationContext"), error);
+    }
+
+    /**
+     * The same for the kinds the specification gives the same signature, each of them beside a valid interceptor
+     * method of the class.
+     *
+     * @return A test for each kind
+     */
+    @TestFactory
+    List<DynamicTest> aMalformedDeclarationOfEveryKindIsReported() {
+        List<DynamicTest> tests = new ArrayList<>();
+        for (String[] kind : new String[][]{
+            {"AroundInvoke", "Object", "return null;"},
+            {"AroundTimeout", "Object", "return null;"},
+            {"AroundConstruct", "void", ""},
+            {"PostConstruct", "void", ""},
+            {"PreDestroy", "void", ""}}) {
+            String annotation = kind[0];
+            String returns = kind[1];
+            String body = kind[2];
+            tests.add(DynamicTest.dynamicTest("a malformed @" + annotation + " method", () -> {
+                String error = compile("""
+                    @Interceptor
+                    public class Subject {
+                        @AroundInvoke
+                        public Object intercept(InvocationContext context) throws Exception {
+                            return context.proceed();
+                        }
+
+                        @%1$s
+                        public %2$s bad(String value) {
+                            %3$s
+                        }
+                    }
+                    """.formatted(annotation, returns, body));
+                assertTrue(error.contains("The @" + annotation + " method [bad]")
+                    && error.contains("must accept a single jakarta.interceptor.InvocationContext"), error);
+            }));
+        }
+        return tests;
+    }
+
+    /**
+     * Section 2.7: a lifecycle callback an interceptor class declares for its own lifecycle takes no argument, and
+     * interposes on nothing. It is not a malformed interceptor method and has to keep compiling.
+     */
+    @Test
+    void aCallbackOfTheInterceptorsOwnLifecycleIsAccepted() {
+        compileSuccessfully("""
+            @Interceptor
+            public class Subject {
+                @AroundInvoke
+                public Object intercept(InvocationContext context) throws Exception {
+                    return context.proceed();
+                }
+
+                @PostConstruct
+                public void created() {
+                }
+
+                @PreDestroy
+                public void destroyed() {
+                }
+            }
+            """);
+    }
+
+    /**
+     * A lifecycle callback of an ordinary bean is invoked by Micronaut with whatever it asks to have injected into
+     * it, which is no business of this module: only the lifecycle callbacks of an interceptor class are read as
+     * interposing on another object, and only those are held to the signature of the specification.
+     */
+    @Test
+    void aLifecycleCallbackOfAnOrdinaryBeanWithAnInjectedParameterIsAccepted() {
+        compileSuccessfully("""
+            @Singleton
+            public class Subject {
+                @PostConstruct
+                void created(Helper helper) {
+                    helper.toString();
+                }
+            }
+
+            @Singleton
+            class Helper {
+            }
+            """);
     }
 
     /**

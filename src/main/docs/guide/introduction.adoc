@@ -25,6 +25,13 @@ parameters and the `getInterceptorBindings()` of version 2.1 and later.
 The interception is Micronaut's own: an interceptor class takes part in the ordinary Micronaut interceptor chain
 of the bean, so it composes with the advice of any other Micronaut module applied to the same bean.
 
+What is intercepted is the class the application wrote. Micronaut generates a bean of its own for each adapted
+method of a class - a method annotated `@EventListener`, say - which implements the interface the method is adapted
+to and invokes the method on the bean; the generated bean carries the annotations of that class, its interception
+among them. It is left out: the method it adapts is intercepted where the application declared it, on the bean
+itself, and the life of the generated bean is not a life the specification describes. So an interceptor bound to
+such a class is constructed once, for the one object, and is handed that object rather than the generated one.
+
 There is no Technology Compatibility Kit for Jakarta Interceptors to run against, and the suites that cover
 interceptors, the Jakarta Contexts and Dependency Injection ones, drive a CDI container rather than this. The specification is instead
 followed assertion by assertion: all 166 of them are recorded under <<conformance,Conformance>>, with the test that

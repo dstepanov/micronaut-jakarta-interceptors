@@ -643,11 +643,65 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         Set<String> names = new LinkedHashSet<>();
         for (AnnotationClassValue<?> value : interceptors.annotationClassValues(AnnotationMetadata.VALUE_MEMBER)) {
             ClassElement named = context.getClassElement(value.getName()).orElse(null);
-            if (named == null || InterceptorClassScanner.scan(named).intercepts()) {
+            if (named == null || declaresAnInterceptorMethod(named)) {
                 names.add(value.getName());
             }
         }
         return List.copyOf(names);
+    }
+
+    /**
+     * Tells whether a class named by {@code @Interceptors} has an interceptor method to interpose with.
+     *
+     * <p>Reading the class again does not answer it on its own. An interceptor method that interposes on a
+     * lifecycle callback has the annotation that would make Micronaut invoke it as a callback of its own class
+     * taken off it once it has been recorded, and the metadata of a method is the same metadata wherever it is read
+     * from, so a class already visited in this compilation reads as declaring nothing. What it declared is recorded
+     * on it as {@code @JakartaInterceptorMethods} before that happens, which is what is read here: the descriptor
+     * of the class and of its superclasses, whether it was written while they were visited or while they were
+     * compiled before.</p>
+     *
+     * <p>A recorded method counts only while the class still has it. An interceptor method overridden by a method
+     * that is not one is no longer a method of the class - that is what the descriptor of its superclass records
+     * and the class itself no longer has - and a class left with nothing to interpose with is the one this filter
+     * is for.</p>
+     *
+     * @param named The class the element names
+     * @return Whether it declares an interceptor method
+     */
+    private static boolean declaresAnInterceptorMethod(ClassElement named) {
+        if (InterceptorClassScanner.scan(named).intercepts()) {
+            return true;
+        }
+        for (ClassElement type = named; type != null; type = type.getSuperType().orElse(null)) {
+            AnnotationValue<?> recorded = type.getAnnotationMetadata()
+                .getDeclaredAnnotation(JakartaInterceptorMethods.class);
+            if (recorded == null) {
+                continue;
+            }
+            for (InterceptionKind kind : InterceptionKind.values()) {
+                String[] recordedNames = recorded.stringValues(kind.member());
+                AnnotationClassValue<?>[] declaringTypes = recorded.annotationClassValues(kind.declaringTypesMember());
+                for (int i = 0; i < recordedNames.length && i < declaringTypes.length; i++) {
+                    if (stillDeclares(named, declaringTypes[i].getName(), recordedNames[i])) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Tells whether a class still has the method one of its classes declared, which it does not when a subclass
+     * overrides it: the methods of a class are the ones in effect on it, and an override takes the place of the
+     * method it overrides.
+     */
+    private static boolean stillDeclares(ClassElement element, String declaringType, String name) {
+        return element.getEnclosedElements(ElementQuery.ALL_METHODS)
+            .stream()
+            .anyMatch(method -> method.getName().equals(name)
+                && method.getDeclaringType().getName().equals(declaringType));
     }
 
     private static boolean declaresInterception(MethodElement method) {

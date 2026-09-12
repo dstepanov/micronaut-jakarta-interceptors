@@ -26,7 +26,11 @@ public class ConstructInterceptor {
 
 An `@AroundConstruct` method that returns without proceeding leaves the bean unconstructed, which is an error.
 
-Every interceptor instance of the chain is created and injected before the first `@AroundConstruct` method runs.
+Every interceptor class the class of the bean is bound to has its instance created and injected before the first
+`@AroundConstruct` method runs, including one that declares no `@AroundConstruct` method and therefore takes no part
+in the construction. An interceptor class bound to one method of the bean alone is the exception: the methods of a
+bean are not reachable from a constructor interception, so its instance is created as the bean finishes being
+created, before anything is invoked on it.
 The bean itself is injected, and its `@PostConstruct` callbacks run, inside `proceed()`: Micronaut injects and
 initializes a bean in the same step that constructs it, so by the time `proceed()` returns the bean is complete.
 The specification completes injection only after every around-construct method has returned; see

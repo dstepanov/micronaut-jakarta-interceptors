@@ -69,8 +69,11 @@ final class InterceptorCreationListener implements BeanCreatedEventListener<Obje
                 }
             }
         }
-        // what was not taken by now is nobody's to take, except the instances of a target whose proxy comes next
-        InterceptorInstances.forgetPostConstructedExcept(isProxyTarget(event.getBeanDefinition()) ? bean : null);
+        // the instances of a bean no proxy will be created around are nobody's to take; the instances of a bean
+        // whose proxy is still being built around it stay where the proxy will find them
+        if (!isProxyTarget(event.getBeanDefinition())) {
+            InterceptorInstances.forgetPostConstructed(bean);
+        }
         return bean;
     }
 

@@ -20,7 +20,9 @@ import io.micronaut.context.BeanRegistration;
 import io.micronaut.context.BeanResolutionContext;
 import io.micronaut.context.DefaultBeanContext;
 import io.micronaut.context.DefaultBeanResolutionContext;
+import io.micronaut.context.DependentBeanProvider;
 import io.micronaut.core.annotation.Internal;
+import io.micronaut.inject.BeanDefinition;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -58,12 +60,19 @@ final class InterceptorInstances {
      */
     private static final ThreadLocal<@Nullable PostConstructed> POST_CONSTRUCTED = new ThreadLocal<>();
 
+    /**
+     * The annotation that makes a bean of a custom scope resolve to a proxy over a target the scope keeps. Named
+     * rather than referenced: it is declared by a module this one does not depend on, and what matters here is only
+     * what Micronaut itself reads it for, which is the same name.
+     */
+    private static final String SCOPED_PROXY = "io.micronaut.runtime.context.scope.ScopedProxy";
+
     private final BeanContext beanContext;
     private final Map<Class<?>, Object> instances = new HashMap<>(4);
     /**
      * The registrations of the instances that belong to this object alone, in the order they were created. An
-     * interceptor with a scope of its own - a {@code @Singleton} shared by every object it intercepts - is not
-     * among them: it is not the object's to destroy.
+     * interceptor with a scope of its own - a {@code @Singleton}, or a bean of a custom scope, shared by every object
+     * it intercepts - is not among them: it is not the object's to destroy. See {@link #own}.
      */
     private final List<BeanRegistration<?>> owned = new ArrayList<>(2);
     /**
@@ -155,9 +164,35 @@ final class InterceptorInstances {
         }
         try (BeanResolutionContext resolutionContext = new DefaultBeanResolutionContext(beanContext, null)) {
             Object instance = resolutionContext.getBean(interceptorClass);
-            owned.addAll(resolutionContext.getAndResetDependentBeans());
+            for (BeanRegistration<?> registration : resolutionContext.getAndResetDependentBeans()) {
+                own(registration);
+            }
             return instance;
         }
+    }
+
+    /**
+     * Keeps what a registration Micronaut reported as a dependent leaves this object to destroy.
+     *
+     * <p>A dependent is usually the object's alone, and is kept as it is. A bean of a custom scope that resolves
+     * through a proxy is not: Micronaut reports the proxy as a dependent, while the bean behind it belongs to the
+     * scope and serves every object the interceptor is bound to. Destroying such a registration in its own right
+     * removes that bean from its scope, which is how destroying one intercepted object used to destroy an interceptor
+     * another was still intercepted by. Micronaut does not do that when it destroys a proxy as the dependent of a
+     * bean - it destroys what the proxy itself depends on and leaves the scope alone - and the dependents of the
+     * proxy are what is kept here instead, so that the resources the interceptor really holds of its own still go.</p>
+     */
+    private void own(BeanRegistration<?> registration) {
+        BeanDefinition<?> definition = registration.getBeanDefinition();
+        if (definition.isProxy() && definition.hasStereotype(SCOPED_PROXY)) {
+            if (registration instanceof DependentBeanProvider provider) {
+                for (BeanRegistration<?> dependent : provider.dependentBeans()) {
+                    own(dependent);
+                }
+            }
+            return;
+        }
+        owned.add(registration);
     }
 
     /**

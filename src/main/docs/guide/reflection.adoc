@@ -49,6 +49,15 @@ which `micronaut-graal` turns into the reachability metadata of the image while 
 `getMethod()` and `getConstructor()` therefore answer inside an image as they do on a virtual machine, and an
 application declares nothing for them. Only the members that are actually intercepted are kept.
 
+Those members are the ones of the class the processor looks at. A bean a `@Factory` method produces is bound by the
+factory method, and it is the methods of the produced class that Micronaut advises, so they are not among the members
+the processor declares `@ReflectiveAccess` on. `getMethod()` answers for such a bean nonetheless: the executable
+method Micronaut generates looks the method up by a constant class, name and parameter list, which GraalVM registers
+for reflection on its own when it compiles the image. That is what `ProducedMemberLookupTest` of `test-suite-java`
+holds, on a virtual machine and inside the image, rather than anything this module declares - an application that
+compiles ahead of time with something other than GraalVM's own analysis of those lookups would have to declare the
+business methods of a produced class itself.
+
 `getInterceptorBindings()`, and the typed accessors beside it, are covered the same way. Micronaut builds an
 annotation instance as a dynamic proxy of the annotation type together with
 api:core.annotation.AnnotationValueProvider[], and a native image defines that proxy only when it was told to. The

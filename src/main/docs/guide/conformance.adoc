@@ -302,7 +302,7 @@ InjectionInsideAroundConstructTest pins the order
 | ea)
 | The getMethod method returns the method of the target class for which the interceptor was invoked.
 | Covered
-| InvocationContextTest, LifecycleInterceptionTest
+| InvocationContextTest, LifecycleInterceptionTest, ProducedMemberLookupTest
 
 | eb)
 | In a lifecycle callback interceptor for which there is no corresponding lifecycle callback method on the target class or in the AroundConstruct lifecycle callback interceptor method, getMethod returns null .

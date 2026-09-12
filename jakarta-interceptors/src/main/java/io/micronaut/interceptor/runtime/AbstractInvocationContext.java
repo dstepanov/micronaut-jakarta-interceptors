@@ -160,6 +160,14 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
      * first time, and proceeding it from there would run the intercepted element alone, leaving out the Micronaut
      * interceptors between the two.</p>
      *
+     * <p>Micronaut finds the position of the advice by its identity, resuming after the first interceptor of the
+     * invocation that is the same object. That is the position of this advice because the advice is a prototype
+     * created for the one object it intercepts, and Micronaut builds the interceptors of an invocation from the
+     * interceptor registrations of the proxy, one interceptor apiece: however much a bean declares, it is bound to
+     * one advice and that advice is in the array once. Were it there twice, resuming from its second occurrence
+     * would return to that occurrence rather than to what comes after it. {@code AdviceIdentityTest} holds the
+     * binding to one advice.</p>
+     *
      * @return The result of the invocation
      */
     @Nullable Object proceedTarget() {

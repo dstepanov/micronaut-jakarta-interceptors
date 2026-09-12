@@ -212,9 +212,10 @@ context
 | da)
 | Around-construct lifecycle callback interceptor methods are invoked after dependency injection has been completed on the instances of all interceptor classes associated with the target class.
 | Covered
-| AroundConstructInstancesTest: every interceptor class of the around-construct chain is created and injected
-before the first around-construct method runs. An interceptor class the object is bound to that declares no
-around-construct method takes no part in construction, and is created as the object finishes being created
+| AroundConstructInstancesTest, AssociatedInstancesTest: every interceptor class the class of the object is bound to
+is created and injected before the first around-construct method runs, including one that declares no
+around-construct method and therefore takes no part in the construction. An interceptor class bound to one method of
+the object alone is created as the object finishes being created; see the guide
 
 | daz)
 | Injection of the target component into interceptor instances that are invoked during the AroundConstruct lifecycle callback is not supported.

@@ -109,6 +109,46 @@ own, not by the ones that intercepted the construction and lifecycle of its targ
 in a `@PostConstruct` or `@AroundConstruct` method is not seen by its `@AroundInvoke` method there. Both sets of
 instances are still destroyed.
 
+=== A singleton interceptor and the order a closing context destroys its beans in
+
+An interceptor instance this module owns - one of an interceptor class without a scope of its own - is destroyed by
+the advice once the object it intercepted is gone, so the pre-destroy interception of that object always runs on an
+instance that is still usable. An interceptor class the application declares a `@Singleton`, or puts in any other
+scope it shares between objects, is a bean of the context instead, and when the context closes the order its
+singletons are destroyed in is Micronaut's to decide.
+
+Micronaut derives that order from what the definition of a bean requires: its injection points and the beans
+`@DependsOn` names. A bean bound to an interceptor by a binding annotation requires neither. The interceptor classes
+bound that way are resolved when the element is first intercepted, from the bean index, and neither the definition of
+the bean nor the advice Micronaut generated for it records which interceptor class answered. Where nothing orders two
+singletons, Micronaut destroys them in the order of the names of their definitions, so a singleton interceptor whose
+name sorts first is destroyed before a bean whose destruction it interposes on - and the pre-destroy interceptor
+method then runs on an instance whose own destruction callback has already been invoked, which section 2.3 cc) asks
+not to happen. `ShutdownOrderingTest` of `test-suite-java` holds both orders.
+
+A singleton interceptor that keeps no resource of its own is unaffected: its destruction callback, if it has one,
+runs late rather than early, and the interception itself works either way. One that does keep a resource it closes,
+or that is injected with a singleton of its own, has to be ordered explicitly. An application does that by naming the
+interceptor class among what the intercepted bean depends on:
+
+[source,java]
+----
+@Singleton
+@Guarded
+@DependsOn(GuardingInterceptor.class)
+public class GuardedService {
+
+    @PreDestroy
+    void close() {
+        // the interceptor of this destruction is still open
+    }
+}
+----
+
+Injecting the interceptor into the bean has the same effect, since an injection point is a requirement of the
+definition. Making Micronaut order the two without either needs it to know what the interception resolved, which is
+decided while the application runs and is not part of a bean definition.
+
 == What Micronaut requires
 
 An element is intercepted through the proxy Micronaut generates for its bean, so the ordinary rules of Micronaut

@@ -53,14 +53,17 @@ module stands against every one of them.
 |===
 | | Assertions
 
-| Covered by a test of this repository | 130
+| Covered by a test of this repository | 128
+| Covered by a test, with one exception described under Limitations | 2
 | Differs from the specification, deliberately | 5
 | Not applicable to a module without Jakarta Enterprise Beans, a deployment descriptor or a naming context | 27
 | A statement of intent, with nothing to verify | 4
 |===
 
 Everything the specification describes that applies to a module of this kind is covered by a test, apart from the
-5 differences below, each of which is deliberate.
+5 differences below, each of which is deliberate, and the order a closing context destroys a `@Singleton` interceptor
+in, which the two assertions about the destruction of interceptor instances name and <<limitations,Limitations>>
+describes.
 
 == Where this module differs
 |===
@@ -137,8 +140,10 @@ class level binding, are
 
 | cd)
 | Pre-destroy interceptor methods (annotated with the jakarta.annotation.PreDestroy annotation). Pre-destroy interceptor methods are invoked before the target instance and all interceptor instances associated with it are destroyed by the container.
-| Covered
-| LifecycleInterceptionTest
+| Covered, with one exception
+| LifecycleInterceptionTest; an interceptor class the application declares a `@Singleton` is a bean of the context,
+which a closing context may destroy before the bean whose destruction it interposes on, as `ShutdownOrderingTest`
+holds and <<limitations,Limitations>> describes
 
 | ce)
 | Around-construct interceptor methods (annotated with the jakarta.interceptor.AroundConstruct annotation). Around-construct interceptor methods interpose on the invocation of the constructor of the target instance.
@@ -206,8 +211,10 @@ context
 
 | cc)
 | Pre-destroy interceptor methods are invoked before the target instance and all interceptor instances associated with it are destroyed.
-| Covered
-| LifecycleInterceptionTest
+| Covered, with one exception
+| LifecycleInterceptionTest; the exception is an interceptor class the application declares a `@Singleton`, destroyed
+with the other singletons of the context rather than with the object it intercepted: see `ShutdownOrderingTest` and
+<<limitations,Limitations>>
 
 | da)
 | Around-construct lifecycle callback interceptor methods are invoked after dependency injection has been completed on the instances of all interceptor classes associated with the target class.

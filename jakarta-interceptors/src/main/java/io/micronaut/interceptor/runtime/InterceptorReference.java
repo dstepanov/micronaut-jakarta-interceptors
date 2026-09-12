@@ -34,11 +34,16 @@ import java.lang.reflect.InvocationTargetException;
  * @param method     The interceptor method
  * @param self       Whether the method is declared by the intercepted class itself, in which case it is invoked on
  *                   the intercepted instance rather than on an interceptor of its own
+ * @param reflective Whether the executable method reaches the interceptor method reflectively, which is the case
+ *                   for a method generated code cannot call
  * @author Denis Stepanov
  * @since 1.0
  */
 @Internal
-record InterceptorReference(Class<?> interceptorClass, ExecutableMethod<Object, Object> method, boolean self) {
+record InterceptorReference(Class<?> interceptorClass,
+                            ExecutableMethod<Object, Object> method,
+                            boolean self,
+                            boolean reflective) {
 
     /**
      * Invokes the interceptor method.
@@ -50,12 +55,20 @@ record InterceptorReference(Class<?> interceptorClass, ExecutableMethod<Object, 
      * access. A checked exception is rethrown unchanged too, as it is from an interceptor method called directly;
      * which checked exceptions are allowed through is decided by the kind of interception, further up.</p>
      *
+     * <p>Only a method that is reached reflectively has it taken off. An interceptor method reached directly threw
+     * whatever it threw itself, and an interceptor is free to throw that pair of exceptions on purpose; unwrapping
+     * on the shape of the exception alone would hand the caller the inside of something the interceptor meant to
+     * throw whole.</p>
+     *
      * @param interceptor The interceptor instance
      * @param context     The context to pass to it
      * @return Whatever the interceptor method returned, which is the result of the invocation for an
      * {@code @AroundInvoke} method and nothing for the others
      */
     @Nullable Object invoke(Object interceptor, InvocationContext context) {
+        if (!reflective) {
+            return method.invoke(interceptor, context);
+        }
         try {
             return method.invoke(interceptor, context);
         } catch (InvocationException e) {

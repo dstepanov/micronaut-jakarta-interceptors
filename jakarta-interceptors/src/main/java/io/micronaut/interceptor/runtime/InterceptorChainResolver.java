@@ -23,6 +23,7 @@ import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.core.annotation.Order;
+import io.micronaut.core.annotation.ReflectiveAccess;
 import io.micronaut.inject.BeanDefinition;
 import io.micronaut.inject.ExecutableMethod;
 import io.micronaut.interceptor.annotation.InterceptionKind;
@@ -299,12 +300,25 @@ public final class InterceptorChainResolver {
         List<InterceptorReference> references = new ArrayList<>(names.length);
         for (int i = 0; i < names.length; i++) {
             String declaringType = i < declaringTypes.length ? declaringTypes[i].getName() : null;
-            references.add(new InterceptorReference(definition.getBeanType(),
-                interceptorMethod(definition, names[i], declaringType), self));
+            ExecutableMethod<Object, Object> method = interceptorMethod(definition, names[i], declaringType);
+            references.add(new InterceptorReference(definition.getBeanType(), method, self, isReflective(method)));
         }
         // the list is shared between every chain that includes this interceptor, so it is not one of theirs to
         // change
         return List.copyOf(references);
+    }
+
+    /**
+     * Whether the executable method of an interceptor method reaches it reflectively rather than calling it.
+     *
+     * <p>Micronaut reaches a method generated code cannot call - one declared {@code private}, or a {@code protected}
+     * or package private one of a superclass in another package - reflectively, once it is told that reflection is
+     * permitted, and the processor tells it so for exactly those interceptor methods. The annotation it wrote is
+     * therefore what says which of them Micronaut wraps the exception of; see
+     * {@link InterceptorReference#invoke(Object, jakarta.interceptor.InvocationContext)}.</p>
+     */
+    private static boolean isReflective(ExecutableMethod<?, ?> method) {
+        return method.getAnnotationMetadata().hasDeclaredAnnotation(ReflectiveAccess.class);
     }
 
     /**

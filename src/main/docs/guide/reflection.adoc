@@ -16,6 +16,12 @@ interceptor class. For one of those the executable method Micronaut generates ca
 called directly, so declaring interceptor methods with at least package private access, in the package of the
 interceptor class or `public` in a superclass elsewhere, keeps every invocation of them free of reflection.
 
+A reflective call wraps whatever the method threw, and that wrapper is taken off again: what such an interceptor
+method throws travels to the interceptors before it and to the caller exactly as an interceptor method of any other
+access would throw it. The wrapper is taken off only where the call was reflective, which the same
+`@ReflectiveAccess` says, so an interceptor method reached directly that throws that pair of exceptions on purpose
+has it delivered whole.
+
 Three accessors of `InvocationContext` do reach for the reflection of the platform, because the types the
 specification has them return leave no choice:
 

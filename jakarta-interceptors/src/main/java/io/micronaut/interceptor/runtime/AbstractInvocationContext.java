@@ -160,6 +160,14 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
      * first time, and proceeding it from there would run the intercepted element alone, leaving out the Micronaut
      * interceptors between the two.</p>
      *
+     * <p>Micronaut finds the position of the advice by its identity, resuming after the first interceptor of the
+     * invocation that is the same object. That is the position of this advice because the advice is a prototype
+     * created for the one object it intercepts, and Micronaut builds the interceptors of an invocation from the
+     * interceptor registrations of the proxy, one interceptor apiece: however much a bean declares, it is bound to
+     * one advice and that advice is in the array once. Were it there twice, resuming from its second occurrence
+     * would return to that occurrence rather than to what comes after it. {@code AdviceIdentityTest} holds the
+     * binding to one advice.</p>
+     *
      * @return The result of the invocation
      */
     @Nullable Object proceedTarget() {
@@ -196,6 +204,26 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     @Override
     public AnnotationMetadata getAnnotationMetadata() {
         return context.getAnnotationMetadata();
+    }
+
+    /**
+     * The metadata the bindings of the intercepted element are read from, which is the metadata its interception was
+     * resolved from.
+     *
+     * <p>Micronaut hands the advice a wrapper around the metadata of an element whose annotations contain an
+     * evaluated expression anywhere, so that the expression can read the invocation. Asked for an annotation, that
+     * wrapper merges the members the element declares with the members its class declares, member by member - which
+     * for a binding resurrects the value the element replaced: a method declaring {@code @Zone} where its class
+     * declares {@code @Zone("a")} is bound by the default of the member, and the merged annotation says {@code "a"}.
+     * The wrapper is therefore taken off, leaving the metadata Micronaut compiled, where a declaration of the element
+     * replaces the one of its class whole, as resolving the chain read it. Core takes it off the same way before it
+     * resolves which interceptors are bound to an element.</p>
+     *
+     * <p>A binding whose member is itself an expression is read unevaluated, as the comparison that bound the
+     * interceptor read it.</p>
+     */
+    private AnnotationMetadata bindingMetadata() {
+        return getAnnotationMetadata().getTargetAnnotationMetadata();
     }
 
     /**
@@ -244,7 +272,7 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
         }
         // getInterceptorBinding returns the annotation itself, so one has to be built
         @SuppressWarnings("NoReflection")
-        T binding = getAnnotationMetadata().synthesize(annotationType);
+        T binding = bindingMetadata().synthesize(annotationType);
         return binding;
     }
 
@@ -293,7 +321,7 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
      * was compiled, so the metadata answers it having read nothing.</p>
      */
     private Annotation[] synthesizeBindings(Class<? extends Annotation> annotationType) {
-        AnnotationMetadata annotationMetadata = getAnnotationMetadata();
+        AnnotationMetadata annotationMetadata = bindingMetadata();
         if (annotationMetadata.findRepeatableAnnotation(annotationType.getName()).isPresent()) {
             // the bindings are the annotations themselves, so they have to be built
             @SuppressWarnings("NoReflection")
@@ -311,13 +339,13 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
      * that simply happens to be there. Read from the metadata, so nothing is built to answer it.
      */
     private boolean isBinding(Class<? extends Annotation> annotationType) {
-        return getAnnotationMetadata()
+        return bindingMetadata()
             .getAnnotationNamesByStereotype(JakartaInterceptorSupport.INTERCEPTOR_BINDING)
             .contains(annotationType.getName());
     }
 
     private Set<Annotation> resolveBindings() {
-        AnnotationMetadata annotationMetadata = getAnnotationMetadata();
+        AnnotationMetadata annotationMetadata = bindingMetadata();
         List<String> names = annotationMetadata.getAnnotationNamesByStereotype(JakartaInterceptorSupport.INTERCEPTOR_BINDING);
         if (names.isEmpty()) {
             return Collections.emptySet();

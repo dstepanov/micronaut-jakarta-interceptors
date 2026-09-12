@@ -473,26 +473,36 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
      * the bindings are looked for by their stereotype rather than among the annotations the element declares
      * itself.</p>
      *
+     * <p>A repeatable binding is as many bindings as the element carries occurrences of it, so the bindings are kept
+     * by type as a list rather than as one: what a member declares of a type replaces every occurrence of that type
+     * its class declares, and the occurrences of a type the member says nothing about are all inherited.</p>
+     *
      * @param element The element
      * @param owner   The class the element belongs to, or {@code null} when the element is the class
      * @return The bindings, as strings, in a stable order
      */
     private static String[] bindingsOf(Element element, @Nullable ClassElement owner) {
-        Map<String, InterceptorBindingValues.Binding> bindings = new LinkedHashMap<>();
+        Map<String, List<InterceptorBindingValues.Binding>> bindings = new LinkedHashMap<>();
         if (owner != null) {
-            for (InterceptorBindingValues.Binding binding : InterceptorBindingValues.of(owner.getAnnotationMetadata())) {
-                bindings.put(binding.name(), binding);
-            }
+            groupByType(InterceptorBindingValues.of(owner.getAnnotationMetadata()), bindings);
         }
         AnnotationMetadata own = InterceptorClassScanner.ownMetadataOf(element);
-        for (InterceptorBindingValues.Binding binding : InterceptorBindingValues.of(own)) {
-            bindings.put(binding.name(), binding);
-        }
+        Map<String, List<InterceptorBindingValues.Binding>> declared = new LinkedHashMap<>();
+        groupByType(InterceptorBindingValues.of(own), declared);
+        bindings.putAll(declared);
         return bindings.values()
             .stream()
+            .flatMap(List::stream)
             .map(InterceptorBindingValues.Binding::canonical)
             .sorted()
             .toArray(String[]::new);
+    }
+
+    private static void groupByType(Set<InterceptorBindingValues.Binding> read,
+                                    Map<String, List<InterceptorBindingValues.Binding>> into) {
+        for (InterceptorBindingValues.Binding binding : read) {
+            into.computeIfAbsent(binding.name(), name -> new ArrayList<>()).add(binding);
+        }
     }
 
     private static void bindingsMember(AnnotationValueBuilder<JakartaInterception> builder, String[] bindings) {

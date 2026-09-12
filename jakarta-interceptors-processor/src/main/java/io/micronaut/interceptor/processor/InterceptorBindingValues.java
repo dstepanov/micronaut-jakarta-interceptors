@@ -27,6 +27,7 @@ import io.micronaut.inject.ast.MethodElement;
 import io.micronaut.inject.visitor.VisitorContext;
 import org.jspecify.annotations.Nullable;
 
+import java.lang.annotation.Annotation;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -161,9 +162,20 @@ public final class InterceptorBindingValues {
         }
         Set<Binding> bindings = new LinkedHashSet<>(names.size());
         for (String name : names) {
-            annotationMetadata.findAnnotation(name)
-                .map(annotation -> of(annotation, excluded))
-                .ifPresent(bindings::add);
+            // a repeatable binding binds by every occurrence of it the element carries, each of which is a binding
+            // of its own: an interceptor declaring one of them is bound to the element, and one declaring an
+            // occurrence the element does not carry is not. Reading the annotation by name answers with the first
+            // occurrence alone, which made the order they were declared in decide what an element binds by
+            List<AnnotationValue<Annotation>> occurrences = annotationMetadata.getAnnotationValuesByName(name);
+            if (occurrences.isEmpty()) {
+                annotationMetadata.findAnnotation(name)
+                    .map(annotation -> of(annotation, excluded))
+                    .ifPresent(bindings::add);
+                continue;
+            }
+            for (AnnotationValue<Annotation> occurrence : occurrences) {
+                bindings.add(of(occurrence, excluded));
+            }
         }
         return bindings;
     }

@@ -43,7 +43,8 @@ public @interface Cached {
 ----
 
 <1> `jakarta.enterprise.util.Nonbinding` excludes a member from the binding, so two declarations may differ in it
-and still bind to each other.
+and still bind to each other. That holds wherever the two declarations are: two annotations each carrying `@Cached`
+with a different `comment` bring the same binding to a class, and nothing is reported.
 
 The value a member defaults to is filled in before the comparison, so `@Cached` and `@Cached(region = "default")`
 are the same binding. A default of an empty string or an empty array is no exception: `@Region("")` and `@Region`
@@ -63,6 +64,12 @@ not to `users`: a member the method leaves out takes its default, never the valu
 An interceptor applies to an element when *every* binding annotation the interceptor declares is also declared by
 the element. An interceptor declaring two bindings therefore only intercepts the elements declaring both, while an
 element declaring more bindings than an interceptor is still intercepted by it.
+
+A `@Repeatable` binding annotation is as many bindings as there are occurrences of it, and each occurrence is
+matched as any other binding is. An element carrying `@Tag("one")` and `@Tag("two")` is intercepted by an
+interceptor declaring `@Tag("one")`, and not by one declaring `@Tag("one")` and `@Tag("three")`; the order the
+occurrences are declared in says nothing. A method declaring occurrences of a binding its class declares as well
+replaces all of the class's occurrences of it, as a single binding declared twice would be replaced.
 
 == Bindings that come from elsewhere
 

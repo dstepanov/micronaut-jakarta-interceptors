@@ -93,6 +93,17 @@ application declared rather than one this module declares, and is left as it was
 same class is then as ambiguous with it as with any other bean declared twice, unless one of the two is marked
 `@Primary` or `@Secondary`.
 
+=== What a factory method binds
+
+A method of a `@Factory` class that declares another bean is not a business method of the factory but the
+declaration of that bean, so what it binds, and the interceptor classes it names, belong to the bean it produces and
+are combined with whatever the produced type declares on itself. A static factory method produces a bean the same
+way and binds it the same way. The factory is a bean of its own besides, and is intercepted in its own right when it
+carries a binding or declares an `@AroundInvoke` method: an interceptor method the factory declares on itself
+interposes on the business methods of the factory and is never invoked on the object it produced, which is another
+object of another type. A factory that is intercepted in its own right also has Micronaut intercept the producer
+method, so producing the bean is intercepted once, by what the method binds, before the bean itself is.
+
 === Interceptor classes named on a superclass
 
 `jakarta.interceptor.Interceptors` is not declared `@Inherited`, so a subclass does not pick up the interceptor

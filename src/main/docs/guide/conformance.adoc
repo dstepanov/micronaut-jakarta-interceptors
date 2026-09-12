@@ -794,7 +794,8 @@ factory produced
 | The set of interceptor bindings for a method or constructor are those declared at class level combined with those declared at method or constructor level.
 | Covered
 | CdiBindingRulesTest; SharedSuperclassBusinessMethodTest, where two classes bound differently inherit one method,
-and FactoryMethodsOfOneClassTest, where two factory methods bind one class differently
+and FactoryMethodsOfOneClassTest, where two factory methods bind one class differently; ProducerMethodsTest for a
+static factory method and for a factory that interposes on its own business methods
 
 | da)
 | Test a constructor.

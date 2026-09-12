@@ -37,6 +37,7 @@ import io.micronaut.inject.ast.ElementQuery;
 import io.micronaut.inject.ast.MemberElement;
 import io.micronaut.inject.ast.MethodElement;
 import io.micronaut.inject.ast.ParameterElement;
+import io.micronaut.inject.ast.PropertyElement;
 import io.micronaut.inject.processing.ProcessingException;
 import io.micronaut.inject.visitor.TypeElementVisitor;
 import io.micronaut.inject.visitor.VisitorContext;
@@ -280,8 +281,7 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         // belongs to the bean it produces, and is worked out with that bean as the owner
         boolean factory = isFactory(element);
         List<Producer> producers = producersOf(element);
-        List<MethodElement> methods = element.getEnclosedElements(ElementQuery.ALL_METHODS.onlyInstance())
-            .stream()
+        List<MethodElement> methods = methodsOf(element).stream()
             .filter(method -> !factory || !declaresAnotherBean(method))
             .toList();
         // a binding that disagrees with itself is a definition error wherever it is declared, so the members that
@@ -469,6 +469,13 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
      * would otherwise be passed over in silence. The specification names every non-static, non-private final method.
      * The final methods of {@code Object} are left out: every class has them, and they are not methods of the class
      * the specification has in mind.</p>
+     *
+     * <p>A method the compiler generated is left out as well, and with it the accessor of a Kotlin property. The
+     * accessor is an ordinary method of the class and is intercepted as one, but the language model answers whether
+     * it is final from the source alone, without the allowance it makes for a function of a class the all-open
+     * compiler plugin opens; an accessor the plugin opened is therefore not told apart from one that is really final,
+     * and reporting it would refuse a class that is perfectly proxyable. A property that is not open is left
+     * uninterceptable rather than reported, as Micronaut leaves it.</p>
      */
     private static void rejectFinalMethods(ClassElement element, List<MethodElement> methods) {
         for (MethodElement method : methods) {
@@ -761,6 +768,56 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
     private static boolean declaresInterception(MemberElement member) {
         return InterceptorClassScanner.ownMetadataOf(member).hasDeclaredAnnotation(JakartaInterceptors.INTERCEPTORS)
             || !InterceptorClassScanner.bindingsOf(member).isEmpty();
+    }
+
+    /**
+     * Every instance method of a class the interception may reach, the accessors of its properties included.
+     *
+     * <p>A method query answers the methods a class declares as methods. Kotlin declares a property rather than a
+     * pair of methods, and the accessors of that property are methods of the class on the virtual machine like any
+     * other - they can be bound, and class level advice reaches them - but the language model answers them only as
+     * the accessors of the property, so they are taken from the properties and added to the methods. A language that
+     * answers an accessor as a method as well, which Java and Groovy do, answers the same method twice, and the
+     * second answer is dropped.</p>
+     */
+    private static List<MethodElement> methodsOf(ClassElement element) {
+        List<MethodElement> methods = new ArrayList<>(
+            element.getEnclosedElements(ElementQuery.ALL_METHODS.onlyInstance()));
+        for (PropertyElement property : element.getSyntheticBeanProperties()) {
+            addAccessor(methods, property.getReadMethod().orElse(null));
+            addAccessor(methods, property.getWriteMethod().orElse(null));
+        }
+        return List.copyOf(methods);
+    }
+
+    /**
+     * Adds the accessor of a property to the methods of a class, unless the class answered it as a method already or
+     * it is no instance method.
+     */
+    private static void addAccessor(List<MethodElement> methods, @Nullable MethodElement accessor) {
+        if (accessor == null || accessor.isStatic()) {
+            return;
+        }
+        for (MethodElement method : methods) {
+            if (method.getName().equals(accessor.getName()) && sameParameters(method, accessor)) {
+                return;
+            }
+        }
+        methods.add(accessor);
+    }
+
+    private static boolean sameParameters(MethodElement one, MethodElement other) {
+        ParameterElement[] ours = one.getParameters();
+        ParameterElement[] theirs = other.getParameters();
+        if (ours.length != theirs.length) {
+            return false;
+        }
+        for (int i = 0; i < ours.length; i++) {
+            if (!ours[i].getType().getName().equals(theirs[i].getType().getName())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

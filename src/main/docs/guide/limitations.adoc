@@ -182,3 +182,12 @@ three.
 A Kotlin suspending function is intercepted up to the point it first suspends rather than until it completes, as
 described under methods that return a future above, and the continuation the compiler adds after the arguments it
 declares is not shown to the interceptor.
+
+The accessors of a Kotlin property are methods of the class on the virtual machine, and are intercepted as its
+functions are: a binding on the accessor - `@get:Guarded`, `@set:Guarded` - binds that accessor, and a binding on the
+class binds both. A property has to be `open` to be intercepted, as a function does, because the proxy overrides its
+accessors; one that is not open is left uninterceptable rather than reported, since a property the all-open compiler
+plugin opens cannot be told from one that is really final.
+
+A Groovy method whose name begins with `$` is not part of the class as far as Micronaut is concerned - the name is
+reserved for what the compiler generates - so it is neither intercepted nor reported when it is final.

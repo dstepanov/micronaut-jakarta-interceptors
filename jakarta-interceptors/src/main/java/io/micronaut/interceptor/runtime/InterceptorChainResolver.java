@@ -15,6 +15,7 @@
  */
 package io.micronaut.interceptor.runtime;
 
+import io.micronaut.aop.Adapter;
 import io.micronaut.aop.InterceptorKind;
 import io.micronaut.context.BeanContext;
 import io.micronaut.core.annotation.AnnotationMetadata;
@@ -107,6 +108,12 @@ public final class InterceptorChainResolver {
     private List<InterceptorReference> build(AnnotationMetadata metadata, InterceptorKind interceptorKind) {
         AnnotationValue<JakartaInterception> interception = metadata.getAnnotation(JakartaInterception.class);
         if (interception != null && interception.booleanValue("excluded").orElse(false)) {
+            return List.of();
+        }
+        if (interceptorKind == InterceptorKind.INTRODUCTION && metadata.hasStereotype(Adapter.class)) {
+            // a method Micronaut introduces on an adapter it generated - the listener it makes of an
+            // @EventListener method, say - is a bridge to a method of the bean, which is intercepted as itself
+            // when the bridge reaches it; the bridge carries the bean's bindings but is no business method of it
             return List.of();
         }
         boolean timeout = interception != null && interception.booleanValue("timeout").orElse(false);

@@ -53,9 +53,9 @@ module stands against every one of them.
 |===
 | | Assertions
 
-| Covered by a test of this repository | 129
+| Covered by a test of this repository | 130
 | Differs from the specification, deliberately | 4
-| Not applicable to a module without Jakarta Enterprise Beans, a deployment descriptor or a naming context | 29
+| Not applicable to a module without Jakarta Enterprise Beans, a deployment descriptor or a naming context | 28
 | A statement of intent, with nothing to verify | 4
 |===
 
@@ -178,8 +178,8 @@ class level binding, are
 
 | bb)
 | These interceptor instances are destroyed if the target instance fails to be created or when it is removed.
-| Not applicable
-| Destruction of an instance cannot be observed
+| Covered
+| InterceptorDestructionTest
 
 | c)
 | An interceptor instance may be the target of dependency injection. Dependency injection is performed when the interceptor instance is created, using the naming context of the associated target class.

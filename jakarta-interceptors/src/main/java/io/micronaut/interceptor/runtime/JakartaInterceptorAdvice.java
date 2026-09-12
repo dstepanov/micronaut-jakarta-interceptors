@@ -29,6 +29,7 @@ import io.micronaut.core.annotation.Internal;
 import io.micronaut.core.beans.BeanConstructor;
 import io.micronaut.inject.BeanDefinition;
 import io.micronaut.inject.ExecutableMethod;
+import jakarta.annotation.PreDestroy;
 import io.micronaut.interceptor.annotation.JakartaInterception;
 import jakarta.interceptor.Interceptor;
 import org.jspecify.annotations.Nullable;
@@ -43,7 +44,9 @@ import java.util.List;
  * the intercepted element itself - runs after all of them, which is the order the specification asks for.</p>
  *
  * <p>The advice is created for each object it intercepts rather than shared, because the interceptor instances it
- * holds belong to that one object: an interceptor may keep state for the life of the object it intercepts.</p>
+ * holds belong to that one object: an interceptor may keep state for the life of the object it intercepts. It is
+ * destroyed with that object, after the object's own pre-destroy interception has run, and destroys the interceptor
+ * instances then, which is the order section 2.3 asks for.</p>
  *
  * @author Denis Stepanov
  * @since 1.0
@@ -58,7 +61,6 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
 
     private final InterceptorChainResolver resolver;
     private final InterceptorInstances instances;
-    // one for each lifecycle event of the object this advice was created for
 
     /**
      * @param resolver    The resolver of the interceptor chains
@@ -72,6 +74,16 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
     @Override
     public int getOrder() {
         return Interceptor.Priority.APPLICATION;
+    }
+
+    /**
+     * Destroys the interceptor instances of the object this advice interposed on, which Micronaut destroys this
+     * advice after: an interceptor's own pre-destroy callback runs after the pre-destroy interception of the
+     * object it intercepted, and whatever was injected into the interceptor is destroyed with it.
+     */
+    @PreDestroy
+    void destroyInterceptorInstances() {
+        instances.destroyAll();
     }
 
     // implementing both MethodInterceptor and ConstructorInterceptor inherits two declarations of this method,
@@ -145,7 +157,9 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         try {
             invocation.proceed();
         } catch (Exception e) {
-            throw lifecycleFailure(e);
+            // an @AroundConstruct method, unlike a lifecycle callback interceptor method, may throw a checked
+            // exception, and it reaches whoever asked for the bean as it was thrown
+            throw sneakyThrow(e);
         }
         Object constructed = invocation.constructed();
         if (constructed == null) {

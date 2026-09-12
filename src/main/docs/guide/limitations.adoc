@@ -114,6 +114,13 @@ none.
 A class or method that is `final` is simply not intercepted, which is Micronaut's own rule; the specification asks
 for a definition error.
 
+An `@AroundConstruct` interceptor method that returns without proceeding is reported as an error, since whoever
+asked for the bean is owed an instance; the specification says only that no instance is created.
+
+A method the scheduler invokes is a timeout method however it is invoked: a call the application makes to it
+directly is also intercepted by the `@AroundTimeout` methods, and shown the schedule as its timer. Micronaut does
+not tell the two apart.
+
 == Languages
 
 Java, Groovy and Kotlin are supported, and each has a test suite of its own in this repository. The processor only

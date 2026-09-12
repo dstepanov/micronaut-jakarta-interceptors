@@ -98,11 +98,17 @@ final class ConstructorInvocationContextAdapter extends AbstractInvocationContex
      * {@code @AroundConstruct} method return {@code null} rather than the instance. The instance is what
      * {@link #getTarget()} returns from here on.
      *
+     * <p>The constructor runs once: an interceptor that proceeds a second time after the instance was created,
+     * as one may to recover from what the rest of the chain threw, is not handed a second instance in place of
+     * the one already made. A second attempt after a construction that failed does construct.</p>
+     *
      * @return Always {@code null}
      */
     @Override
     @Nullable Object proceedTarget() {
-        target = context.proceed();
+        if (target == null) {
+            target = context.proceed();
+        }
         return null;
     }
 

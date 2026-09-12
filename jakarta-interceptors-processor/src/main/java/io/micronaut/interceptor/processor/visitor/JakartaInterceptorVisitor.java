@@ -446,7 +446,13 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         // a binding the method declares replaces the one of the class, so the method carries a declaration of its
         // own as soon as what it is bound by differs from what its class is bound by
         boolean replacesBindings = !Arrays.equals(classBindings, methodBindings);
-        if (timeout || replacesBindings || !classDeclares || excludesClassInterceptors || !methodInterceptors.isEmpty()) {
+        // Micronaut applies the advice a class declares to the public and package private methods of the class, and
+        // leaves a protected one alone, although it is able to override it: the proxy is a subclass. The
+        // specification intercepts every non-static, non-private business method, so a protected one carries the
+        // interception it inherits from its class itself, which is what makes Micronaut advise it
+        boolean advisedOnlyWhenDeclaredOnTheMethod = method.isProtected();
+        if (timeout || replacesBindings || !classDeclares || excludesClassInterceptors
+            || !methodInterceptors.isEmpty() || advisedOnlyWhenDeclaredOnTheMethod) {
             // the list of the method replaces the one it would otherwise inherit from the class
             method.annotate(JakartaInterception.class, builder -> {
                 interceptorMembers(builder, interceptors);

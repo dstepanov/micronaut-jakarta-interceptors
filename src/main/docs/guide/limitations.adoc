@@ -115,7 +115,8 @@ An element is intercepted through the proxy Micronaut generates for its bean, so
 aspect oriented programming apply:
 
 * the intercepted class must be a bean;
-* an intercepted method must not be `private`, `static` or `final`;
+* an intercepted method must not be `private`, `static` or `final`. Every other access level is intercepted, a
+`protected` method included: the proxy is a subclass of the bean and overrides it as it overrides a public one;
 * a call from one method of a bean to another on `this` is intercepted as long as the proxy is the bean, which it
 is by default: the proxy is a subclass of the bean, so `this` is the proxy and the call goes through the method it
 overrides. A bean proxied with `@Around(proxyTarget = true)` is the opposite case. Its proxy delegates to a separate

@@ -843,7 +843,7 @@ method is left out of the proxy, so the binding simply never applies
 | ca)
 | Test a business method.
 | Covered
-| AroundInvokeTest
+| AroundInvokeTest; ProtectedBusinessMethodTest, where the business method is `protected`
 
 | cb)
 | Test a timeout method.

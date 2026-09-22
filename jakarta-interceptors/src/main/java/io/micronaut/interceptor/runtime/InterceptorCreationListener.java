@@ -18,7 +18,6 @@ package io.micronaut.interceptor.runtime;
 import io.micronaut.aop.HotSwappableInterceptedProxy;
 import io.micronaut.aop.Intercepted;
 import io.micronaut.aop.InterceptedProxy;
-import io.micronaut.aop.Interceptor;
 import io.micronaut.context.BeanRegistration;
 import io.micronaut.context.event.BeanCreatedEvent;
 import io.micronaut.context.event.BeanCreatedEventListener;
@@ -58,9 +57,11 @@ final class InterceptorCreationListener implements BeanCreatedEventListener<Obje
         Object bean = event.getBean();
         // only a bean Micronaut generated a proxy of carries advice, and only that advice holds interceptor
         // instances; anything else is not intercepted at all
-        if (bean instanceof Intercepted intercepted) {
+        if (bean instanceof Intercepted) {
             InterceptorInstances targetInstances = instancesOfTarget(bean);
-            for (BeanRegistration<Interceptor<?, ?>> registration : intercepted.$interceptorRegistrations()) {
+            // the advice is created for this bean alone, so Micronaut records it among the dependents of the bean,
+            // which are those of the bean being created and not of the beans it was injected with
+            for (BeanRegistration<?> registration : event.getDependentBeans()) {
                 if (registration.getBean() instanceof JakartaInterceptorAdvice advice) {
                     if (targetInstances != null) {
                         advice.shareInterceptorInstances(targetInstances);

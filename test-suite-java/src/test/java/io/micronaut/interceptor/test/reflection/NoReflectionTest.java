@@ -53,7 +53,8 @@ class NoReflectionTest {
             "invokesAPrivateInterceptorMethodReflectively");
         assertTrue(between.contains("java.lang.reflect.Method.invoke"),
             "a private interceptor method is invoked reflectively: " + between);
-        assertTrue(between.contains("io.micronaut.core.reflect.ReflectionUtils.invokeMethod"),
+        // invokeMethod, or invokeMethodPropagating since Micronaut 5.3, which rethrows what the method threw
+        assertTrue(between.stream().anyMatch(frame -> frame.startsWith("io.micronaut.core.reflect.ReflectionUtils.invokeMethod")),
             "a private interceptor method is invoked reflectively: " + between);
     }
 

@@ -16,7 +16,6 @@
 package io.micronaut.interceptor.runtime;
 
 import io.micronaut.aop.Intercepted;
-import io.micronaut.aop.Interceptor;
 import io.micronaut.context.BeanRegistration;
 import io.micronaut.context.event.BeanDestroyedEvent;
 import io.micronaut.context.event.BeanDestroyedEventListener;
@@ -49,8 +48,9 @@ final class InterceptorDestructionListener implements BeanDestroyedEventListener
     public void onDestroyed(BeanDestroyedEvent<Object> event) {
         // only a bean Micronaut generated a proxy of carries advice, and only that advice holds interceptor
         // instances; anything else is not intercepted at all
-        if (event.getBean() instanceof Intercepted intercepted) {
-            for (BeanRegistration<Interceptor<?, ?>> registration : intercepted.$interceptorRegistrations()) {
+        if (event.getBean() instanceof Intercepted) {
+            // the advice was created for this bean alone, and is among the dependents destroyed with it
+            for (BeanRegistration<?> registration : event.getDependentBeans()) {
                 if (registration.getBean() instanceof JakartaInterceptorAdvice advice) {
                     advice.beanDestroyed();
                 }

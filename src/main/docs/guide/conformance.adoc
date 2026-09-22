@@ -241,11 +241,8 @@ the object alone is created as the object finishes being created; see the guide
 
 | dd)
 | Dependency injection on the target instance is not completed until after invocation of all interceptor methods in the AroundConstruct interceptor chain complete successfully. Around-construct lifecycle callback interceptor methods should therefore exercise caution when invoking methods of the target instance since dependency injection on the target instance will not have been completed.
-| Differs
-| Micronaut injects and initializes an object in the method that constructs it, which is what the last
-around-construct method proceeds to: when `proceed()` returns to an around-construct method, the object has been
-injected and its post-construct callbacks and post-construct interceptor methods have run.
-InjectionInsideAroundConstructTest pins the order
+| Covered
+| InjectionAfterAroundConstructTest
 |===
 
 === Section 2.3.1 - Interceptor Environment

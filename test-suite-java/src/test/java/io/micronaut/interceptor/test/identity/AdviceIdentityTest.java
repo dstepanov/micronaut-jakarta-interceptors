@@ -1,7 +1,6 @@
 package io.micronaut.interceptor.test.identity;
 
 import io.micronaut.aop.Intercepted;
-import io.micronaut.aop.Interceptor;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.context.BeanRegistration;
 import io.micronaut.interceptor.runtime.JakartaInterceptorAdvice;
@@ -16,9 +15,8 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
  * <p>Handing the rest of the chain over to Micronaut is {@code InvocationContext.proceed(advice)}, and Micronaut
  * resumes after the first interceptor of the invocation that is the same object as the one handed to it. Were the
  * same advice object in the array of an invocation twice, resuming from its second occurrence would return to that
- * occurrence and never reach what comes after. Micronaut builds that array from the interceptor registrations of the
- * proxy, one interceptor apiece, and the advice is a prototype, so each bean has one of its own and it is there
- * once; this holds that to be so.</p>
+ * occurrence and never reach what comes after. The advice is a prototype, created for the bean as one of its
+ * dependents, so each bean has one of its own and it is there once; this holds that to be so.</p>
  */
 class AdviceIdentityTest {
 
@@ -29,9 +27,9 @@ class AdviceIdentityTest {
             assertEquals("done", service.work());
             assertEquals("again", service.boundAgain());
 
-            Intercepted intercepted = assertInstanceOf(Intercepted.class, service);
+            assertInstanceOf(Intercepted.class, service);
             int advices = 0;
-            for (BeanRegistration<Interceptor<?, ?>> registration : intercepted.$interceptorRegistrations()) {
+            for (BeanRegistration<?> registration : context.findBeanRegistration(service).orElseThrow().getDependentBeans()) {
                 if (registration.getBean() instanceof JakartaInterceptorAdvice) {
                     advices++;
                 }

@@ -31,10 +31,9 @@ Every interceptor class the class of the bean is bound to has its instance creat
 in the construction. An interceptor class bound to one method of the bean alone is the exception: the methods of a
 bean are not reachable from a constructor interception, so its instance is created as the bean finishes being
 created, before anything is invoked on it.
-The bean itself is injected, and its `@PostConstruct` callbacks run, inside `proceed()`: Micronaut injects and
-initializes a bean in the same step that constructs it, so by the time `proceed()` returns the bean is complete.
-The specification completes injection only after every around-construct method has returned; see
-<<limitations,Limitations>>.
+The bean itself is injected, and its `@PostConstruct` callbacks run, once every around-construct method has
+returned, as the specification describes: when `proceed()` returns to an around-construct method the instance
+exists, but its fields and methods are not injected yet.
 
 == Lifecycle callbacks
 
@@ -75,8 +74,9 @@ interceptor for it alone is destroyed as well.
 A bean proxied with a separate target, declared `@Around(proxyTarget = true)` or produced by a `@Factory` method,
 is two objects to Micronaut - the proxy its business methods are invoked on, and the target whose construction and
 lifecycle are intercepted - and one object to the specification. It has one instance of each interceptor class,
-so what an interceptor keeps in a `@PostConstruct` method is there in its `@AroundInvoke` method, unless the proxy
-resolves its target lazily; see <<limitations,Limitations>>.
+so what an interceptor keeps in a `@PostConstruct` method is there in its `@AroundInvoke` method, whether the proxy
+resolves its target lazily, may swap it, or fronts a target that already existed: Micronaut keeps the interceptors of
+a target with the target, and the proxy uses those of the target of each call.
 
 An interceptor declared `@Singleton` is shared by every object it intercepts and belongs to none of them, so it
 is destroyed with the context, as any other singleton is. The interceptor instances of a prototype that is never

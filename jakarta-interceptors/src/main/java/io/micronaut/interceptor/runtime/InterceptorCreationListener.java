@@ -15,11 +15,15 @@
  */
 package io.micronaut.interceptor.runtime;
 
+import io.micronaut.aop.InterceptedProxy;
 import io.micronaut.context.BeanRegistration;
+import io.micronaut.context.DependentBeanProvider;
 import io.micronaut.context.event.BeanCreatedEvent;
 import io.micronaut.context.event.BeanCreatedEventListener;
 import io.micronaut.core.annotation.Internal;
 import jakarta.inject.Singleton;
+
+import java.util.List;
 
 /**
  * Creates the interceptor instances of an object as the object is created.
@@ -33,6 +37,10 @@ import jakarta.inject.Singleton;
  * object. Creating them through that advice is what makes them the same instances the interceptions of the object go
  * on to use, rather than a second set nobody reads.</p>
  *
+ * <p>A proxy with a separate target, which intercepts its target with the advice of the target, selected that advice
+ * as it was constructed, as a dependent of the target: a target whose own construction and lifecycle are not
+ * intercepted had none yet as it was created. It is found among the dependents of the target the proxy holds.</p>
+ *
  * @author Denis Stepanov
  * @since 1.0
  */
@@ -42,11 +50,19 @@ final class InterceptorCreationListener implements BeanCreatedEventListener<Obje
 
     @Override
     public Object onCreated(BeanCreatedEvent<Object> event) {
-        for (BeanRegistration<?> registration : event.getDependentBeans()) {
+        createInterceptorInstances(event.getDependentBeans(), event);
+        if (event.getBean() instanceof InterceptedProxy<?> proxy
+            && proxy.interceptedTargetRegistration() instanceof DependentBeanProvider target) {
+            createInterceptorInstances(target.dependentBeans(), event);
+        }
+        return event.getBean();
+    }
+
+    private static void createInterceptorInstances(List<BeanRegistration<?>> dependents, BeanCreatedEvent<Object> event) {
+        for (BeanRegistration<?> registration : dependents) {
             if (registration.getBean() instanceof JakartaInterceptorAdvice advice) {
                 advice.createInterceptorInstances(event.getBeanDefinition());
             }
         }
-        return event.getBean();
     }
 }

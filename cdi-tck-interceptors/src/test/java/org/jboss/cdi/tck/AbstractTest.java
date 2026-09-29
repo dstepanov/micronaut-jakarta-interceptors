@@ -321,12 +321,6 @@ public abstract class AbstractTest {
             if (!metadata.hasAnnotation(INTERCEPTOR) || !supports(metadata, type)) {
                 continue;
             }
-            if (metadata.hasAnnotation(ADAPTER)) {
-                // an interceptor class is also described by the definition the module has Micronaut generate to
-                // index it, which carries the metadata of the class it was adapted from. It is the same
-                // interceptor class described a second time, and the container resolves it once
-                continue;
-            }
             Set<InterceptorBindingValues.Binding> bindings = new LinkedHashSet<>();
             for (String name : metadata.getAnnotationNamesByStereotype(INTERCEPTOR_BINDING)) {
                 if (!INTERCEPTOR_BINDING.equals(name)) {
@@ -341,8 +335,6 @@ public abstract class AbstractTest {
         }
         return resolved;
     }
-
-    private static final String ADAPTER = "io.micronaut.aop.Adapter";
 
     private static boolean supports(AnnotationMetadata metadata, InterceptionType type) {
         AnnotationValue<JakartaInterceptorMethods> methods = metadata.getAnnotation(JakartaInterceptorMethods.class);

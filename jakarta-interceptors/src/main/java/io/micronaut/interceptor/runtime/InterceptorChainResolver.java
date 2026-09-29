@@ -15,7 +15,6 @@
  */
 package io.micronaut.interceptor.runtime;
 
-import io.micronaut.aop.Adapter;
 import io.micronaut.aop.InterceptorKind;
 import io.micronaut.context.BeanContext;
 import io.micronaut.core.annotation.AnnotationMetadata;
@@ -83,18 +82,6 @@ public final class InterceptorChainResolver {
      * @return The interceptors, in the order they are invoked in
      */
     List<InterceptorReference> resolve(InterceptorKind interceptorKind, AnnotationMetadata metadata) {
-        if (metadata.hasAnnotation(Adapter.class)) {
-            // Micronaut generates a bean for each adapted method of a class - a method annotated @EventListener,
-            // say - which implements the interface the method is adapted to and invokes the method on the bean. It
-            // carries the metadata of the class whose method it adapts, so everything that class declares reaches
-            // it, the interception included, and it is nothing the application declared: it is the class itself
-            // that the specification constructs, initializes and removes, and its methods that are invoked. Leaving
-            // the generated bean out is what keeps the interception of that one object to one object's worth -
-            // interposing on an invocation of the adapted method here as well would run its chain twice, and
-            // interposing on the life of the generated bean would construct a second interceptor instance and hand
-            // it an object of a type the binding was never declared on
-            return List.of();
-        }
         AnnotationValue<JakartaInterception> interception = metadata.getAnnotation(JakartaInterception.class);
         boolean timeout = interception != null && interception.booleanValue("timeout").orElse(false);
         InterceptionKind kind = InterceptionKind.of(interceptorKind, timeout);
@@ -127,7 +114,7 @@ public final class InterceptorChainResolver {
      */
     List<InterceptorReference> resolveAssociated(AnnotationMetadata metadata) {
         AnnotationValue<JakartaInterception> interception = metadata.getAnnotation(JakartaInterception.class);
-        if (interception == null || metadata.hasAnnotation(Adapter.class)) {
+        if (interception == null) {
             return List.of();
         }
         AssociatedKey key = new AssociatedKey(

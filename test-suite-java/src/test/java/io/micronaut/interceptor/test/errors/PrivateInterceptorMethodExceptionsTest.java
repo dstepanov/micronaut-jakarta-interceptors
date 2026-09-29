@@ -12,9 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * A private interceptor method is reached reflectively, which wraps what it throws. What it throws still travels
- * through the chain as it was thrown, to the interceptors before it and to the caller, whatever kind of interception
- * the method interposes on.
+ * A private interceptor method is reached reflectively. What it throws still travels through the chain as it was
+ * thrown, to the interceptors before it and to the caller, whatever kind of interception the method interposes on.
  */
 class PrivateInterceptorMethodExceptionsTest {
 

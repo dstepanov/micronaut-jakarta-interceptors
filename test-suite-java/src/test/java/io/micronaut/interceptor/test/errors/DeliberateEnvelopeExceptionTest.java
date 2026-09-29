@@ -10,11 +10,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * What an interceptor method throws travels as it was thrown, including where what it throws happens to look like
- * the envelope Micronaut puts the exception of a reflectively reached method in.
+ * the envelope a reflective call puts an exception in.
  *
- * <p>That envelope is taken off a reflectively reached interceptor method, so that what the method threw reaches the
- * caller - see {@link PrivateInterceptorMethodExceptionsTest}. An interceptor method reached directly threw what it
- * threw, and nothing is taken off it.</p>
+ * <p>A reflectively reached interceptor method does not throw that envelope: Micronaut rethrows what the method threw
+ * instead - see {@link PrivateInterceptorMethodExceptionsTest}. Nothing is taken off what an interceptor method
+ * throws, so one that throws that pair of exceptions on purpose has it delivered whole.</p>
  */
 class DeliberateEnvelopeExceptionTest {
 

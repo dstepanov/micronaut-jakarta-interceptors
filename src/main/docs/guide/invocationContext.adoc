@@ -46,7 +46,8 @@ running. For a lifecycle callback that is all it does: the bean is neither repla
 
 An exception thrown by an interceptor method reaches the caller unchanged, checked exceptions included: the
 intercepted method is what the caller sees, and it declares them. That holds for a `private` interceptor method as
-well, which is reached reflectively: the exception the reflective call wraps what it threw in is taken off again.
+well, which is reached reflectively: Micronaut rethrows what it threw rather than the exception the reflective call
+wraps it in.
 
 An `@AroundConstruct` method may throw what the constructor it interposes on declares, and lets through what the
 constructor throws. The bean is then not created, and Micronaut reports it as it reports a constructor that is not

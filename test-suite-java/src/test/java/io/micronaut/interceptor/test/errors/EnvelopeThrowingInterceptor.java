@@ -8,9 +8,9 @@ import jakarta.interceptor.InvocationContext;
 import java.lang.reflect.InvocationTargetException;
 
 /**
- * An interceptor whose method throws, on purpose, exactly what Micronaut wraps the exception of a reflectively
- * reached method in: an {@code InvocationException} caused by an {@code InvocationTargetException}. Its method is
- * public, so it is reached directly and nothing wrapped it.
+ * An interceptor whose method throws, on purpose, the envelope a reflective call puts an exception in: an
+ * {@code InvocationException} caused by an {@code InvocationTargetException}. Its method is public, so it is reached
+ * directly and nothing wrapped it.
  */
 @Interceptor
 @Enveloped

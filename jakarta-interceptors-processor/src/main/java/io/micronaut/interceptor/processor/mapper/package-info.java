@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 /**
- * The annotation mappers that give the annotations of the Jakarta Interceptors specification their Micronaut
- * meaning.
+ * The annotation mapper that gives {@code jakarta.enterprise.util.Nonbinding} its Micronaut meaning.
  *
  * @author Denis Stepanov
  * @since 1.0

@@ -87,6 +87,16 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         return VisitorKind.ISOLATING;
     }
 
+    /**
+     * The annotations that make a class one this visitor has something to declare on.
+     *
+     * <p>They are also what brings a class to the attention of the bean processor, which only looks at a class that
+     * carries one of the annotations a visitor supports. An interceptor class need not carry anything else: the
+     * visitor makes it a bean, and that bean is only written out when the processor looks at the class. Every
+     * interceptor method annotation is therefore listed, the lifecycle callbacks included, so that a class named by
+     * {@code @Interceptors} whose only interceptor methods interpose on {@code @PostConstruct} or
+     * {@code @PreDestroy} becomes a bean as well.</p>
+     */
     @Override
     public Set<String> getSupportedAnnotationNames() {
         return Set.of(
@@ -94,7 +104,10 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
             JakartaInterceptors.INTERCEPTORS,
             JakartaInterceptors.INTERCEPTOR_BINDING,
             JakartaInterceptors.AROUND_INVOKE,
-            JakartaInterceptors.AROUND_CONSTRUCT
+            JakartaInterceptors.AROUND_TIMEOUT,
+            JakartaInterceptors.AROUND_CONSTRUCT,
+            JakartaInterceptors.POST_CONSTRUCT,
+            JakartaInterceptors.PRE_DESTROY
         );
     }
 
@@ -148,15 +161,12 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
     /**
      * Tells whether the application declares a class a bean of its own, as opposed to the module making it one.
      *
-     * <p>{@code @Interceptor} is mapped to {@code @Bean}, which is what makes an interceptor class a bean however
-     * little else it declares. That {@code @Bean} is the module's rather than the application's, and it is not told
-     * apart from one the class declares by reading the metadata: both are a declared {@code @Bean}. Counting it
-     * would read every {@code @Interceptor} class as a bean the application declared, and the definition the module
-     * declares for it would never be made the secondary one a factory producing the same class takes the place
-     * of - the two would be ambiguous instead. So on a class declaring {@code @Interceptor}, {@code @Bean} itself
-     * is left out, and what counts is a scope or another annotation that is a bean declaration, such as
-     * {@code @Singleton} or {@code @Prototype}. A plain {@code @Bean} on such a class declares nothing
-     * {@code @Interceptor} does not already declare.</p>
+     * <p>What counts is a scope or an annotation that is a bean declaration, such as {@code @Singleton} or
+     * {@code @Prototype}. An interceptor class that declares neither is made a bean by the module, as a prototype
+     * and a secondary definition; see {@link #declareInterceptorMethods}. A plain {@code @Bean} on a class declaring
+     * {@code @Interceptor} is not counted: every such class is made a bean anyway, so {@code @Bean} declares nothing
+     * {@code @Interceptor} does not, and counting it would keep the definition from being made the secondary one a
+     * factory producing the same class takes the place of - the two would be ambiguous instead.</p>
      *
      * <p>A class the application does declare a bean is left as it declared it, which is how Micronaut treats any
      * bean: an {@code @Interceptor} class that is also {@code @Singleton} is a singleton and not a secondary
@@ -172,9 +182,9 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
             // of the annotation rather than as a scope annotation of its own
             return true;
         }
-        boolean mapped = element.hasDeclaredAnnotation(JakartaInterceptors.INTERCEPTOR);
+        boolean interceptorClass = element.hasDeclaredAnnotation(JakartaInterceptors.INTERCEPTOR);
         for (String name : element.getAnnotationNamesByStereotype(Bean.class.getName())) {
-            if (!mapped || !Bean.class.getName().equals(name)) {
+            if (!interceptorClass || !Bean.class.getName().equals(name)) {
                 return true;
             }
         }

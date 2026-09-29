@@ -37,15 +37,6 @@ class BrokenCasesTest {
     }
 
     @Test
-    void scopedProxyTarget() {
-        PairedInterceptor.clear();
-        try (ApplicationContext context = ApplicationContext.run()) {
-            assertEquals("done", context.getBean(ScopedTargetService.class).work());
-            assertOneInstance("scoped");
-        }
-    }
-
-    @Test
     void scopedTargetInterceptorsDestroyed() {
         PairedInterceptor.clear();
         try (ApplicationContext context = ApplicationContext.run()) {

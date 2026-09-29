@@ -3,6 +3,7 @@ package io.micronaut.interceptor.test.identity;
 import io.micronaut.aop.Intercepted;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.context.BeanRegistration;
+import io.micronaut.context.DependentBeanProvider;
 import io.micronaut.interceptor.runtime.JakartaInterceptorAdvice;
 import org.junit.jupiter.api.Test;
 
@@ -29,7 +30,7 @@ class AdviceIdentityTest {
 
             assertInstanceOf(Intercepted.class, service);
             int advices = 0;
-            for (BeanRegistration<?> registration : context.findBeanRegistration(service).orElseThrow().getDependentBeans()) {
+            for (BeanRegistration<?> registration : ((DependentBeanProvider) context.findBeanRegistration(service).orElseThrow()).dependentBeans()) {
                 if (registration.getBean() instanceof JakartaInterceptorAdvice) {
                     advices++;
                 }

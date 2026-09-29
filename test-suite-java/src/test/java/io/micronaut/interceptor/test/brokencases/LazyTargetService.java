@@ -6,7 +6,7 @@ import jakarta.inject.Singleton;
 
 @Singleton
 @Paired
-@Around(proxyTarget = true, lazy = true)
+@Around(proxyTarget = true, lazy = true, lazyInterceptorsPerTarget = true)
 public class LazyTargetService {
     public String work() {
         return "done";

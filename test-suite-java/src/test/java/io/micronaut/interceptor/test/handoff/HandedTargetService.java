@@ -6,7 +6,7 @@ import jakarta.inject.Singleton;
 /** Proxied with a separate target, and watched by {@link MeddlingListener}. */
 @Singleton
 @Handed
-@Around(proxyTarget = true)
+@Around(proxyTarget = true, lazyInterceptorsPerTarget = true)
 public class HandedTargetService {
 
     public String work() {

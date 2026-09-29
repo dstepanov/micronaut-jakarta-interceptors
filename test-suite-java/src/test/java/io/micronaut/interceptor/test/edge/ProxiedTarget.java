@@ -10,7 +10,7 @@ import java.lang.annotation.Target;
 /**
  * Has Micronaut proxy a bean by wrapping a separate instance of it, rather than by making the proxy the bean.
  */
-@Around(proxyTarget = true)
+@Around(proxyTarget = true, lazyInterceptorsPerTarget = true)
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE, ElementType.METHOD})
 public @interface ProxiedTarget {

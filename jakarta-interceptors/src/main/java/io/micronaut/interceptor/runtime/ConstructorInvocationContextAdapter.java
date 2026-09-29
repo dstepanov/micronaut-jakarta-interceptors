@@ -21,11 +21,9 @@ import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.core.beans.BeanConstructor;
 import io.micronaut.interceptor.MicronautConstructorInvocationContext;
-import io.micronaut.core.type.Argument;
 import org.jspecify.annotations.Nullable;
 
 import java.lang.reflect.Constructor;
-import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -48,8 +46,6 @@ final class ConstructorInvocationContextAdapter extends AbstractInvocationContex
      */
     private final List<InterceptorReference> associated;
     private @Nullable Object target;
-    private @Nullable Constructor<?> constructor;
-    private boolean constructorResolved;
     private boolean proceeding;
 
     ConstructorInvocationContextAdapter(ConstructorInvocationContext<Object> context,
@@ -80,14 +76,19 @@ final class ConstructorInvocationContextAdapter extends AbstractInvocationContex
      * reflection of an {@code @AroundConstruct} interception, and it only happens when an interceptor asks for the
      * constructor.
      *
+     * <p>What Micronaut constructs for a bean that also has around advice is the proxy it generated, whose
+     * constructor takes a few arguments of its own after the declared ones. The bean constructor it hands a
+     * constructor interceptor describes the constructor of the target class regardless, and resolves and remembers
+     * that constructor itself, so the declaring type and the parameters are the ones the specification asks
+     * for.</p>
+     *
      * @return The constructor of the target class, or {@code null} when it cannot be found
      */
     @Override
     public @Nullable Constructor<?> getConstructor() {
-        if (!constructorResolved) {
-            constructorResolved = true;
-            constructor = resolveConstructor(context.getConstructor());
-        }
+        // getConstructor returns a java.lang.reflect.Constructor, which only the platform makes
+        @SuppressWarnings("NoReflection")
+        @Nullable Constructor<?> constructor = context.getConstructor().getTargetConstructor();
         return constructor;
     }
 
@@ -188,30 +189,5 @@ final class ConstructorInvocationContextAdapter extends AbstractInvocationContex
     @Override
     String description() {
         return "constructor " + context.getConstructor().getDescription(false);
-    }
-
-    /**
-     * Finds the constructor of the class the specification calls the target class.
-     *
-     * <p>What Micronaut constructs for a bean that also has around advice is the proxy it generated, whose
-     * constructor takes a few arguments of its own after the declared ones. It describes the constructor of the
-     * target class to a constructor interceptor regardless, so the declaring type and the arguments read here are
-     * the ones the specification asks for.</p>
-     *
-     * @param beanConstructor The constructor of the invocation
-     * @return The constructor, or {@code null} when it cannot be found
-     */
-    private static @Nullable Constructor<?> resolveConstructor(BeanConstructor<?> beanConstructor) {
-        Class<?>[] parameterTypes = Arrays.stream(beanConstructor.getArguments())
-            .map(Argument::getType)
-            .toArray(Class<?>[]::new);
-        try {
-            // getConstructor returns a java.lang.reflect.Constructor, which only the platform makes
-            @SuppressWarnings("NoReflection")
-            Constructor<?> constructor = beanConstructor.getDeclaringBeanType().getDeclaredConstructor(parameterTypes);
-            return constructor;
-        } catch (NoSuchMethodException e) {
-            return null;
-        }
     }
 }

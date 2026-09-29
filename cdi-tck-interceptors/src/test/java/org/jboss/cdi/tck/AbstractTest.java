@@ -330,7 +330,9 @@ public abstract class AbstractTest {
             Set<InterceptorBindingValues.Binding> bindings = new LinkedHashSet<>();
             for (String name : metadata.getAnnotationNamesByStereotype(INTERCEPTOR_BINDING)) {
                 if (!INTERCEPTOR_BINDING.equals(name)) {
-                    metadata.findAnnotation(name).map(InterceptorBindingValues::of).ifPresent(bindings::add);
+                    metadata.findAnnotation(name)
+                        .map(binding -> InterceptorBindingValues.of(binding, AbstractTest::nonBindingMembers))
+                        .ifPresent(bindings::add);
                 }
             }
             if (!bindings.isEmpty() && requested.containsAll(bindings)) {
@@ -356,6 +358,30 @@ public abstract class AbstractTest {
             default -> null;
         };
         return kind != null && methods.stringValues(kind.member()).length > 0;
+    }
+
+    /**
+     * The members of a binding annotation excluded from the binding, read off the annotation type.
+     *
+     * <p>The metadata of an interceptor class records an excluded member only where the class declares a value for
+     * it. The processor compares bindings by every member the annotation type excludes, which it reads off the type
+     * as it compiles; the bridge reads them off the loaded type instead, as {@link #bindingValue} does for the
+     * bindings it is asked about.</p>
+     */
+    private static List<String> nonBindingMembers(String annotationName) {
+        Class<?> annotationType;
+        try {
+            annotationType = Class.forName(annotationName, false, AbstractTest.class.getClassLoader());
+        } catch (ClassNotFoundException e) {
+            throw new IllegalStateException("Cannot load binding annotation " + annotationName, e);
+        }
+        List<String> nonBinding = new ArrayList<>();
+        for (Method member : annotationType.getDeclaredMethods()) {
+            if (member.isAnnotationPresent(jakarta.enterprise.util.Nonbinding.class)) {
+                nonBinding.add(member.getName());
+            }
+        }
+        return nonBinding;
     }
 
     private static InterceptorBindingValues.Binding bindingValue(Annotation annotation) {

@@ -138,14 +138,8 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
                 + "interceptor method. An interceptor class declares at least one of @AroundInvoke, @AroundConstruct, "
                 + "@PostConstruct or @PreDestroy, each accepting a single InvocationContext");
         }
-        if (isInterceptorClass) {
-            // an interceptor class is not itself intercepted: its bindings say what it intercepts. They are
-            // completed before anything is written out, because what a binding is compared by depends on the
-            // members excluded from it
-            completeBindings(element, context);
-        }
         if (model.intercepts()) {
-            declareInterceptorMethods(model, declaredAsABean, isInterceptorClass);
+            declareInterceptorMethods(model, declaredAsABean, isInterceptorClass, context);
         }
         if (isInterceptorClass) {
             if (!InterceptorClassScanner.bindingsOf(element).isEmpty()) {
@@ -212,7 +206,8 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
      */
     private static void declareInterceptorMethods(InterceptorClassModel model,
                                                  boolean declaredAsABean,
-                                                 boolean isInterceptorClass) {
+                                                 boolean isInterceptorClass,
+                                                 VisitorContext context) {
         ClassElement interceptorClass = model.interceptorClass();
         if (!declaredAsABean) {
             // an interceptor class need not be a bean of its own, whether it declares @Interceptor or is named
@@ -222,7 +217,8 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
             interceptorClass.annotate(Prototype.class);
             interceptorClass.annotate(Secondary.class);
         }
-        String[] bindings = isInterceptorClass ? bindingsOf(interceptorClass, null) : new String[0];
+        // an interceptor class is not itself intercepted: its bindings say what it intercepts
+        String[] bindings = isInterceptorClass ? bindingsOf(interceptorClass, null, context) : new String[0];
         interceptorClass.annotate(JakartaInterceptorMethods.class, builder -> {
             for (Map.Entry<InterceptionKind, List<MethodElement>> entry : model.methods().entrySet()) {
                 builder.member(entry.getKey().member(), entry.getValue().stream()
@@ -318,8 +314,7 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
             return;
         }
         interceptEachTarget(element, false);
-        completeBindings(element, context);
-        String[] classBindings = bindingsOf(element, null);
+        String[] classBindings = bindingsOf(element, null, context);
         if (classDeclares) {
             element.annotate(JakartaInterception.class, builder -> {
                 interceptorMembers(builder, classInterceptors);
@@ -332,13 +327,12 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         // construction of a bean is intercepted, and it also lets a constructor declare a binding, or name its own
         // interceptor classes, after the ones the class names
         if (constructor != null && (classDeclares || constructorDeclares)) {
-            completeBindings(constructor, context);
             List<String> whenConstructed = new ArrayList<>();
             if (!constructor.hasDeclaredAnnotation(JakartaInterceptors.EXCLUDE_CLASS_INTERCEPTORS)) {
                 whenConstructed.addAll(classInterceptors);
             }
             whenConstructed.addAll(constructorInterceptors);
-            String[] constructorBindings = bindingsOf(constructor, element);
+            String[] constructorBindings = bindingsOf(constructor, element, context);
             constructor.annotate(JakartaInterception.class, builder -> {
                 interceptorMembers(builder, whenConstructed);
                 bindingsMember(builder, constructorBindings);
@@ -416,11 +410,9 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
             return;
         }
         ClassElement producedType = producer.producedType();
-        completeBindings(producedType, context);
-        completeBindings(member, context);
         List<String> interceptors = new ArrayList<>(namedInterceptors(producedType, context));
         interceptors.addAll(namedInterceptors(member, context));
-        String[] bindings = bindingsOf(member, producedType);
+        String[] bindings = bindingsOf(member, producedType, context);
         member.annotate(JakartaInterception.class, builder -> {
             interceptorMembers(builder, interceptors);
             // Micronaut reads the metadata of a produced bean together with the metadata of the factory that
@@ -590,7 +582,6 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         if (!classDeclares && !declaresInterception(method)) {
             return;
         }
-        completeBindings(method, context);
         // the specification hands an @AroundInvoke or @AroundTimeout interceptor method the intercepted method as
         // a java.lang.reflect.Method, which the runtime reads off the executable method Micronaut generated
         permitReflection(method);
@@ -604,7 +595,7 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         // a schedule is recorded through its repeatable container even when a method declares only one
         boolean timeout = method.hasDeclaredAnnotation(JakartaInterceptors.SCHEDULED)
             || method.hasDeclaredAnnotation(JakartaInterceptors.SCHEDULES);
-        String[] methodBindings = bindingsOf(method, method.getOwningType());
+        String[] methodBindings = bindingsOf(method, method.getOwningType(), context);
         // a binding the method declares replaces the one of the class, so the method carries a declaration of its
         // own as soon as what it is bound by differs from what its class is bound by
         boolean replacesBindings = !Arrays.equals(classBindings, methodBindings);
@@ -646,18 +637,24 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
      * by type as a list rather than as one: what a member declares of a type replaces every occurrence of that type
      * its class declares, and the occurrences of a type the member says nothing about are all inherited.</p>
      *
+     * <p>The members excluded from a binding are read off the annotation type rather than off the element, which
+     * records only the ones it declares a value for: an interceptor and the element it intercepts have to agree on
+     * which members are compared, whether or not either of them declares a value for them.</p>
+     *
      * @param element The element
      * @param owner   The class the element belongs to, or {@code null} when the element is the class
+     * @param context The visitor context, which resolves the binding annotation types
      * @return The bindings, as strings, in a stable order
      */
-    private static String[] bindingsOf(Element element, @Nullable ClassElement owner) {
+    private static String[] bindingsOf(Element element, @Nullable ClassElement owner, VisitorContext context) {
+        InterceptorBindingValues.ExcludedMembers excluded = InterceptorBindingValues.excludedMembersOf(context);
         Map<String, List<InterceptorBindingValues.Binding>> bindings = new LinkedHashMap<>();
         if (owner != null) {
-            groupByType(InterceptorBindingValues.of(owner.getAnnotationMetadata()), bindings);
+            groupByType(InterceptorBindingValues.of(owner.getAnnotationMetadata(), excluded), bindings);
         }
         AnnotationMetadata own = InterceptorClassScanner.ownMetadataOf(element);
         Map<String, List<InterceptorBindingValues.Binding>> declared = new LinkedHashMap<>();
-        groupByType(InterceptorBindingValues.of(own), declared);
+        groupByType(InterceptorBindingValues.of(own, excluded), declared);
         bindings.putAll(declared);
         return bindings.values()
             .stream()
@@ -677,28 +674,6 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
     private static void bindingsMember(AnnotationValueBuilder<JakartaInterception> builder, String[] bindings) {
         if (bindings.length > 0) {
             builder.member("bindings", bindings);
-        }
-    }
-
-    /**
-     * Records on every binding annotation of an element the complete list of the members excluded from the
-     * binding.
-     *
-     * <p>Micronaut only records the excluded members that the element declares a value for, which is enough for a
-     * qualifier but not here: an interceptor and the element it intercepts have to agree on which members are
-     * compared, whether or not either of them declares a value for them.</p>
-     */
-    private static void completeBindings(Element element, VisitorContext context) {
-        InterceptorBindingValues.ExcludedMembers members = InterceptorBindingValues.excludedMembersOf(context);
-        for (AnnotationValue<?> binding : InterceptorClassScanner.bindingsOf(element)) {
-            List<String> excluded = members.of(binding.getAnnotationName());
-            if (excluded.isEmpty()) {
-                continue;
-            }
-            Map<CharSequence, Object> values = binding.getValues();
-            element.annotate(binding.getAnnotationName(), builder -> builder
-                .members(values)
-                .member(AnnotationUtil.NON_BINDING_ATTRIBUTE, excluded.toArray(String[]::new)));
         }
     }
 

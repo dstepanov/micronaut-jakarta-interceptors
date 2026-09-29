@@ -138,16 +138,6 @@ public final class InterceptorBindingValues {
     }
 
     /**
-     * Reads the bindings an element declares.
-     *
-     * @param annotationMetadata The metadata of the element
-     * @return The bindings
-     */
-    public static Set<Binding> of(AnnotationMetadata annotationMetadata) {
-        return of(annotationMetadata, ExcludedMembers.AS_RECORDED);
-    }
-
-    /**
      * Reads the bindings an element declares, with the members excluded from each of them left out however the
      * element declared it.
      *

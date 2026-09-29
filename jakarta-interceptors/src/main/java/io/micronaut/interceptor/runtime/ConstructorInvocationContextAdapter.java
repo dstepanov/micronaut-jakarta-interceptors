@@ -105,11 +105,10 @@ final class ConstructorInvocationContextAdapter extends AbstractInvocationContex
     }
 
     /**
-     * Runs the chain once every interceptor instance of it exists, and destroys the interceptor instances of the
-     * object when the object is not created.
+     * Runs the chain once every interceptor instance of it exists.
      *
      * <p>Every interceptor of the chain proceeds through this same context, so only the outermost call - the one the
-     * advice makes - starts and ends the construction.</p>
+     * advice makes - starts the construction.</p>
      *
      * <p>It starts by creating the instance of every interceptor class associated with the object. Section 2.3 da)
      * runs an {@code @AroundConstruct} method only after injection has completed on the instances of all the
@@ -118,10 +117,10 @@ final class ConstructorInvocationContextAdapter extends AbstractInvocationContex
      * one of them. The chain itself would otherwise create the instance of each of its interceptors as the one before
      * it proceeds, after that one has already begun.</p>
      *
-     * <p>It ends by looking at how the construction went. An exception that reaches it, or a chain that returns
-     * without any interceptor having proceeded to the constructor, leaves no object, and section 2.3 has the
-     * interceptor instances of an object that fails to be created destroyed. An exception an interceptor catches on
-     * the way out does not reach it, and neither discards anything.</p>
+     * <p>An exception that leaves the chain, or a chain that returns without any interceptor having proceeded to the
+     * constructor, leaves no object, and section 2.3 has the interceptor instances of an object that fails to be
+     * created destroyed. Micronaut does that: it destroys the dependents of a bean whose creation fails, and the
+     * advice holding the instances is one of them.</p>
      *
      * @return What the chain returned
      * @throws Exception What the chain threw
@@ -135,14 +134,7 @@ final class ConstructorInvocationContextAdapter extends AbstractInvocationContex
         try {
             createInterceptorInstances();
             createInterceptorInstances(associated);
-            Object result = super.proceed();
-            if (target == null) {
-                discardInterceptorInstances();
-            }
-            return result;
-        } catch (Throwable e) {
-            discardInterceptorInstances();
-            throw e;
+            return super.proceed();
         } finally {
             proceeding = false;
         }

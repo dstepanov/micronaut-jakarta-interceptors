@@ -321,7 +321,6 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
                 selfMember(builder, model);
                 bindingsMember(builder, classBindings);
             });
-            permitCallbackReflection(element, model);
         }
         // the constructor carries the interception of its own: that is where Micronaut decides whether the
         // construction of a bean is intercepted, and it also lets a constructor declare a binding, or name its own
@@ -338,8 +337,10 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
                 bindingsMember(builder, constructorBindings);
             });
             // the specification hands an @AroundConstruct interceptor method a java.lang.reflect.Constructor, which
-            // the runtime looks up on the class. Reflection is permitted for it here so that the lookup answers
-            // inside a native image as it does on a virtual machine
+            // Micronaut looks up on the class by the argument types of the bean constructor. Reflection is permitted
+            // for it here so that the lookup answers inside a native image as it does on a virtual machine. The
+            // methods need nothing of the kind: their executable methods look them up by constants, which the image
+            // registers on its own
             constructor.annotate(ReflectiveAccess.class);
         }
         for (MethodElement method : methods) {
@@ -582,9 +583,6 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         if (!classDeclares && !declaresInterception(method)) {
             return;
         }
-        // the specification hands an @AroundInvoke or @AroundTimeout interceptor method the intercepted method as
-        // a java.lang.reflect.Method, which the runtime reads off the executable method Micronaut generated
-        permitReflection(method);
         List<String> methodInterceptors = namedInterceptors(method, context);
         boolean excludesClassInterceptors = method.hasDeclaredAnnotation(JakartaInterceptors.EXCLUDE_CLASS_INTERCEPTORS);
         List<String> interceptors = new ArrayList<>(classInterceptors.size() + methodInterceptors.size());
@@ -688,74 +686,6 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         builder.member("interceptors", interceptors.stream()
             .map(name -> new AnnotationClassValue<>(name))
             .toArray(AnnotationClassValue<?>[]::new));
-    }
-
-    /**
-     * Permits reflection on the lifecycle callbacks of the intercepted class.
-     *
-     * <p>The specification hands a {@code @PostConstruct} or {@code @PreDestroy} interceptor method the callback of
-     * the class it is interposing on, which the runtime answers with the target method of the executable method the
-     * interception carries. Resolving that reflects, so the callback is declared here, where the class is being
-     * looked at anyway.</p>
-     *
-     * <p>The most specific callback is the one to declare: a chain runs for the event and describes itself by the
-     * last callback it invokes, which is the one this finds - the class's own where it declares one, and the
-     * nearest it inherits where it does not.</p>
-     */
-    private static void permitCallbackReflection(ClassElement element, InterceptorClassModel model) {
-        MethodElement postConstruct = callbackOf(element, model, JakartaInterceptors.POST_CONSTRUCT);
-        if (postConstruct != null) {
-            permitReflection(postConstruct);
-        }
-        MethodElement preDestroy = callbackOf(element, model, JakartaInterceptors.PRE_DESTROY);
-        if (preDestroy != null) {
-            permitReflection(preDestroy);
-        }
-    }
-
-    /**
-     * Permits reflection on a member the specification shows an interceptor method as a member of the platform.
-     *
-     * <p>{@code getMethod()} and {@code getConstructor()} return a {@code java.lang.reflect.Method} and a
-     * {@code java.lang.reflect.Constructor}, which the specification leaves no way around. Looking one up is the
-     * only reflection the interception does, and a native image answers such a lookup only for a member it was
-     * told to keep; the alternative is a lookup that comes back empty once the application is compiled ahead of
-     * time. Only the members that are actually intercepted are kept.</p>
-     */
-    private static void permitReflection(MethodElement member) {
-        if (!member.hasDeclaredAnnotation(ReflectiveAccess.class)) {
-            member.annotate(ReflectiveAccess.class);
-        }
-    }
-
-    /**
-     * The name of the lifecycle callback of a class, the most specific one when the class and its superclasses
-     * each declare one: the interception happens once around all of them, and the callback of the class itself is
-     * the one the specification describes.
-     */
-    private static @Nullable MethodElement callbackOf(ClassElement element,
-                                                      InterceptorClassModel model,
-                                                      String annotation) {
-        List<String> hierarchy = new ArrayList<>();
-        for (ClassElement type = element; type != null; type = type.getSuperType().orElse(null)) {
-            hierarchy.add(type.getName());
-        }
-        MethodElement callback = null;
-        int mostSpecific = Integer.MAX_VALUE;
-        for (MethodElement method : element.getEnclosedElements(ElementQuery.ALL_METHODS)) {
-            // an interceptor method a class declares on itself interposes on other objects rather than being a
-            // callback of this one
-            if (!method.hasDeclaredAnnotation(annotation) || model.isInterceptorMethod(method)) {
-                continue;
-            }
-            // the hierarchy is held with the class itself first, so the smaller index is the more specific one
-            int declaredAt = hierarchy.indexOf(method.getDeclaringType().getName());
-            if (declaredAt >= 0 && declaredAt < mostSpecific) {
-                mostSpecific = declaredAt;
-                callback = method;
-            }
-        }
-        return callback;
     }
 
     private static void selfMember(AnnotationValueBuilder<JakartaInterception> builder, InterceptorClassModel model) {

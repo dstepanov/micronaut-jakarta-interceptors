@@ -15,6 +15,7 @@
  */
 package io.micronaut.interceptor.processor.visitor;
 
+import io.micronaut.aop.Interceptor;
 import io.micronaut.context.annotation.Bean;
 import io.micronaut.context.annotation.Executable;
 import io.micronaut.context.annotation.Factory;
@@ -306,6 +307,7 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
             && methods.stream().noneMatch(JakartaInterceptorVisitor::declaresInterception)) {
             return;
         }
+        interceptEachTarget(element, false);
         completeBindings(element, context);
         String[] classBindings = bindingsOf(element, null);
         if (classDeclares) {
@@ -398,6 +400,9 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         MethodElement member = producer.element();
         if (!declaresInterception(member)) {
             // the produced type carries whatever it declares on itself, as any other bean does
+            if (typeDeclaresInterception(producer.producedType())) {
+                interceptEachTarget(member, true);
+            }
             return;
         }
         ClassElement producedType = producer.producedType();
@@ -416,6 +421,45 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
             builder.member("self", new AnnotationClassValue<>(void.class));
             builder.member("bindings", bindings);
         });
+        interceptEachTarget(member, true);
+    }
+
+    /**
+     * Has a proxy with a separate target intercept each target with the advice of that target.
+     *
+     * <p>Such a proxy - of a bean declared {@code @Around(proxyTarget = true)}, of a bean of a scope that resolves
+     * through a proxy, or of a bean a factory produces - otherwise resolves an advice of its own, while the
+     * construction and the lifecycle of the target are intercepted with the advice of the target, and the one object
+     * the specification sees would have two sets of interceptor instances. {@code lazyInterceptorsPerTarget} has
+     * the proxy intercept each target with the advice of the target. It is written on the {@code @Around} in effect
+     * together with what that declares already: an {@code @Around} declared on an element replaces the one its scope
+     * contributes.</p>
+     *
+     * @param element     The intercepted class, or the member of a factory producing an intercepted bean
+     * @param proxyTarget Whether the element is proxied with a separate target whatever its {@code @Around} says,
+     *                    which a bean a factory produces always is
+     */
+    private static void interceptEachTarget(Element element, boolean proxyTarget) {
+        AnnotationValue<Annotation> around = element.getAnnotation(AnnotationUtil.ANN_AROUND);
+        if (!proxyTarget && (around == null || !around.isTrue(Interceptor.PROXY_TARGET.toString()))) {
+            return;
+        }
+        element.annotate(AnnotationUtil.ANN_AROUND, builder -> {
+            if (around != null) {
+                builder.members(around.getValues());
+            }
+            builder.member(Interceptor.LAZY_INTERCEPTORS_PER_TARGET.toString(), true);
+        });
+    }
+
+    /**
+     * Whether a type declares an interception of its own that makes a bean of it advised: interceptor classes or
+     * bindings on the class, or on one of its methods.
+     */
+    private static boolean typeDeclaresInterception(ClassElement type) {
+        return InterceptorClassScanner.ownMetadataOf(type).hasDeclaredAnnotation(JakartaInterceptors.INTERCEPTORS)
+            || !InterceptorClassScanner.bindingsOf(type).isEmpty()
+            || methodsOf(type).stream().anyMatch(JakartaInterceptorVisitor::declaresInterception);
     }
 
     /**

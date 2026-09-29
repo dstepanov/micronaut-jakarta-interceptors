@@ -23,6 +23,11 @@ import io.micronaut.aop.InvocationContext;
 import io.micronaut.aop.MethodInterceptor;
 import io.micronaut.aop.MethodInvocationContext;
 import io.micronaut.context.BeanContext;
+import io.micronaut.context.BeanRegistration;
+import io.micronaut.context.BeanResolutionContext;
+import io.micronaut.context.DefaultBeanContext;
+import io.micronaut.context.DefaultBeanResolutionContext;
+import io.micronaut.context.DependentBeanProvider;
 import io.micronaut.context.annotation.Prototype;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.Internal;
@@ -35,7 +40,9 @@ import jakarta.interceptor.Interceptor;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The single Micronaut interceptor of the Jakarta Interceptors implementation.
@@ -45,7 +52,11 @@ import java.util.List;
  * the intercepted element itself - runs after all of them, which is the order the specification asks for.</p>
  *
  * <p>The advice is created for each object it intercepts rather than shared, because the interceptor instances it
- * holds belong to that one object: an interceptor may keep state for the life of the object it intercepts.</p>
+ * holds belong to that one object: an interceptor may keep state for the life of the object it intercepts. Micronaut
+ * creates it as a dependent of that object, uses the same advice for the construction, the lifecycle events and the
+ * business methods of the object - through a proxy with a separate target as well, whose {@code @Around} the
+ * processor declares {@code lazyInterceptorsPerTarget = true} on - and destroys it with the object, after the
+ * pre-destroy event. The interceptor instances go with it, as section 2.3 has them go.</p>
  *
  * @author Denis Stepanov
  * @since 1.0
@@ -58,9 +69,21 @@ import java.util.List;
 @InterceptorBinding(value = JakartaInterception.class, kind = InterceptorKind.PRE_DESTROY)
 public final class JakartaInterceptorAdvice implements MethodInterceptor<Object, Object>, ConstructorInterceptor<Object> {
 
+    /**
+     * The annotation that makes a bean of a custom scope resolve to a proxy over a target the scope keeps. Named
+     * rather than referenced: it is declared by a module this one does not depend on.
+     */
+    private static final String SCOPED_PROXY = "io.micronaut.runtime.context.scope.ScopedProxy";
+
     private final InterceptorChainResolver resolver;
-    private final InterceptorInstances instances;
-    // one for each lifecycle event of the object this advice was created for
+    private final BeanContext beanContext;
+    private final Map<Class<?>, Object> instances = new HashMap<>(4);
+    /**
+     * The registrations of the instances that belong to the object alone, in the order they were created. An
+     * interceptor with a scope of its own - a {@code @Singleton}, or a bean of a custom scope, shared by every object
+     * it intercepts - is not among them: it is not the object's to destroy. See {@link #own}.
+     */
+    private final List<BeanRegistration<?>> owned = new ArrayList<>(2);
 
     /**
      * @param resolver    The resolver of the interceptor chains
@@ -68,7 +91,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      */
     public JakartaInterceptorAdvice(InterceptorChainResolver resolver, BeanContext beanContext) {
         this.resolver = resolver;
-        this.instances = new InterceptorInstances(beanContext);
+        this.beanContext = beanContext;
     }
 
     @Override
@@ -77,27 +100,15 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
     }
 
     /**
-     * Destroys the interceptor instances of the object this advice was created for, unless the pre-destroy event of
-     * that object is what destroys them.
+     * Destroys the interceptor instances of the object this advice was created for.
      *
-     * <p>Micronaut destroys this advice together with that object, as a dependent created for it alone, and the
-     * interceptor instances go with it: section 2.3 gives them the life of the object they intercept. See
-     * {@link InterceptorInstances#adviceDestroyed()} for the objects whose instances wait for their pre-destroy
-     * event instead.</p>
+     * <p>Micronaut destroys this advice together with that object, as a dependent created for it alone, once the
+     * pre-destroy event of the object has been intercepted, or skipped by an ordinary Micronaut interceptor of the
+     * event that did not proceed.</p>
      */
     @PreDestroy
     void destroyInterceptorInstances() {
-        instances.adviceDestroyed();
-    }
-
-    /**
-     * Has this advice, bound to a proxy, intercept with the interceptor instances of the target of that proxy.
-     * Called by {@link InterceptorCreationListener} as the proxy is created.
-     *
-     * @param targetInstances The interceptor instances of the target
-     */
-    void shareInterceptorInstances(InterceptorInstances targetInstances) {
-        instances.share(targetInstances);
+        destroy();
     }
 
     // implementing both MethodInterceptor and ConstructorInterceptor inherits two declarations of this method,
@@ -117,25 +128,15 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
     @Override
     public @Nullable Object intercept(MethodInvocationContext<Object, Object> context) {
         InterceptorKind kind = context.getKind();
-        if (kind == InterceptorKind.POST_CONSTRUCT) {
-            Object bean = interceptLifecycle(context, kind);
-            instances.postConstructed(context.getTarget());
-            return bean;
-        }
-        if (kind == InterceptorKind.PRE_DESTROY) {
-            try {
-                return interceptLifecycle(context, kind);
-            } finally {
-                // 2.3 cc): the interceptor instances are destroyed once the pre-destroy interception is over
-                instances.preDestroyed();
-            }
+        if (kind == InterceptorKind.POST_CONSTRUCT || kind == InterceptorKind.PRE_DESTROY) {
+            return interceptLifecycle(context, kind);
         }
         List<InterceptorReference> chain = resolver.resolve(kind, context.getAnnotationMetadata());
         if (chain.isEmpty()) {
             return context.proceed();
         }
         try {
-            return new BusinessMethodInvocationContext(context, chain, instances, this).proceed();
+            return new BusinessMethodInvocationContext(context, chain, this).proceed();
         } catch (Exception e) {
             throw sneakyThrow(e);
         }
@@ -154,7 +155,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
             context.proceed();
             return context.getTarget();
         }
-        LifecycleInvocationContext invocation = new LifecycleInvocationContext(context, chain, instances, this);
+        LifecycleInvocationContext invocation = new LifecycleInvocationContext(context, chain, this);
         try {
             invocation.proceed();
         } catch (Exception e) {
@@ -176,7 +177,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
             return context.proceed();
         }
         ConstructorInvocationContextAdapter invocation = new ConstructorInvocationContextAdapter(
-            context, chain, instances, this, associatedWithTheClass(constructor.getAnnotationMetadata()));
+            context, chain, this, associatedWithTheClass(constructor.getAnnotationMetadata()));
         try {
             invocation.proceed();
         } catch (Exception e) {
@@ -256,7 +257,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
             // created before it are then those of an object that fails to be created: 2.3 bb) destroys them.
             // Nothing else would - Micronaut has no registration of this object yet to hang them on
             try {
-                instances.discard();
+                discardInterceptorInstances();
             } catch (RuntimeException discardFailure) {
                 e.addSuppressed(discardFailure);
             }
@@ -264,25 +265,124 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         }
     }
 
-    /**
-     * Destroys the interceptor instances of the object this advice was created for, now that the object has been
-     * destroyed. Called by {@link InterceptorDestructionListener}.
-     *
-     * <p>The pre-destroy event is where section 2.3 destroys them, and interposing on that event is how they normally
-     * go. This is what happens when that interception never runs, which an ordinary Micronaut interceptor of the same
-     * event ordered before this advice can arrange by returning without proceeding.</p>
-     */
-    void beanDestroyed() {
-        instances.beanDestroyed();
+    private void createInstancesOf(InterceptorKind kind, AnnotationMetadata metadata) {
+        createInterceptorInstances(resolver.resolve(kind, metadata));
     }
 
-    private void createInstancesOf(InterceptorKind kind, AnnotationMetadata metadata) {
-        for (InterceptorReference reference : resolver.resolve(kind, metadata)) {
+    /**
+     * Returns the instance of an interceptor class, creating it the first time it is asked for.
+     *
+     * @param reference The interceptor
+     * @return The instance
+     */
+    synchronized Object interceptorInstance(InterceptorReference reference) {
+        Class<?> interceptorClass = reference.interceptorClass();
+        Object instance = instances.get(interceptorClass);
+        if (instance == null) {
+            instance = create(interceptorClass);
+            instances.put(interceptorClass, instance);
+        }
+        return instance;
+    }
+
+    /**
+     * Creates the instance of every interceptor class of the given references that has none yet.
+     *
+     * @param references The interceptors
+     */
+    void createInterceptorInstances(List<InterceptorReference> references) {
+        for (InterceptorReference reference : references) {
             // an interceptor method the intercepted class declares itself runs on the object, and has no
             // instance of its own to create
             if (!reference.self()) {
-                instances.get(reference);
+                interceptorInstance(reference);
             }
+        }
+    }
+
+    /**
+     * Destroys the interceptor instances of the object this advice was created for, because the object will not
+     * exist: its construction or its post-construct event failed, or an interceptor instance it still needed could
+     * not be created. Section 2.3 destroys them as it does those of an object that is removed, and nothing else would:
+     * Micronaut destroys this advice only together with a bean that exists.
+     */
+    void discardInterceptorInstances() {
+        destroy();
+    }
+
+    /**
+     * Creates the instance of an interceptor class.
+     *
+     * <p>Resolved by type rather than from one definition: an interceptor class may also be produced by a factory,
+     * and the instance the application configured there is the one to intercept with. Resolved in a resolution
+     * context of its own, which is where Micronaut records what it created as a dependency rather than found in a
+     * scope, exactly as it does for the dependencies of any bean, so nothing here has to know the scopes.</p>
+     */
+    private Object create(Class<?> interceptorClass) {
+        if (!(beanContext instanceof DefaultBeanContext)) {
+            // a context of another implementation records no dependents to read
+            return beanContext.getBean(interceptorClass);
+        }
+        try (BeanResolutionContext resolutionContext = new DefaultBeanResolutionContext(beanContext, null)) {
+            Object instance = resolutionContext.getBean(interceptorClass);
+            for (BeanRegistration<?> registration : resolutionContext.getAndResetDependentBeans()) {
+                own(registration);
+            }
+            return instance;
+        }
+    }
+
+    /**
+     * Keeps what a registration Micronaut reported as a dependent leaves the object to destroy.
+     *
+     * <p>A bean of a custom scope that resolves through a proxy is reported as that proxy, while the bean behind it
+     * belongs to the scope and serves every object the interceptor is bound to: destroying the registration would
+     * remove the bean from its scope. The dependents of the proxy are kept instead, which is what Micronaut destroys
+     * when it destroys such a proxy as the dependent of a bean.</p>
+     */
+    private void own(BeanRegistration<?> registration) {
+        BeanDefinition<?> definition = registration.getBeanDefinition();
+        if (definition.isProxy() && definition.hasStereotype(SCOPED_PROXY)) {
+            if (registration instanceof DependentBeanProvider provider) {
+                for (BeanRegistration<?> dependent : provider.dependentBeans()) {
+                    own(dependent);
+                }
+            }
+            return;
+        }
+        owned.add(registration);
+    }
+
+    /**
+     * Destroys the interceptor instances that belong to the object alone, latest first, as Micronaut destroys the
+     * dependents of a bean, and forgets every instance. Destroying them twice destroys them once. One failing to be
+     * destroyed does not keep the rest alive: the first failure is reported once all are destroyed.
+     */
+    private void destroy() {
+        List<BeanRegistration<?>> destroyed;
+        synchronized (this) {
+            instances.clear();
+            if (owned.isEmpty()) {
+                return;
+            }
+            destroyed = new ArrayList<>(owned);
+            owned.clear();
+        }
+        RuntimeException failure = null;
+        // outside of the lock: what an interceptor does as it is destroyed is its own code
+        for (int i = destroyed.size() - 1; i >= 0; i--) {
+            try {
+                beanContext.destroyBean(destroyed.get(i));
+            } catch (RuntimeException e) {
+                if (failure == null) {
+                    failure = e;
+                } else {
+                    failure.addSuppressed(e);
+                }
+            }
+        }
+        if (failure != null) {
+            throw failure;
         }
     }
 

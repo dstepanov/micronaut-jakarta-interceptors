@@ -15,7 +15,6 @@
  */
 package io.micronaut.interceptor.runtime;
 
-import io.micronaut.aop.Interceptor;
 import io.micronaut.aop.InterceptorKind;
 import io.micronaut.aop.MethodInvocationContext;
 import io.micronaut.core.annotation.Internal;
@@ -43,9 +42,8 @@ final class BusinessMethodInvocationContext extends AbstractInvocationContext
 
     BusinessMethodInvocationContext(MethodInvocationContext<Object, ?> context,
                                     List<InterceptorReference> chain,
-                                    InterceptorInstances instances,
-                                    Interceptor<?, ?> advice) {
-        super(context, chain, instances, advice);
+                                    JakartaInterceptorAdvice advice) {
+        super(context, chain, advice);
         this.context = context;
     }
 

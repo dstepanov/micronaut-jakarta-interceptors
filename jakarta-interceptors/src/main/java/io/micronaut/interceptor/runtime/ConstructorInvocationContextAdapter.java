@@ -16,7 +16,6 @@
 package io.micronaut.interceptor.runtime;
 
 import io.micronaut.aop.ConstructorInvocationContext;
-import io.micronaut.aop.Interceptor;
 import io.micronaut.aop.InterceptorKind;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.Internal;
@@ -55,10 +54,9 @@ final class ConstructorInvocationContextAdapter extends AbstractInvocationContex
 
     ConstructorInvocationContextAdapter(ConstructorInvocationContext<Object> context,
                                         List<InterceptorReference> chain,
-                                        InterceptorInstances instances,
-                                        Interceptor<?, ?> advice,
+                                        JakartaInterceptorAdvice advice,
                                         List<InterceptorReference> associated) {
-        super(context, chain, instances, advice);
+        super(context, chain, advice);
         this.context = context;
         this.associated = associated;
     }

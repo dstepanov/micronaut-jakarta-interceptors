@@ -110,29 +110,13 @@ method, so producing the bean is intercepted once, by what the method binds, bef
 classes its superclass names. Declare it on the class that is the bean, or use a binding annotation that is
 `@Inherited`, which is inherited as the specification describes.
 
-=== Interceptor state on a proxy whose target it does not find
+=== Interceptor state on an object handed to a hot-swappable proxy
 
-A bean proxied with a separate target is two objects to Micronaut, and one instance of each interceptor class
-serves both; see <<lifecycle,Lifecycle and Constructor Interception>>. Unless its `@Around` declares
-`lazyInterceptorsPerTarget = true`, the proxy finds the instances of its target
-among the objects whose post-construct event the thread building the proxy has intercepted, because nothing in
-Micronaut links a proxy to the advice of the target it was created around. There are cases where the proxy
-consequently finds nothing and intercepts its business methods with interceptor instances of its own, so that a
-field an interceptor sets in a `@PostConstruct` or `@AroundConstruct` method is not seen by its `@AroundInvoke`
-method there. Both sets of instances are still destroyed. They are:
-
-* a proxy that resolves its target only when it is first invoked - `@Around(proxyTarget = true, lazy = true)`, and
-so the scoped proxies - since it has no target to ask about while it is being created, and asking for one would
-create it early;
-* a proxy whose target may be swapped - `hotswap = true` - since it would otherwise go on using the instances of a
-target it no longer has;
-* a proxy created around a target that already existed, which is a singleton target that another resolution of the
-same bean created first, possibly on another thread.
-
-Declaring `lazyInterceptorsPerTarget = true` on the `@Around` of the proxy closes all three: Micronaut keeps the
-interceptors of a target with the target, and the proxy intercepts each call with those of its target. A scoped bean
-declares it together with the proxy settings of its scope, `@Around(proxyTarget = true, lazy = true,
-lazyInterceptorsPerTarget = true)`, since an `@Around` declared on the bean replaces the one its scope contributes.
+A proxy declared `@Around(proxyTarget = true, hotswap = true)` intercepts each target with the interceptor instances
+of that target; see <<lifecycle,Lifecycle and Constructor Interception>>. An object handed to its `swap` method is
+intercepted with its own instances only when the context holds it, as a singleton or a bean of a custom scope. Any
+other object is intercepted with instances the context creates once for the definition of the target, so a field an
+interceptor set in a `@PostConstruct` method of that object is not seen by its `@AroundInvoke` method.
 
 === A singleton interceptor and the order a closing context destroys its beans in
 

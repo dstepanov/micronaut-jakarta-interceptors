@@ -15,7 +15,6 @@
  */
 package io.micronaut.interceptor.runtime;
 
-import io.micronaut.aop.Interceptor;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.core.convert.value.MutableConvertibleValues;
@@ -61,18 +60,15 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
 
     private final io.micronaut.aop.InvocationContext<Object, ?> context;
     private final List<InterceptorReference> chain;
-    private final InterceptorInstances instances;
-    private final Interceptor<?, ?> advice;
+    private final JakartaInterceptorAdvice advice;
     private int index;
     private @Nullable Set<Annotation> bindings;
 
     AbstractInvocationContext(io.micronaut.aop.InvocationContext<Object, ?> context,
                               List<InterceptorReference> chain,
-                              InterceptorInstances instances,
-                              Interceptor<?, ?> advice) {
+                              JakartaInterceptorAdvice advice) {
         this.context = context;
         this.chain = chain;
-        this.instances = instances;
         this.advice = advice;
     }
 
@@ -121,7 +117,7 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
 
     private Object instanceOf(InterceptorReference reference) {
         if (!reference.self()) {
-            return instances.get(reference);
+            return advice.interceptorInstance(reference);
         }
         Object target = getTarget();
         if (target == null) {
@@ -136,7 +132,7 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
      * reaches it.
      */
     final void createInterceptorInstances() {
-        instances.createAll(chain);
+        advice.createInterceptorInstances(chain);
     }
 
     /**
@@ -146,7 +142,7 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
      * @param references The interceptors
      */
     final void createInterceptorInstances(List<InterceptorReference> references) {
-        instances.createAll(references);
+        advice.createInterceptorInstances(references);
     }
 
     /**
@@ -157,7 +153,7 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
      * only destroyed together with a bean that exists.</p>
      */
     final void discardInterceptorInstances() {
-        instances.discard();
+        advice.discardInterceptorInstances();
     }
 
     /**

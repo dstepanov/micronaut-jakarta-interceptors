@@ -50,6 +50,7 @@ import io.micronaut.interceptor.processor.InterceptorBindingValues;
 import io.micronaut.interceptor.processor.InterceptorClassModel;
 import io.micronaut.interceptor.processor.InterceptorClassScanner;
 import io.micronaut.interceptor.processor.JakartaInterceptors;
+import io.micronaut.interceptor.runtime.JakartaInterceptorSupport;
 
 import org.jspecify.annotations.Nullable;
 
@@ -100,9 +101,9 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
     @Override
     public Set<String> getSupportedAnnotationNames() {
         return Set.of(
-            JakartaInterceptors.INTERCEPTOR,
+            JakartaInterceptorSupport.INTERCEPTOR,
             JakartaInterceptors.INTERCEPTORS,
-            JakartaInterceptors.INTERCEPTOR_BINDING,
+            JakartaInterceptorSupport.INTERCEPTOR_BINDING,
             JakartaInterceptors.AROUND_INVOKE,
             JakartaInterceptors.AROUND_TIMEOUT,
             JakartaInterceptors.AROUND_CONSTRUCT,
@@ -131,7 +132,7 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         // read before anything is declared on the class: an interceptor class is made a bean below, and whether it
         // was one to begin with is what tells a bean interposing on itself from a class written to intercept others
         boolean declaredAsABean = declaresABean(element);
-        boolean isInterceptorClass = element.hasDeclaredAnnotation(JakartaInterceptors.INTERCEPTOR)
+        boolean isInterceptorClass = element.hasDeclaredAnnotation(JakartaInterceptorSupport.INTERCEPTOR)
             || interposesOnAnotherObject(model);
         if (isInterceptorClass && !model.intercepts()) {
             throw new ProcessingException(element, "The interceptor class [" + element.getName() + "] declares no "
@@ -176,7 +177,7 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
             // of the annotation rather than as a scope annotation of its own
             return true;
         }
-        boolean interceptorClass = element.hasDeclaredAnnotation(JakartaInterceptors.INTERCEPTOR);
+        boolean interceptorClass = element.hasDeclaredAnnotation(JakartaInterceptorSupport.INTERCEPTOR);
         for (String name : element.getAnnotationNamesByStereotype(Bean.class.getName())) {
             if (!interceptorClass || !Bean.class.getName().equals(name)) {
                 return true;
@@ -591,7 +592,7 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         }
         interceptors.addAll(methodInterceptors);
         // a schedule is recorded through its repeatable container even when a method declares only one
-        boolean timeout = method.hasDeclaredAnnotation(JakartaInterceptors.SCHEDULED)
+        boolean timeout = method.hasDeclaredAnnotation(JakartaInterceptorSupport.SCHEDULED)
             || method.hasDeclaredAnnotation(JakartaInterceptors.SCHEDULES);
         String[] methodBindings = bindingsOf(method, method.getOwningType(), context);
         // a binding the method declares replaces the one of the class, so the method carries a declaration of its

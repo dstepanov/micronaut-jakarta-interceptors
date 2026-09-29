@@ -36,7 +36,6 @@ final class BusinessMethodInvocationContext extends AbstractInvocationContext
     implements MicronautMethodInvocationContext {
 
     private final MethodInvocationContext<Object, ?> context;
-    private @Nullable Method method;
     private @Nullable Object timer;
     private boolean timerResolved;
 
@@ -72,21 +71,17 @@ final class BusinessMethodInvocationContext extends AbstractInvocationContext
     /**
      * The specification hands the interceptor a {@link Method}, so one is looked up. That lookup is the only
      * reflection of an {@code @AroundInvoke} interception, and it only happens when an interceptor asks for the
-     * method: the invocation itself goes through the executable method Micronaut generated at compilation time.
+     * method: the invocation itself goes through the executable method Micronaut generated at compilation time,
+     * which remembers the method once it has looked it up.
      *
      * @return The intercepted method
      */
     @Override
     public Method getMethod() {
-        Method resolved = method;
-        if (resolved == null) {
-            // getMethod returns a java.lang.reflect.Method, which only the platform can produce
-            @SuppressWarnings("NoReflection")
-            Method target = context.getExecutableMethod().getTargetMethod();
-            resolved = target;
-            method = resolved;
-        }
-        return resolved;
+        // getMethod returns a java.lang.reflect.Method, which only the platform can produce
+        @SuppressWarnings("NoReflection")
+        Method target = context.getExecutableMethod().getTargetMethod();
+        return target;
     }
 
     /**

@@ -25,6 +25,7 @@ import io.micronaut.inject.ast.ClassElement;
 import io.micronaut.inject.ast.ElementQuery;
 import io.micronaut.inject.ast.MethodElement;
 import io.micronaut.inject.visitor.VisitorContext;
+import io.micronaut.interceptor.runtime.JakartaInterceptorSupport;
 import org.jspecify.annotations.Nullable;
 
 import java.lang.annotation.Annotation;
@@ -146,7 +147,8 @@ public final class InterceptorBindingValues {
      * @return The bindings
      */
     public static Set<Binding> of(AnnotationMetadata annotationMetadata, ExcludedMembers excluded) {
-        List<String> names = annotationMetadata.getAnnotationNamesByStereotype(JakartaInterceptors.INTERCEPTOR_BINDING);
+        List<String> names =
+            annotationMetadata.getAnnotationNamesByStereotype(JakartaInterceptorSupport.INTERCEPTOR_BINDING);
         if (names.isEmpty()) {
             return Set.of();
         }

@@ -21,6 +21,7 @@ import io.micronaut.core.annotation.Internal;
 import io.micronaut.inject.ast.ClassElement;
 import io.micronaut.inject.ast.Element;
 import io.micronaut.inject.visitor.VisitorContext;
+import io.micronaut.interceptor.runtime.JakartaInterceptorSupport;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -127,17 +128,18 @@ public final class BindingConflicts {
         Set<String> conflicts = new LinkedHashSet<>();
         Set<String> declaredNames = metadata.getDeclaredAnnotationNames();
         for (String name : names) {
-            if (JakartaInterceptors.INTERCEPTOR_BINDING.equals(name)) {
+            if (JakartaInterceptorSupport.INTERCEPTOR_BINDING.equals(name)) {
                 // a binding annotation names itself among its bindings; it is not one of its own
                 continue;
             }
             ClassElement type = context.getClassElement(name).orElse(null);
             // an annotation carrying no binding, however far it is followed, leads nowhere: this leaves out the
             // annotations of the platform, which every annotation type is declared with, along with the rest
-            if (type == null || !type.hasStereotype(JakartaInterceptors.INTERCEPTOR_BINDING)) {
+            if (type == null || !type.hasStereotype(JakartaInterceptorSupport.INTERCEPTOR_BINDING)) {
                 continue;
             }
-            if (declaredNames.contains(name) && type.hasDeclaredAnnotation(JakartaInterceptors.INTERCEPTOR_BINDING)) {
+            if (declaredNames.contains(name)
+                && type.hasDeclaredAnnotation(JakartaInterceptorSupport.INTERCEPTOR_BINDING)) {
                 AnnotationValue<?> value = metadata.findAnnotation(name).orElse(null);
                 if (value != null) {
                     declared.put(name, InterceptorBindingValues.of(value, excluded));

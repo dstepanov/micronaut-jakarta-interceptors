@@ -16,28 +16,20 @@
 package io.micronaut.interceptor.processor;
 
 import io.micronaut.core.annotation.Internal;
+import io.micronaut.interceptor.runtime.JakartaInterceptorSupport;
 
 /**
  * The names of the annotations of the Jakarta Interceptors and the Jakarta Annotations specifications.
  *
  * <p>The names are used rather than the classes so that neither specification has to be on the annotation
- * processor classpath of a build that does not use it.</p>
+ * processor classpath of a build that does not use it. The names the runtime reads as well are declared once, by
+ * {@link JakartaInterceptorSupport}.</p>
  *
  * @author Denis Stepanov
  * @since 1.0
  */
 @Internal
 public final class JakartaInterceptors {
-
-    /**
-     * {@code jakarta.interceptor.Interceptor}, declaring an interceptor class.
-     */
-    public static final String INTERCEPTOR = "jakarta.interceptor.Interceptor";
-
-    /**
-     * {@code jakarta.interceptor.InterceptorBinding}, the meta-annotation of the binding annotations.
-     */
-    public static final String INTERCEPTOR_BINDING = "jakarta.interceptor.InterceptorBinding";
 
     /**
      * {@code jakarta.interceptor.Interceptors}, naming interceptor classes directly.
@@ -80,19 +72,8 @@ public final class JakartaInterceptors {
     public static final String PRE_DESTROY = "jakarta.annotation.PreDestroy";
 
     /**
-     * {@code jakarta.annotation.Priority}, ordering the interceptors bound through a binding annotation.
-     */
-    public static final String PRIORITY = "jakarta.annotation.Priority";
-
-    /**
-     * {@code io.micronaut.scheduling.annotation.Scheduled}, which declares the methods the scheduler invokes and
-     * which this module reads as the timeout methods of the specification.
-     */
-    public static final String SCHEDULED = "io.micronaut.scheduling.annotation.Scheduled";
-
-    /**
-     * {@code io.micronaut.scheduling.annotation.Schedules}, the repeatable container of {@link #SCHEDULED}, which
-     * is how a single schedule is recorded as well.
+     * {@code io.micronaut.scheduling.annotation.Schedules}, the repeatable container of
+     * {@link JakartaInterceptorSupport#SCHEDULED}, which is how a single schedule is recorded as well.
      */
     public static final String SCHEDULES = "io.micronaut.scheduling.annotation.Schedules";
 

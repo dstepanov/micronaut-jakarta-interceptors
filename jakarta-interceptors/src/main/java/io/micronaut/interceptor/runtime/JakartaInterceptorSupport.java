@@ -20,32 +20,35 @@ import io.micronaut.core.annotation.Internal;
 /**
  * The names of the annotations of the Jakarta Interceptors specification the runtime reads.
  *
+ * <p>The processor reads them by the same names, and depends on this module, so they are declared here once for
+ * both; the ones only the processor reads are declared by {@code JakartaInterceptors} of the processor.</p>
+ *
  * @author Denis Stepanov
  * @since 1.0
  */
 @Internal
-final class JakartaInterceptorSupport {
+public final class JakartaInterceptorSupport {
 
     /**
      * {@code jakarta.interceptor.InterceptorBinding}, the meta-annotation of the binding annotations.
      */
-    static final String INTERCEPTOR_BINDING = "jakarta.interceptor.InterceptorBinding";
+    public static final String INTERCEPTOR_BINDING = "jakarta.interceptor.InterceptorBinding";
 
     /**
      * {@code jakarta.interceptor.Interceptor}, declaring an interceptor class.
      */
-    static final String INTERCEPTOR = "jakarta.interceptor.Interceptor";
+    public static final String INTERCEPTOR = "jakarta.interceptor.Interceptor";
 
     /**
      * {@code jakarta.annotation.Priority}, ordering the interceptors bound by a binding annotation.
      */
-    static final String PRIORITY = "jakarta.annotation.Priority";
+    public static final String PRIORITY = "jakarta.annotation.Priority";
 
     /**
      * {@code io.micronaut.scheduling.annotation.Scheduled}, which declares the methods the scheduler invokes and
      * which this module reads as the timeout methods of the specification.
      */
-    static final String SCHEDULED = "io.micronaut.scheduling.annotation.Scheduled";
+    public static final String SCHEDULED = "io.micronaut.scheduling.annotation.Scheduled";
 
     private JakartaInterceptorSupport() {
     }

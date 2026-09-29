@@ -25,6 +25,7 @@ import io.micronaut.inject.ast.MethodElement;
 import io.micronaut.inject.ast.ParameterElement;
 import io.micronaut.inject.processing.ProcessingException;
 import io.micronaut.interceptor.annotation.InterceptionKind;
+import io.micronaut.interceptor.runtime.JakartaInterceptorSupport;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -150,7 +151,7 @@ public final class InterceptorClassScanner {
         if (malformed.isEmpty()) {
             return;
         }
-        boolean interceptorClass = element.hasDeclaredAnnotation(JakartaInterceptors.INTERCEPTOR)
+        boolean interceptorClass = element.hasDeclaredAnnotation(JakartaInterceptorSupport.INTERCEPTOR)
             || interposes.stream().anyMatch(kind -> kind != InterceptionKind.AROUND_INVOKE
                 && kind != InterceptionKind.AROUND_TIMEOUT);
         for (Map.Entry<MethodElement, String> entry : malformed.entrySet()) {
@@ -204,7 +205,8 @@ public final class InterceptorClassScanner {
      */
     public static List<AnnotationValue<?>> bindingsOf(Element element) {
         AnnotationMetadata annotationMetadata = ownMetadataOf(element);
-        List<String> names = annotationMetadata.getAnnotationNamesByStereotype(JakartaInterceptors.INTERCEPTOR_BINDING);
+        List<String> names =
+            annotationMetadata.getAnnotationNamesByStereotype(JakartaInterceptorSupport.INTERCEPTOR_BINDING);
         if (names.isEmpty()) {
             return List.of();
         }
@@ -222,7 +224,7 @@ public final class InterceptorClassScanner {
         // a map keyed by name keeps the bindings distinct while preserving the declaration order
         Map<String, AnnotationValue<?>> bindings = new LinkedHashMap<>(names.size());
         for (String name : names) {
-            if (JakartaInterceptors.INTERCEPTOR_BINDING.equals(name)) {
+            if (JakartaInterceptorSupport.INTERCEPTOR_BINDING.equals(name)) {
                 // a binding annotation names itself among its bindings; it is not one of its own
                 continue;
             }

@@ -40,8 +40,6 @@ final class LifecycleInvocationContext extends AbstractInvocationContext
     implements MicronautMethodInvocationContext {
 
     private final MethodInvocationContext<Object, ?> context;
-    private @Nullable Method method;
-    private boolean methodResolved;
     private boolean proceeding;
 
     LifecycleInvocationContext(MethodInvocationContext<Object, ?> context,
@@ -86,20 +84,17 @@ final class LifecycleInvocationContext extends AbstractInvocationContext
      * <p>Resolving it is the one place a lifecycle interception reaches for the reflection of the platform, and it
      * only happens when an interceptor asks for the method. It used to be a walk up the class hierarchy, looking
      * for a name the processor had recorded, which read the declared methods of every class between the bean and
-     * the one that declared the callback. Micronaut answers it in one lookup.</p>
+     * the one that declared the callback. Micronaut answers it in one lookup, and remembers the method once it has
+     * looked it up.</p>
      *
      * @return The callback of the intercepted class, or {@code null} when it declares none
      */
     @Override
     public @Nullable Method getMethod() {
-        if (!methodResolved) {
-            methodResolved = true;
-            // getMethod returns a java.lang.reflect.Method, which only the platform can produce
-            @SuppressWarnings("NoReflection")
-            @Nullable Method target = context.getExecutableMethod().getTargetMethod();
-            method = target;
-        }
-        return method;
+        // getMethod returns a java.lang.reflect.Method, which only the platform can produce
+        @SuppressWarnings("NoReflection")
+        @Nullable Method target = context.getExecutableMethod().getTargetMethod();
+        return target;
     }
 
     /**

@@ -27,7 +27,6 @@ import io.micronaut.context.BeanRegistration;
 import io.micronaut.context.BeanResolutionContext;
 import io.micronaut.context.DefaultBeanContext;
 import io.micronaut.context.DefaultBeanResolutionContext;
-import io.micronaut.context.DependentBeanProvider;
 import io.micronaut.context.annotation.Prototype;
 import io.micronaut.context.exceptions.NonUniqueBeanException;
 import io.micronaut.core.annotation.AnnotationMetadata;
@@ -71,19 +70,13 @@ import java.util.Map;
 @InterceptorBinding(value = JakartaInterception.class, kind = InterceptorKind.PRE_DESTROY)
 public final class JakartaInterceptorAdvice implements MethodInterceptor<Object, Object>, ConstructorInterceptor<Object> {
 
-    /**
-     * The annotation that makes a bean of a custom scope resolve to a proxy over a target the scope keeps. Named
-     * rather than referenced: it is declared by a module this one does not depend on.
-     */
-    private static final String SCOPED_PROXY = "io.micronaut.runtime.context.scope.ScopedProxy";
-
     private final InterceptorChainResolver resolver;
     private final BeanContext beanContext;
     private final Map<Class<?>, Object> instances = new HashMap<>(4);
     /**
-     * The registrations of the instances that belong to the object alone, in the order they were created. An
-     * interceptor with a scope of its own - a {@code @Singleton}, or a bean of a custom scope, shared by every object
-     * it intercepts - is not among them: it is not the object's to destroy. See {@link #own}.
+     * The registrations of what Micronaut created for the instances rather than found in a scope, in the order they
+     * were created. An interceptor with a scope of its own - a {@code @Singleton}, or a bean of a custom scope, shared
+     * by every object it intercepts - is not the object's to destroy: see {@link #destroy()}.
      */
     private final List<BeanRegistration<?>> owned = new ArrayList<>(2);
     /**
@@ -346,38 +339,20 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         }
         try (BeanResolutionContext resolutionContext = new DefaultBeanResolutionContext(beanContext, null)) {
             Object instance = resolutionContext.getBean(interceptorClass);
-            for (BeanRegistration<?> registration : resolutionContext.getAndResetDependentBeans()) {
-                own(registration);
-            }
+            owned.addAll(resolutionContext.getAndResetDependentBeans());
             return instance;
         }
-    }
-
-    /**
-     * Keeps what a registration Micronaut reported as a dependent leaves the object to destroy.
-     *
-     * <p>A bean of a custom scope that resolves through a proxy is reported as that proxy, while the bean behind it
-     * belongs to the scope and serves every object the interceptor is bound to: destroying the registration would
-     * remove the bean from its scope. The dependents of the proxy are kept instead, which is what Micronaut destroys
-     * when it destroys such a proxy as the dependent of a bean.</p>
-     */
-    private void own(BeanRegistration<?> registration) {
-        BeanDefinition<?> definition = registration.getBeanDefinition();
-        if (definition.isProxy() && definition.hasStereotype(SCOPED_PROXY)) {
-            if (registration instanceof DependentBeanProvider provider) {
-                for (BeanRegistration<?> dependent : provider.dependentBeans()) {
-                    own(dependent);
-                }
-            }
-            return;
-        }
-        owned.add(registration);
     }
 
     /**
      * Destroys the interceptor instances that belong to the object alone, latest first, as Micronaut destroys the
      * dependents of a bean, and forgets every instance. Destroying them twice destroys them once. One failing to be
      * destroyed does not keep the rest alive: the first failure is reported once all are destroyed.
+     *
+     * <p>Each is destroyed as a dependent, the way Micronaut destroys the dependents of a bean. A bean of a custom
+     * scope that resolves through a proxy is reported as that proxy, while the bean behind it belongs to the scope
+     * and serves every object the interceptor is bound to: destroyed as a dependent, the proxy and its own
+     * dependents go, and the bean stays in its scope.</p>
      */
     private void destroy() {
         List<BeanRegistration<?>> destroyed;
@@ -393,7 +368,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         // outside of the lock: what an interceptor does as it is destroyed is its own code
         for (int i = destroyed.size() - 1; i >= 0; i--) {
             try {
-                beanContext.destroyBean(destroyed.get(i));
+                beanContext.destroyDependentBean(destroyed.get(i));
             } catch (RuntimeException e) {
                 if (failure == null) {
                     failure = e;

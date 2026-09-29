@@ -30,7 +30,8 @@ Every interceptor class the class of the bean is bound to has its instance creat
 `@AroundConstruct` method runs, including one that declares no `@AroundConstruct` method and therefore takes no part
 in the construction. An interceptor class bound to one method of the bean alone is the exception: the methods of a
 bean are not reachable from a constructor interception, so its instance is created as the bean finishes being
-created, before anything is invoked on it.
+created, before anything is invoked on it. That holds for a bean proxied with a separate target, and for one a
+`@Factory` method produces, as well: their interceptor instances are created as the proxy is.
 The bean itself is injected, and its `@PostConstruct` callbacks run, once every around-construct method has
 returned, as the specification describes: when `proceed()` returns to an around-construct method the instance
 exists, but its fields and methods are not injected yet.

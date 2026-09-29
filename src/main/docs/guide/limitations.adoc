@@ -75,10 +75,11 @@ from the call, and is intercepted through to its completion as any other method 
 
 === Interceptors registered after the first interception
 
-The interceptor classes bound by a binding annotation are looked for among the beans once, the first time an
-element bound that way is intercepted, and the chain of each element is remembered after it is resolved. An
-interceptor registered with the context after that, at runtime, is therefore not picked up. Interception is
-declared where it is compiled, and that is where interceptors are expected to come from.
+The interceptor classes bound by a binding annotation are looked for among the beans each time a chain is
+resolved, which is the first time an element declaring that interception is intercepted, and the chain is
+remembered after that. An interceptor registered with the context at runtime is therefore picked up by the chains
+resolved after it was registered, and not by one resolved before. Interception is declared where it is compiled,
+and that is where interceptors are expected to come from.
 
 === A note on interceptor instances
 

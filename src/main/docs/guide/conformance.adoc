@@ -53,15 +53,15 @@ module stands against every one of them.
 |===
 | | Assertions
 
-| Covered by a test of this repository | 128
+| Covered by a test of this repository | 129
 | Covered by a test, with one exception described under Limitations | 2
-| Differs from the specification, deliberately | 5
+| Differs from the specification, deliberately | 4
 | Not applicable to a module without Jakarta Enterprise Beans, a deployment descriptor or a naming context | 27
 | A statement of intent, with nothing to verify | 4
 |===
 
 Everything the specification describes that applies to a module of this kind is covered by a test, apart from the
-5 differences below, each of which is deliberate, and the order a closing context destroys a `@Singleton` interceptor
+4 differences below, each of which is deliberate, and the order a closing context destroys a `@Singleton` interceptor
 in, which the two assertions about the destruction of interceptor instances name and <<limitations,Limitations>>
 describes.
 
@@ -71,10 +71,6 @@ describes.
 
 | 2.2 c)
 | An interceptor class is a bean, so it needs no public no-arg constructor and may take injection
-
-| 2.3 dd)
-| An object is injected, and its post-construct callbacks run, before its around-construct interceptor methods
-return rather than after
 
 | 3.3 g)
 | A binding declared on a final method is not reported; a final class, and a final method of a class carrying a
@@ -222,7 +218,8 @@ with the other singletons of the context rather than with the object it intercep
 | AroundConstructInstancesTest, AssociatedInstancesTest: every interceptor class the class of the object is bound to
 is created and injected before the first around-construct method runs, including one that declares no
 around-construct method and therefore takes no part in the construction. An interceptor class bound to one method of
-the object alone is created as the object finishes being created; see the guide
+the object alone is created as the object finishes being created, whether it is proxied as a subclass, proxied with
+a separate target or produced by a factory method: EagerCreationTest; see the guide
 
 | daz)
 | Injection of the target component into interceptor instances that are invoked during the AroundConstruct lifecycle callback is not supported.

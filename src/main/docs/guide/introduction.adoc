@@ -35,7 +35,7 @@ such a class is constructed once, for the one object, and is handed that object 
 There is no Technology Compatibility Kit for Jakarta Interceptors to run against, and the suites that cover
 interceptors, the Jakarta Contexts and Dependency Injection ones, drive a CDI container rather than this. The specification is instead
 followed assertion by assertion: all 166 of them are recorded under <<conformance,Conformance>>, with the test that
-covers each. Everything that applies to a module of this kind is covered, apart from eight deliberate
+covers each. Everything that applies to a module of this kind is covered, apart from four deliberate
 differences.
 
 NOTE: The public API is marked `@Experimental`: it can change between minor versions until the first stable

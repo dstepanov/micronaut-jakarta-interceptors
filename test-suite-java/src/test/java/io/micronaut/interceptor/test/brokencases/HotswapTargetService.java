@@ -6,7 +6,7 @@ import jakarta.inject.Singleton;
 
 @Singleton
 @Paired
-@Around(proxyTarget = true, hotswap = true, lazyInterceptorsPerTarget = true)
+@Around(proxyTarget = true, hotswap = true)
 public class HotswapTargetService {
     public String work() {
         return "done";

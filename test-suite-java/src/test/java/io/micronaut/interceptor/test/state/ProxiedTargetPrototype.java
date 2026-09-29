@@ -5,7 +5,7 @@ import io.micronaut.context.annotation.Prototype;
 
 @Prototype
 @Paired
-@Around(proxyTarget = true, lazyInterceptorsPerTarget = true)
+@Around(proxyTarget = true)
 public class ProxiedTargetPrototype {
 
     public String work() {

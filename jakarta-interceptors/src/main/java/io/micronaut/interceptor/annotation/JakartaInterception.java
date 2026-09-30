@@ -65,6 +65,16 @@ public @interface JakartaInterception {
     Class<?>[] interceptors() default {};
 
     /**
+     * The interceptor classes the class of a constructor names with {@code jakarta.interceptor.Interceptors},
+     * recorded on the constructor whether or not it excludes them. They are associated with the class, and section
+     * 2.3 has them created before an around-construct interceptor method runs, even where the constructor is not
+     * intercepted by them.
+     *
+     * @return The interceptor classes
+     */
+    Class<?>[] associated() default {};
+
+    /**
      * The class that declares interceptor methods on itself, which the specification invokes after every
      * interceptor class. Its interceptor method is invoked on the intercepted instance rather than on an
      * interceptor of its own.

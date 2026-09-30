@@ -66,6 +66,7 @@ public final class InterceptorChainResolver {
     // read of it is read once rather than once for every element it intercepts
     private final Map<Class<?>, Optional<BeanDefinition<?>>> describing = new ConcurrentHashMap<>();
     private final Map<ReferenceKey, List<InterceptorReference>> references = new ConcurrentHashMap<>();
+    private final Map<AssociatedKey, List<InterceptorReference>> associated = new ConcurrentHashMap<>();
 
     /**
      * @param beanContext The bean context the interceptor classes are beans of
@@ -115,6 +116,39 @@ public final class InterceptorChainResolver {
             chains.put(key, chain);
         }
         return chain;
+    }
+
+    /**
+     * Resolves the interceptor classes associated with the class of an object being constructed, whichever kinds of
+     * interceptor method they declare.
+     *
+     * <p>Read from the {@code associated} member the processor writes on the constructor, which lists the interceptor
+     * classes the class names whether or not the constructor excludes them, and from the bindings of the constructor.
+     * Every kind is resolved, so that an interceptor class declaring nothing but an {@code @AroundTimeout} method is
+     * among them as well. Remembered apart from the chains: these are not chains that run.</p>
+     *
+     * @param metadata The annotation metadata of the constructor
+     * @return The interceptor methods of the associated classes, which may repeat an interceptor class
+     */
+    List<InterceptorReference> resolveAssociated(AnnotationMetadata metadata) {
+        AnnotationValue<JakartaInterception> interception = metadata.getAnnotation(JakartaInterception.class);
+        if (interception == null || metadata.hasAnnotation(Adapter.class)) {
+            return List.of();
+        }
+        AssociatedKey key = new AssociatedKey(
+            List.of(interception.classValues("associated")),
+            List.of(interception.stringValues("bindings")));
+        List<InterceptorReference> resolved = associated.get(key);
+        if (resolved == null) {
+            // as with the chains, two threads building the same list build equal lists
+            List<InterceptorReference> all = new ArrayList<>();
+            for (InterceptionKind kind : InterceptionKind.values()) {
+                all.addAll(build(new ChainKey(kind, key.interceptors(), key.bindings(), null, false)));
+            }
+            resolved = List.copyOf(all);
+            associated.put(key, resolved);
+        }
+        return resolved;
     }
 
     /**
@@ -402,6 +436,15 @@ public final class InterceptorChainResolver {
                 interception.classValue("self").filter(type -> type != void.class).orElse(null),
                 interception.booleanValue("excluded").orElse(false));
         }
+    }
+
+    /**
+     * What the interceptor classes associated with a class are resolved from.
+     *
+     * @param interceptors The interceptor classes the class names
+     * @param bindings     What the binding annotations of the constructor are compared by
+     */
+    private record AssociatedKey(List<Class<?>> interceptors, List<String> bindings) {
     }
 
     /**

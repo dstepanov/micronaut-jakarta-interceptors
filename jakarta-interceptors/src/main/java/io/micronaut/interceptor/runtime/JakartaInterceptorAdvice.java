@@ -206,22 +206,17 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      * association rules of the construction itself are untouched: what is created here interposes on nothing, and the
      * chain the construction runs is still only the one resolved for it.</p>
      *
-     * <p>Read from the metadata of the constructor, which carries the metadata of the class as well. An interceptor
-     * class bound to one method of the object alone is not among them: the methods of a bean are not reachable from a
+     * <p>Read from what the processor records on the constructor apart from its chain: the interceptor classes the
+     * class names, whether or not the constructor excludes them with {@code @ExcludeClassInterceptors}, and the
+     * bindings in effect on it. Every kind of interceptor method counts, an {@code @AroundTimeout} one included. An
+     * interceptor class bound to one method of the object alone is not among them: the methods of a bean are not reachable from a
      * constructor interception, and it is created as the object finishes being created. See the guide.</p>
      *
      * @param metadata The annotation metadata of the constructor
      * @return The interceptors, which may repeat those of the chain
      */
     private List<InterceptorReference> associatedWithTheClass(AnnotationMetadata metadata) {
-        if (!metadata.hasAnnotation(JakartaInterception.class)) {
-            return List.of();
-        }
-        List<InterceptorReference> associated = new ArrayList<>(4);
-        associated.addAll(resolver.resolve(InterceptorKind.AROUND, metadata));
-        associated.addAll(resolver.resolve(InterceptorKind.POST_CONSTRUCT, metadata));
-        associated.addAll(resolver.resolve(InterceptorKind.PRE_DESTROY, metadata));
-        return associated;
+        return resolver.resolveAssociated(metadata);
     }
 
     /**

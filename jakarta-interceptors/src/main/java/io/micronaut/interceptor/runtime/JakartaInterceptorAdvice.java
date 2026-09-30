@@ -31,6 +31,7 @@ import io.micronaut.context.DependentBeanProvider;
 import io.micronaut.context.annotation.Prototype;
 import io.micronaut.context.exceptions.NonUniqueBeanException;
 import io.micronaut.core.annotation.AnnotationMetadata;
+import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.core.beans.BeanConstructor;
 import io.micronaut.inject.BeanDefinition;
@@ -138,12 +139,18 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
             return interceptLifecycle(context, kind);
         }
         createInterceptorInstancesOnce(context);
-        List<InterceptorReference> chain = resolver.resolve(kind, context.getAnnotationMetadata());
+        AnnotationMetadata metadata = context.getAnnotationMetadata();
+        // a method declaring @Scheduled is a timeout method only while the scheduler invokes it: a direct call by
+        // the application is a business method invocation
+        AnnotationValue<?> schedule = metadata.isTrue(JakartaInterception.class, "timeout")
+            ? ScheduledInvocation.scheduleOf(context)
+            : null;
+        List<InterceptorReference> chain = resolver.resolve(kind, metadata, schedule != null);
         if (chain.isEmpty()) {
             return context.proceed();
         }
         try {
-            return new BusinessMethodInvocationContext(context, chain, this).proceed();
+            return new BusinessMethodInvocationContext(context, chain, this, schedule).proceed();
         } catch (Exception e) {
             throw sneakyThrow(e);
         }

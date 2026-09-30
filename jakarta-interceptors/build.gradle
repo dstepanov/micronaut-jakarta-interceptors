@@ -11,6 +11,8 @@ dependencies {
     // answers the accessors of InvocationContext that return an object of the Java reflection API. It is compiled
     // against and left to the application to add: without it those accessors fail, and nothing else is affected
     compileOnly mn.micronaut.reflection
+    // the scheduler is read only for a method declaring @Scheduled, which brings micronaut-context along
+    compileOnly mn.micronaut.context
 
     testImplementation platform(libs.junit.bom)
     testImplementation libs.junit.jupiter

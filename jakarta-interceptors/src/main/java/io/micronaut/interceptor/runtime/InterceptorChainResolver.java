@@ -82,8 +82,21 @@ public final class InterceptorChainResolver {
      * @return The interceptors, in the order they are invoked in
      */
     List<InterceptorReference> resolve(InterceptorKind interceptorKind, AnnotationMetadata metadata) {
+        return resolve(interceptorKind, metadata, true);
+    }
+
+    /**
+     * Resolves the chain of an intercepted element, telling whether the scheduler invoked it.
+     *
+     * @param interceptorKind The kind Micronaut intercepts the element as
+     * @param metadata        The annotation metadata of the element
+     * @param scheduled       Whether the scheduler is invoking the element, without which a timeout method is
+     *                        interposed on as a business method
+     * @return The interceptors, in the order they are invoked in
+     */
+    List<InterceptorReference> resolve(InterceptorKind interceptorKind, AnnotationMetadata metadata, boolean scheduled) {
         AnnotationValue<JakartaInterception> interception = metadata.getAnnotation(JakartaInterception.class);
-        boolean timeout = interception != null && interception.booleanValue("timeout").orElse(false);
+        boolean timeout = scheduled && interception != null && interception.booleanValue("timeout").orElse(false);
         InterceptionKind kind = InterceptionKind.of(interceptorKind, timeout);
         if (kind == null) {
             return List.of();

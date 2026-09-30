@@ -17,6 +17,7 @@ package io.micronaut.interceptor.runtime;
 
 import io.micronaut.aop.InterceptorKind;
 import io.micronaut.aop.MethodInvocationContext;
+import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.inject.ExecutableMethod;
 import io.micronaut.interceptor.MicronautMethodInvocationContext;
@@ -38,12 +39,15 @@ final class BusinessMethodInvocationContext extends AbstractInvocationContext
     private final MethodInvocationContext<Object, ?> context;
     private @Nullable Object timer;
     private boolean timerResolved;
+    private final @Nullable AnnotationValue<?> schedule;
 
     BusinessMethodInvocationContext(MethodInvocationContext<Object, ?> context,
                                     List<InterceptorReference> chain,
-                                    JakartaInterceptorAdvice advice) {
+                                    JakartaInterceptorAdvice advice,
+                                    @Nullable AnnotationValue<?> schedule) {
         super(context, chain, advice);
         this.context = context;
+        this.schedule = schedule;
     }
 
     @Override
@@ -88,7 +92,8 @@ final class BusinessMethodInvocationContext extends AbstractInvocationContext
 
     /**
      * The specification returns the timer of the timer service that invoked a timeout method. What stands for one
-     * here is the schedule the method was registered with, and an ordinary business method has none.
+     * here is the schedule that triggered the invocation, and a business method invocation - a direct call of a
+     * scheduled method included - has none.
      *
      * @return The schedule of the method, or {@code null} when the scheduler does not invoke it
      */
@@ -96,13 +101,7 @@ final class BusinessMethodInvocationContext extends AbstractInvocationContext
     public @Nullable Object getTimer() {
         if (!timerResolved) {
             timerResolved = true;
-            // a schedule is recorded through its repeatable container even when a method declares only one
-            timer = context.getAnnotationMetadata()
-                .getAnnotationValuesByName(JakartaInterceptorSupport.SCHEDULED)
-                .stream()
-                .findFirst()
-                .map(ScheduledTimer::of)
-                .orElse(null);
+            timer = schedule == null ? null : ScheduledTimer.of(schedule);
         }
         return timer;
     }

@@ -20,6 +20,7 @@ import io.micronaut.core.annotation.Internal;
 import io.micronaut.core.convert.value.MutableConvertibleValues;
 import io.micronaut.core.reflect.ReflectionUtils;
 import io.micronaut.core.type.Argument;
+import io.micronaut.inject.annotation.AnnotationMetadataHierarchy;
 import io.micronaut.interceptor.MicronautInvocationContext;
 import jakarta.interceptor.InvocationContext;
 import org.jspecify.annotations.Nullable;
@@ -27,6 +28,7 @@ import org.jspecify.annotations.Nullable;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -329,15 +331,41 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     private Annotation[] synthesizeBindings(Class<? extends Annotation> annotationType) {
         AnnotationMetadata annotationMetadata = bindingMetadata();
         if (annotationMetadata.findRepeatableAnnotation(annotationType.getName()).isPresent()) {
-            // the bindings are the annotations themselves, so they have to be built
-            @SuppressWarnings("NoReflection")
-            Annotation[] repeated = annotationMetadata.synthesizeAnnotationsByType(annotationType);
-            return repeated;
+            return nearestRepeated(annotationMetadata, annotationType);
         }
         // as above, for a binding that does not repeat
         @SuppressWarnings("NoReflection")
         Annotation single = annotationMetadata.synthesize(annotationType);
         return single == null ? EMPTY_BINDINGS : new Annotation[]{single};
+    }
+
+    /**
+     * The occurrences of a repeatable binding the nearest layer of the metadata declares: the method's when it
+     * declares any, the class's otherwise.
+     *
+     * <p>The metadata of a method is a hierarchy of the metadata of its class and its own, and asked for the
+     * occurrences of a repeatable annotation it answers those of every layer. The chain was selected by the
+     * occurrences the method declares alone, which replace those of the class, so that is what is answered.</p>
+     */
+    private static Annotation[] nearestRepeated(AnnotationMetadata metadata, Class<? extends Annotation> annotationType) {
+        if (metadata instanceof AnnotationMetadataHierarchy hierarchy) {
+            List<AnnotationMetadata> layers = new ArrayList<>(2);
+            // the hierarchy iterates from the root, the class, to the element itself
+            for (AnnotationMetadata layer : hierarchy) {
+                layers.add(0, layer);
+            }
+            for (AnnotationMetadata layer : layers) {
+                Annotation[] repeated = nearestRepeated(layer, annotationType);
+                if (repeated.length > 0) {
+                    return repeated;
+                }
+            }
+            return EMPTY_BINDINGS;
+        }
+        // the bindings are the annotations themselves, so they have to be built
+        @SuppressWarnings("NoReflection")
+        Annotation[] repeated = metadata.synthesizeAnnotationsByType(annotationType);
+        return repeated;
     }
 
     /**

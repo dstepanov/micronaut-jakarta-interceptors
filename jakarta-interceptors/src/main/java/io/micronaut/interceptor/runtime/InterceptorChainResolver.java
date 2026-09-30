@@ -18,11 +18,9 @@ package io.micronaut.interceptor.runtime;
 import io.micronaut.aop.Adapter;
 import io.micronaut.aop.InterceptorKind;
 import io.micronaut.context.BeanContext;
-import io.micronaut.core.annotation.AnnotationClassValue;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
-import io.micronaut.core.annotation.Order;
 import io.micronaut.inject.BeanDefinition;
 import io.micronaut.inject.ExecutableMethod;
 import io.micronaut.interceptor.annotation.InterceptionKind;
@@ -30,8 +28,6 @@ import io.micronaut.interceptor.annotation.JakartaInterception;
 import io.micronaut.interceptor.annotation.JakartaInterceptorIndex;
 import io.micronaut.interceptor.annotation.JakartaInterceptorMethods;
 import jakarta.inject.Singleton;
-import jakarta.interceptor.Interceptor;
-import jakarta.interceptor.InvocationContext;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -40,7 +36,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.OptionalInt;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -216,7 +211,7 @@ public final class InterceptorChainResolver {
                 matching.add(definition);
             }
         }
-        matching.sort(Comparator.comparingInt(InterceptorChainResolver::priorityOf)
+        matching.sort(Comparator.<BeanDefinition<?>>comparingInt(InterceptorMethods::priorityOf)
             .thenComparing(definition -> definition.getBeanType().getName()));
         return matching;
     }
@@ -316,73 +311,21 @@ public final class InterceptorChainResolver {
     }
 
     private static List<InterceptorReference> referencesOf(BeanDefinition<?> definition, InterceptionKind kind, boolean self) {
-        AnnotationValue<JakartaInterceptorMethods> methods =
-            definition.getAnnotation(JakartaInterceptorMethods.class);
-        if (methods == null) {
-            return List.of();
-        }
-        InterceptionKind recorded = kind;
-        if (kind == InterceptionKind.AROUND_TIMEOUT && methods.stringValues(kind.member()).length == 0) {
+        InterceptorMethods declared = InterceptorMethods.of(definition, kind);
+        if (kind == InterceptionKind.AROUND_TIMEOUT && declared.isEmpty()) {
             // the specification has an @AroundInvoke method interpose on business methods alone. An interceptor
             // that declares no @AroundTimeout method would then quietly stop intercepting a method the moment it
             // was scheduled, so its @AroundInvoke methods are used instead
-            recorded = InterceptionKind.AROUND_INVOKE;
+            declared = InterceptorMethods.of(definition, InterceptionKind.AROUND_INVOKE);
         }
-        String[] names = methods.stringValues(recorded.member());
-        AnnotationClassValue<?>[] declaringTypes = methods.annotationClassValues(recorded.declaringTypesMember());
-        List<InterceptorReference> references = new ArrayList<>(names.length);
-        for (int i = 0; i < names.length; i++) {
-            String declaringType = i < declaringTypes.length ? declaringTypes[i].getName() : null;
-            ExecutableMethod<Object, Object> method = interceptorMethod(definition, names[i], declaringType);
+        List<ExecutableMethod<Object, Object>> methods = declared.methods();
+        List<InterceptorReference> references = new ArrayList<>(methods.size());
+        for (ExecutableMethod<Object, Object> method : methods) {
             references.add(new InterceptorReference(definition.getBeanType(), method, self));
         }
         // the list is shared between every chain that includes this interceptor, so it is not one of theirs to
         // change
         return List.copyOf(references);
-    }
-
-    /**
-     * The executable method of one interceptor method.
-     *
-     * <p>It is found by the class that declares it as well as by its name. The executable methods of a class
-     * include the ones it inherits, and a class and its superclass may each declare a private interceptor method of
-     * the same name and signature; looked up by name alone, both would be whichever of them came first.</p>
-     *
-     * @param definition    The definition of the interceptor class
-     * @param name          The name of the method
-     * @param declaringType The name of the class that declares it, or {@code null} where it was not recorded
-     */
-    @SuppressWarnings("unchecked")
-    private static ExecutableMethod<Object, Object> interceptorMethod(BeanDefinition<?> definition,
-                                                                     String name,
-                                                                     @Nullable String declaringType) {
-        for (ExecutableMethod<?, ?> method : definition.getExecutableMethods()) {
-            Class<?>[] argumentTypes = method.getArgumentTypes();
-            if (method.getMethodName().equals(name)
-                && argumentTypes.length == 1
-                && argumentTypes[0] == InvocationContext.class
-                && (declaringType == null || method.getDeclaringType().getName().equals(declaringType))) {
-                return (ExecutableMethod<Object, Object>) method;
-            }
-        }
-        throw new IllegalStateException("The interceptor method [" + name + "] of ["
-            + (declaringType == null ? definition.getBeanType().getName() : declaringType)
-            + "] has no executable method. The interceptor class has to be compiled with "
-            + "micronaut-jakarta-interceptors-processor on the annotation processor path");
-    }
-
-    /**
-     * The priority an interceptor class is ordered by, which the specification takes from
-     * {@code jakarta.annotation.Priority}. Micronaut maps that annotation onto its own {@code @Order}, which is
-     * read as a fallback so that an interceptor ordered the Micronaut way is ordered the same.
-     */
-    private static int priorityOf(BeanDefinition<?> definition) {
-        AnnotationMetadata metadata = definition.getAnnotationMetadata();
-        OptionalInt priority = metadata.intValue(JakartaInterceptorSupport.PRIORITY, AnnotationMetadata.VALUE_MEMBER);
-        if (priority.isPresent()) {
-            return priority.getAsInt();
-        }
-        return metadata.intValue(Order.class).orElse(Interceptor.Priority.APPLICATION);
     }
 
     /**

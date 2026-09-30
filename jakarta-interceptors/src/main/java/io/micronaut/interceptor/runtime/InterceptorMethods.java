@@ -123,8 +123,9 @@ public final class InterceptorMethods {
      * Invokes the interceptor methods on an interceptor instance, around an invocation that is not driven by a
      * chain of this runtime.
      *
-     * <p>Each method is given a context that is the given one in everything but {@code proceed}, which leads to the
-     * next method; the last proceeds into the given context itself. What a method or the invocation throws travels
+     * <p>Every method is given the same context, as the specification has the interceptor methods of one invocation
+     * given: one that is the given context in everything but {@code proceed}, which leads to the next method, and
+     * from the last into the given context itself. What a method or the invocation throws travels
      * on as it was thrown, checked or not, including from a method Micronaut reaches reflectively, such as a
      * private one.</p>
      *
@@ -134,7 +135,10 @@ public final class InterceptorMethods {
      * @throws Exception whatever an interceptor method or the invocation threw
      */
     public @Nullable Object invoke(Object interceptor, InvocationContext context) throws Exception {
-        return invokeFrom(0, interceptor, context);
+        if (methods.isEmpty()) {
+            return context.proceed();
+        }
+        return new DirectInvocation(methods, interceptor, context).proceed();
     }
 
     /**
@@ -144,14 +148,6 @@ public final class InterceptorMethods {
      */
     List<ExecutableMethod<Object, Object>> methods() {
         return methods;
-    }
-
-    private @Nullable Object invokeFrom(int index, Object interceptor, InvocationContext context) throws Exception {
-        if (index == methods.size()) {
-            return context.proceed();
-        }
-        return methods.get(index).invoke(interceptor,
-            new NextInContext(context, () -> invokeFrom(index + 1, interceptor, context)));
     }
 
     /**
@@ -185,20 +181,25 @@ public final class InterceptorMethods {
     }
 
     /**
-     * Where proceeding from one interceptor method leads.
-     */
-    @FunctionalInterface
-    private interface ProceedsTo {
-        @Nullable Object proceed() throws Exception;
-    }
-
-    /**
-     * The context the next interceptor method sees: everything of the invocation, with proceed leading on.
+     * The context the interceptor methods of one direct invocation see: everything of the invocation, with proceed
+     * leading from each method to the next, and from the last into the invocation.
      *
-     * @param invocation The context of the invocation itself
-     * @param next       Where proceeding from here leads
+     * <p>It is one object for every method. Where proceeding leads is the position it keeps, which is moved on for
+     * the method proceeded into and put back once that method returns or throws, so that a method proceeding a
+     * second time runs the rest again.</p>
      */
-    private record NextInContext(InvocationContext invocation, ProceedsTo next) implements InvocationContext {
+    private static final class DirectInvocation implements InvocationContext {
+
+        private final List<ExecutableMethod<Object, Object>> methods;
+        private final Object interceptor;
+        private final InvocationContext invocation;
+        private int next;
+
+        DirectInvocation(List<ExecutableMethod<Object, Object>> methods, Object interceptor, InvocationContext invocation) {
+            this.methods = methods;
+            this.interceptor = interceptor;
+            this.invocation = invocation;
+        }
 
         @Override
         public Object getTarget() {
@@ -242,7 +243,16 @@ public final class InterceptorMethods {
 
         @Override
         public @Nullable Object proceed() throws Exception {
-            return next.proceed();
+            int position = next;
+            if (position == methods.size()) {
+                return invocation.proceed();
+            }
+            next = position + 1;
+            try {
+                return methods.get(position).invoke(interceptor, this);
+            } finally {
+                next = position;
+            }
         }
     }
 }

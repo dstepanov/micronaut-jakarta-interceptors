@@ -31,6 +31,7 @@ import io.micronaut.core.annotation.Internal;
 import io.micronaut.core.annotation.ReflectionConfig;
 import io.micronaut.core.annotation.ReflectiveAccess;
 import io.micronaut.core.annotation.TypeHint;
+import io.micronaut.inject.ast.AnnotationElement;
 import io.micronaut.inject.ast.ClassElement;
 import io.micronaut.inject.ast.Element;
 import io.micronaut.inject.ast.ElementQuery;
@@ -55,8 +56,10 @@ import io.micronaut.interceptor.runtime.JakartaInterceptorSupport;
 import org.jspecify.annotations.Nullable;
 
 import java.lang.annotation.Annotation;
+import java.lang.annotation.ElementType;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -82,6 +85,12 @@ import java.util.Set;
  */
 @Internal
 public final class JakartaInterceptorVisitor implements TypeElementVisitor<Object, Object> {
+
+    /**
+     * The element types an interceptor binding is written on, which are the ones section 3.1.1 c) compares.
+     */
+    private static final Set<ElementType> BINDING_TARGETS =
+        Set.of(ElementType.TYPE, ElementType.METHOD, ElementType.CONSTRUCTOR);
 
     @Override
     public VisitorKind getVisitorKind() {
@@ -121,6 +130,7 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
             // is declared on - the interceptor classes included
             return;
         }
+        rejectNarrowerBindings(element, context);
         String conflict = BindingConflicts.conflictOf(element, context);
         if (conflict != null) {
             throw new ProcessingException(element, "The class [" + element.getName() + "] is bound by ["
@@ -151,6 +161,73 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
             return;
         }
         intercept(element, model, declaredAsABean, context);
+    }
+
+    /**
+     * Reports an interceptor binding type that declares another interceptor binding type which cannot be written
+     * everywhere it can, which section 3.1.1 c) makes a definition error: a binding declared {@code @Target(TYPE)}
+     * may not be applied to a binding declared {@code @Target({TYPE, METHOD})}.
+     *
+     * <p>The compiler does not report it. A binding declared {@code @Target(TYPE)} may annotate an annotation type,
+     * so the declaration compiles, and a method the outer binding is written on would then carry an inherited binding
+     * that could never have been written on it. Only the element types an interceptor binding is written on - a
+     * type, a method and a constructor - are compared.</p>
+     *
+     * @param element The class using the binding types
+     * @param context The visitor context
+     */
+    private static void rejectNarrowerBindings(ClassElement element, VisitorContext context) {
+        // the annotation types are not visited themselves, so they are checked where they are used: on the class,
+        // its constructor and its methods, an interceptor class included
+        Set<String> checked = new HashSet<>();
+        rejectNarrowerBindingsOf(element, element, checked, context);
+        element.getPrimaryConstructor()
+            .ifPresent(constructor -> rejectNarrowerBindingsOf(constructor, element, checked, context));
+        for (MethodElement method : methodsOf(element)) {
+            rejectNarrowerBindingsOf(method, element, checked, context);
+        }
+    }
+
+    private static void rejectNarrowerBindingsOf(Element user,
+                                                 ClassElement owner,
+                                                 Set<String> checked,
+                                                 VisitorContext context) {
+        for (AnnotationValue<?> binding : InterceptorClassScanner.bindingsOf(user)) {
+            String name = binding.getAnnotationName();
+            if (checked.add(name)
+                && context.getClassElement(name).orElse(null) instanceof AnnotationElement bindingType) {
+                rejectNarrowerBinding(bindingType, owner, context);
+            }
+        }
+    }
+
+    private static void rejectNarrowerBinding(AnnotationElement bindingType,
+                                              ClassElement owner,
+                                              VisitorContext context) {
+        Set<ElementType> targets = new LinkedHashSet<>(bindingType.getTargets());
+        targets.retainAll(BINDING_TARGETS);
+        String name = bindingType.getName();
+        for (String declaredName : bindingType.getDeclaredAnnotationNames()) {
+            if (declaredName.equals(name)) {
+                continue;
+            }
+            ClassElement declared = context.getClassElement(declaredName).orElse(null);
+            if (!(declared instanceof AnnotationElement declaredAnnotation)
+                || !declared.hasDeclaredAnnotation(JakartaInterceptorSupport.INTERCEPTOR_BINDING)) {
+                continue;
+            }
+            Set<ElementType> declaredTargets = declaredAnnotation.getTargets();
+            if (!declaredTargets.containsAll(targets)) {
+                Set<ElementType> missing = new LinkedHashSet<>(targets);
+                missing.removeAll(declaredTargets);
+                throw new ProcessingException(owner, "The interceptor binding type [" + name + "], used by ["
+                    + owner.getName() + "], declares the interceptor binding type [" + declaredName + "], which may "
+                    + "not be written on " + missing + " although [" + name + "] may. An interceptor binding type "
+                    + "can only be applied to an interceptor binding type whose targets are a subset of its own, so "
+                    + "that every element the outer binding is written on can carry the inherited one. Widen the "
+                    + "@Target of [" + declaredName + "], or narrow the @Target of [" + name + "]");
+            }
+        }
     }
 
     /**

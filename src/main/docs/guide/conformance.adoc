@@ -704,8 +704,8 @@ factory produced
 
 | c)
 | An interceptor binding type can only be applied to an interceptor binding type defining a superset of it's target types. For example interceptor binding types declared Target(TYPE) may not be applied to interceptor binding types declared Target({TYPE, METHOD}) .
-| Not applicable
-| Target types are checked by the Java compiler
+| Covered
+| BindingTargetCompatibilityTest (reported by the processor: the Java compiler accepts the declaration)
 |===
 
 === Section 3.1.2 - Other sources of interceptor bindings

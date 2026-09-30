@@ -29,6 +29,7 @@ import io.micronaut.context.DefaultBeanContext;
 import io.micronaut.context.DefaultBeanResolutionContext;
 import io.micronaut.context.DependentBeanProvider;
 import io.micronaut.context.annotation.Prototype;
+import io.micronaut.context.exceptions.NonUniqueBeanException;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.core.beans.BeanConstructor;
@@ -84,6 +85,11 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      * it intercepts - is not among them: it is not the object's to destroy. See {@link #own}.
      */
     private final List<BeanRegistration<?>> owned = new ArrayList<>(2);
+    /**
+     * Whether the interceptor instances of the object have been created as the object was, see
+     * {@link #createInterceptorInstancesOnce}.
+     */
+    private volatile boolean instancesCreated;
 
     /**
      * @param resolver    The resolver of the interceptor chains
@@ -131,6 +137,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         if (kind == InterceptorKind.POST_CONSTRUCT || kind == InterceptorKind.PRE_DESTROY) {
             return interceptLifecycle(context, kind);
         }
+        createInterceptorInstancesOnce(context);
         List<InterceptorReference> chain = resolver.resolve(kind, context.getAnnotationMetadata());
         if (chain.isEmpty()) {
             return context.proceed();
@@ -139,6 +146,39 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
             return new BusinessMethodInvocationContext(context, chain, this).proceed();
         } catch (Exception e) {
             throw sneakyThrow(e);
+        }
+    }
+
+    /**
+     * Creates the interceptor instances of the object on the first intercepted call, when nothing created them as the
+     * object was created.
+     *
+     * <p>A proxy that resolves its target lazily - {@code @Around(proxyTarget = true, lazy = true)}, or a bean of a
+     * scope that resolves through a proxy - has no target yet when it is created, so
+     * {@link InterceptorCreationListener} finds no advice to ask, and the advice is only resolved for the target as the first call reaches it. Each method
+     * interceptor would then be created only once its own method is called. The first call is the earliest the advice
+     * of such a target is seen, so the instances of every method are created then, from the definition the listener
+     * would have been handed: the one the target's class resolves to.</p>
+     */
+    private void createInterceptorInstancesOnce(MethodInvocationContext<Object, Object> context) {
+        if (instancesCreated) {
+            return;
+        }
+        synchronized (this) {
+            if (instancesCreated) {
+                return;
+            }
+            instancesCreated = true;
+        }
+        BeanDefinition<?> definition;
+        try {
+            definition = beanContext.findBeanDefinition(context.getTarget().getClass()).orElse(null);
+        } catch (NonUniqueBeanException e) {
+            // the class is ambiguous: each method interceptor is still created as its method is first called
+            return;
+        }
+        if (definition != null) {
+            createInterceptorInstances(definition);
         }
     }
 
@@ -233,6 +273,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      * @param definition The definition of the object
      */
     void createInterceptorInstances(BeanDefinition<?> definition) {
+        instancesCreated = true;
         try {
             AnnotationMetadata classMetadata = definition.getAnnotationMetadata();
             // only what this module intercepts is asked for: an element it does not intercept has no chain, and

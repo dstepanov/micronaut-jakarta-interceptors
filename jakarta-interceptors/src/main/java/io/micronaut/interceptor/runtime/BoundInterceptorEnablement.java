@@ -46,4 +46,20 @@ public interface BoundInterceptorEnablement {
      * @return Whether the interceptor class takes part in the chains its bindings bind it to
      */
     boolean isEnabled(BeanDefinition<?> interceptor);
+
+    /**
+     * The position of an interceptor class among the ones that are ordered by being listed rather than by a
+     * priority, where the module has such a list.
+     *
+     * <p>The interceptor classes a binding binds are ordered by their priority, and on its own this module orders
+     * every one of them so. An interceptor class with a position comes after all of those, in the order of the
+     * positions: the way Contexts and Dependency Injection orders the interceptors enabled by being listed for a
+     * bean archive after the ones enabled by a priority.</p>
+     *
+     * @param interceptor The definition that describes the interceptor class
+     * @return The position, or a negative number for an interceptor class ordered by its priority
+     */
+    default int position(BeanDefinition<?> interceptor) {
+        return -1;
+    }
 }

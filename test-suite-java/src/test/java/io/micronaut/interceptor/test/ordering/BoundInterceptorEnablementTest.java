@@ -87,6 +87,82 @@ class BoundInterceptorEnablementTest {
         }
     }
 
+    @InterceptorBinding
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target({TYPE, METHOD})
+    @interface Listed {
+    }
+
+    @Listed
+    @Interceptor
+    public static class AlphaListedInterceptor {
+        @AroundInvoke
+        public Object around(InvocationContext context) throws Exception {
+            return "alpha " + context.proceed();
+        }
+    }
+
+    @Listed
+    @Interceptor
+    public static class ZuluListedInterceptor {
+        @AroundInvoke
+        public Object around(InvocationContext context) throws Exception {
+            return "zulu " + context.proceed();
+        }
+    }
+
+    @Listed
+    @Interceptor
+    @jakarta.annotation.Priority(Interceptor.Priority.APPLICATION + 500)
+    public static class PrioritizedListedInterceptor {
+        @AroundInvoke
+        public Object around(InvocationContext context) throws Exception {
+            return "prioritized " + context.proceed();
+        }
+    }
+
+    @Singleton
+    @Listed
+    public static class ListedService {
+        public String work() {
+            return "worked";
+        }
+    }
+
+    static final String LISTING = "test.bound-interceptor-enablement.listing";
+
+    /** Lists two interceptor classes against the order of their names, where the test asks for it. */
+    @Singleton
+    @Requires(property = LISTING, value = "true")
+    public static class ListingEnablement implements BoundInterceptorEnablement {
+        @Override
+        public boolean isEnabled(BeanDefinition<?> interceptor) {
+            return true;
+        }
+
+        @Override
+        public int position(BeanDefinition<?> interceptor) {
+            if (interceptor.getBeanType() == ZuluListedInterceptor.class) {
+                return 0;
+            }
+            return interceptor.getBeanType() == AlphaListedInterceptor.class ? 1 : -1;
+        }
+    }
+
+    @Test
+    void boundInterceptorsAreOrderedByPriorityThenNameOnTheirOwn() {
+        try (ApplicationContext context = ApplicationContext.run()) {
+            assertEquals("alpha zulu prioritized worked", context.getBean(ListedService.class).work());
+        }
+    }
+
+    @Test
+    void theInterceptorsAModuleListsComeAfterTheOnesOrderedByPriorityInTheOrderOfTheList() {
+        try (ApplicationContext context = ApplicationContext.run(Map.of(LISTING, "true"))) {
+            assertEquals("prioritized zulu alpha worked", context.getBean(ListedService.class).work());
+        }
+    }
+
     @Test
     void everyBoundInterceptorIsEnabledOnItsOwn() {
         try (ApplicationContext context = ApplicationContext.run()) {

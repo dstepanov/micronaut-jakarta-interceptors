@@ -35,5 +35,13 @@ are left out of the chains: Micronaut CDI does, since Jakarta Contexts and Depen
 interceptor bound by an annotation only when it declares a priority. An interceptor class named with `@Interceptors`
 is enabled by being named, whatever such a module decides.
 
+Such a module may also order some interceptor classes by a list of its own rather than by a priority, through the
+`position` of the same bean: those come after the ones ordered by priority, in the order of the list. Micronaut CDI
+uses it for the interceptor classes the Java SE bootstrap enables with `SeContainerInitializer.enableInterceptors`.
+
+Where the constructor of a class declares a binding of a type the class declares too, the binding of the
+constructor is the one its construction is interposed on by, and the interceptors the binding of the class binds are
+still created before it is.
+
 Interception declared by other Micronaut modules on the same bean composes with this one; the whole chain is
 ordered by Micronaut, with the Jakarta interceptors of a bean at `Interceptor.Priority.APPLICATION` among them.

@@ -34,6 +34,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -223,20 +224,57 @@ public final class InterceptorChainResolver {
         }
         matching.sort(Comparator.<BeanDefinition<?>>comparingInt(InterceptorMethods::priorityOf)
             .thenComparing(definition -> definition.getBeanType().getName()));
-        return matching;
+        return listedLast(matching);
+    }
+
+    /**
+     * Moves the interceptor classes a module orders by a list after the ones ordered by their priority, in the
+     * order of the list. On its own the module has no such list, and the order by priority stands.
+     */
+    private List<BeanDefinition<?>> listedLast(List<BeanDefinition<?>> byPriority) {
+        List<BoundInterceptorEnablement> resolved = enablements();
+        if (resolved.isEmpty()) {
+            return byPriority;
+        }
+        Map<BeanDefinition<?>, Integer> positions = new HashMap<>();
+        for (BeanDefinition<?> definition : byPriority) {
+            for (BoundInterceptorEnablement enablement : resolved) {
+                int position = enablement.position(definition);
+                if (position >= 0) {
+                    positions.put(definition, position);
+                    break;
+                }
+            }
+        }
+        if (positions.isEmpty()) {
+            return byPriority;
+        }
+        List<BeanDefinition<?>> ordered = new ArrayList<>(byPriority.size());
+        List<BeanDefinition<?>> listed = new ArrayList<>(positions.size());
+        for (BeanDefinition<?> definition : byPriority) {
+            (positions.containsKey(definition) ? listed : ordered).add(definition);
+        }
+        // a stable sort: two of one position stay in the order their priority and name gave them
+        listed.sort(Comparator.comparingInt(positions::get));
+        ordered.addAll(listed);
+        return ordered;
     }
 
     /**
      * Whether an interceptor class a binding binds takes part in interception: every one does, unless a module
      * that has rules of enablement provided a {@link BoundInterceptorEnablement} that leaves it out.
      */
-    private boolean isEnabled(BeanDefinition<?> definition) {
+    private List<BoundInterceptorEnablement> enablements() {
         List<BoundInterceptorEnablement> resolved = enablements;
         if (resolved == null) {
             resolved = List.copyOf(beanContext.getBeansOfType(BoundInterceptorEnablement.class));
             enablements = resolved;
         }
-        for (BoundInterceptorEnablement enablement : resolved) {
+        return resolved;
+    }
+
+    private boolean isEnabled(BeanDefinition<?> definition) {
+        for (BoundInterceptorEnablement enablement : enablements()) {
             if (!enablement.isEnabled(definition)) {
                 return false;
             }

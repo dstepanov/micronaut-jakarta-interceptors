@@ -1,6 +1,11 @@
 package io.micronaut.interceptor.test.errors;
 
 import io.micronaut.context.ApplicationContext;
+import io.micronaut.core.annotation.AnnotationValue;
+import io.micronaut.core.propagation.PropagatedContext;
+import io.micronaut.inject.ExecutableMethod;
+import io.micronaut.scheduling.ScheduledExecution;
+import io.micronaut.scheduling.annotation.Scheduled;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -62,8 +67,14 @@ class PrivateInterceptorMethodExceptionsTest {
         IllegalArgumentException thrown = new IllegalArgumentException("from the timeout interceptor");
         PrivateGuardInterceptor.failure = thrown;
         PrivatelyGuardedSchedule schedule = context.getBean(PrivatelyGuardedSchedule.class);
+        // the scheduler invokes the method with its invocation in the propagated context, which is what makes the
+        // call a timeout
+        ExecutableMethod<PrivatelyGuardedSchedule, Object> method = context.getBeanDefinition(PrivatelyGuardedSchedule.class)
+            .getRequiredMethod("onSchedule");
+        AnnotationValue<Scheduled> trigger = method.getAnnotationValuesByType(Scheduled.class).get(0);
+        PropagatedContext scheduled = PropagatedContext.getOrEmpty().plus(new ScheduledExecution(method, trigger));
 
-        assertSame(thrown, assertThrows(IllegalArgumentException.class, schedule::onSchedule));
+        assertSame(thrown, assertThrows(IllegalArgumentException.class, () -> scheduled.propagate(schedule::onSchedule)));
     }
 
     @Test

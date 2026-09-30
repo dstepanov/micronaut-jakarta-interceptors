@@ -42,8 +42,9 @@ final class ScheduledInvocation {
     /**
      * The schedule that triggered the invocation of a method.
      *
-     * <p>The scheduler records its invocation for the whole of the call, so a method the scheduled method calls
-     * sees it as well; only the method the scheduler invoked is answered.</p>
+     * <p>The scheduler puts its invocation in the propagated context of the call, so a method the scheduled method
+     * calls, or work it propagates to another thread, sees it as well; only the method the scheduler invoked is
+     * answered.</p>
      *
      * @param context The invocation
      * @return The {@code @Scheduled} annotation that triggered it, or {@code null} when the scheduler did not

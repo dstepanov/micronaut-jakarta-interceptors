@@ -16,6 +16,7 @@
 package io.micronaut.interceptor.runtime;
 
 import io.micronaut.core.annotation.AnnotationMetadata;
+import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.core.convert.value.MutableConvertibleValues;
 import io.micronaut.core.reflect.ReflectionUtils;
@@ -57,8 +58,6 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
      * to any other advice of the same invocation.
      */
     private static final String CONTEXT_DATA = "io.micronaut.interceptor.contextData";
-
-    private static final Annotation[] EMPTY_BINDINGS = new Annotation[0];
 
     private final io.micronaut.aop.InvocationContext<Object, ?> context;
     private final List<InterceptorReference> chain;
@@ -279,9 +278,11 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
             return null;
         }
         // getInterceptorBinding returns the annotation itself, so one has to be built
-        @SuppressWarnings("NoReflection")
-        T binding = bindingMetadata().synthesize(annotationType);
-        return binding;
+        try {
+            return synthesizeBinding(bindingMetadata(), annotationType);
+        } catch (NoClassDefFoundError e) {
+            throw reflectionUnavailable("getInterceptorBinding(Class)", e);
+        }
     }
 
     /**
@@ -309,8 +310,10 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
             return Collections.emptySet();
         }
         Set<T> matching = new LinkedHashSet<>(1);
-        for (Annotation binding : synthesizeBindings(annotationType)) {
-            matching.add(annotationType.cast(binding));
+        try {
+            matching.addAll(synthesizeBindings(annotationType));
+        } catch (NoClassDefFoundError e) {
+            throw reflectionUnavailable("getInterceptorBindings(Class)", e);
         }
         return Collections.unmodifiableSet(matching);
     }
@@ -328,15 +331,35 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
      * virtual machine keeps for it. Micronaut recorded the container of a repeatable annotation as the application
      * was compiled, so the metadata answers it having read nothing.</p>
      */
-    private Annotation[] synthesizeBindings(Class<? extends Annotation> annotationType) {
+    private <T extends Annotation> List<T> synthesizeBindings(Class<T> annotationType) {
         AnnotationMetadata annotationMetadata = bindingMetadata();
         if (annotationMetadata.findRepeatableAnnotation(annotationType.getName()).isPresent()) {
             return nearestRepeated(annotationMetadata, annotationType);
         }
-        // as above, for a binding that does not repeat
-        @SuppressWarnings("NoReflection")
-        Annotation single = annotationMetadata.synthesize(annotationType);
-        return single == null ? EMPTY_BINDINGS : new Annotation[]{single};
+        T single = synthesizeBinding(annotationMetadata, annotationType);
+        return single == null ? List.of() : List.of(single);
+    }
+
+    /**
+     * The one binding of an annotation type the nearest layer of the metadata carries, built as an instance.
+     *
+     * <p>As with a repeatable binding, the layers are read one at a time, the element before its class: the
+     * metadata of a hierarchy asked for the value of an annotation merges the members of every layer, where a
+     * declaration of the element replaces the one of its class whole.</p>
+     */
+    private static <T extends Annotation> @Nullable T synthesizeBinding(AnnotationMetadata metadata, Class<T> annotationType) {
+        if (metadata instanceof AnnotationMetadataHierarchy hierarchy) {
+            for (AnnotationMetadata layer : nearestFirst(hierarchy)) {
+                T binding = synthesizeBinding(layer, annotationType);
+                if (binding != null) {
+                    return binding;
+                }
+            }
+            return null;
+        }
+        AnnotationValue<T> value = metadata.getAnnotation(annotationType);
+        // the binding is the annotation itself, so it has to be built
+        return value == null ? null : PlatformReflection.annotation(annotationType, value);
     }
 
     /**
@@ -347,25 +370,35 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
      * occurrences of a repeatable annotation it answers those of every layer. The chain was selected by the
      * occurrences the method declares alone, which replace those of the class, so that is what is answered.</p>
      */
-    private static Annotation[] nearestRepeated(AnnotationMetadata metadata, Class<? extends Annotation> annotationType) {
+    private static <T extends Annotation> List<T> nearestRepeated(AnnotationMetadata metadata, Class<T> annotationType) {
         if (metadata instanceof AnnotationMetadataHierarchy hierarchy) {
-            List<AnnotationMetadata> layers = new ArrayList<>(2);
-            // the hierarchy iterates from the root, the class, to the element itself
-            for (AnnotationMetadata layer : hierarchy) {
-                layers.add(0, layer);
-            }
-            for (AnnotationMetadata layer : layers) {
-                Annotation[] repeated = nearestRepeated(layer, annotationType);
-                if (repeated.length > 0) {
+            for (AnnotationMetadata layer : nearestFirst(hierarchy)) {
+                List<T> repeated = nearestRepeated(layer, annotationType);
+                if (!repeated.isEmpty()) {
                     return repeated;
                 }
             }
-            return EMPTY_BINDINGS;
+            return List.of();
         }
-        // the bindings are the annotations themselves, so they have to be built
-        @SuppressWarnings("NoReflection")
-        Annotation[] repeated = metadata.synthesizeAnnotationsByType(annotationType);
+        List<AnnotationValue<T>> values = metadata.getAnnotationValuesByType(annotationType);
+        List<T> repeated = new ArrayList<>(values.size());
+        for (AnnotationValue<T> value : values) {
+            // the bindings are the annotations themselves, so they have to be built
+            repeated.add(PlatformReflection.annotation(annotationType, value));
+        }
         return repeated;
+    }
+
+    /**
+     * @return The layers of a hierarchy from the element itself to the root, its class
+     */
+    private static List<AnnotationMetadata> nearestFirst(AnnotationMetadataHierarchy hierarchy) {
+        List<AnnotationMetadata> layers = new ArrayList<>(2);
+        // the hierarchy iterates from the root, the class, to the element itself
+        for (AnnotationMetadata layer : hierarchy) {
+            layers.add(0, layer);
+        }
+        return layers;
     }
 
     /**
@@ -385,11 +418,35 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
             return Collections.emptySet();
         }
         Set<Annotation> resolved = new LinkedHashSet<>(names.size());
-        for (String name : names) {
-            annotationMetadata.getAnnotationType(name)
-                .ifPresent(type -> Collections.addAll(resolved, synthesizeBindings(type)));
+        try {
+            for (String name : names) {
+                // the type of an annotation is a class found by its name, and its instances are built
+                PlatformReflection.annotationType(annotationMetadata, name)
+                    .ifPresent(type -> resolved.addAll(synthesizeBindings(type)));
+            }
+        } catch (NoClassDefFoundError e) {
+            throw reflectionUnavailable("getInterceptorBindings()", e);
         }
         return Collections.unmodifiableSet(resolved);
+    }
+
+    /**
+     * The failure of an accessor that returns an object of the reflection of the platform, in an application
+     * without the module that answers it.
+     *
+     * <p>{@link PlatformReflection} is what links to that module, and it fails to load without it. That failure is
+     * how the absence is found out: nothing looks for the module beforehand.</p>
+     *
+     * @param accessor The accessor of {@code InvocationContext} that was called
+     * @param cause    What loading the module failed with
+     * @return The exception to throw
+     */
+    static UnsupportedOperationException reflectionUnavailable(String accessor, NoClassDefFoundError cause) {
+        return new UnsupportedOperationException("InvocationContext." + accessor + " returns an object of the Java"
+            + " reflection API, which needs io.micronaut:micronaut-reflection on the classpath (or"
+            + " io.micronaut.cdi:micronaut-cdi-reflection, which brings it, when the interceptors are used through"
+            + " Micronaut CDI). Add that dependency, or read the interception through MicronautInvocationContext,"
+            + " which reflects on nothing.", cause);
     }
 
     /**

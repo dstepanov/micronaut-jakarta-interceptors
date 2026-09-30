@@ -102,6 +102,9 @@ dependencies {
     testImplementation mn.micronaut.inject
     testImplementation mn.micronaut.aop
     testImplementation mn.micronaut.context
+    // answers the accessors of InvocationContext that return an object of the Java reflection API, which the tests
+    // call; being on the compile classpath, it is also what has the processor declare the metadata they need
+    testImplementation mn.micronaut.reflection
 
     testImplementation libs.testng
     // compiles a rejected deployment in memory. The processors are on the classpath of the tests as well as

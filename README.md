@@ -42,6 +42,12 @@ public class Greeter {
 }
 ```
 
+`getMethod()`, `getConstructor()` and the accessors that return the instances of the binding annotations return
+objects of the Java reflection API. They are answered by `io.micronaut:micronaut-reflection`, which an application
+whose interceptors call them adds, and throw an `UnsupportedOperationException` naming it otherwise. Every context
+also implements `MicronautInvocationContext`, which describes the interception as Micronaut compiled it and needs
+no such module.
+
 ## Documentation
 
 See the [Documentation](https://micronaut-projects.github.io/micronaut-jakarta-interceptors/latest/guide/) for more

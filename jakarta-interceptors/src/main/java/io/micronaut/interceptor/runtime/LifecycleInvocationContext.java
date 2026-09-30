@@ -92,9 +92,11 @@ final class LifecycleInvocationContext extends AbstractInvocationContext
     @Override
     public @Nullable Method getMethod() {
         // getMethod returns a java.lang.reflect.Method, which only the platform can produce
-        @SuppressWarnings("NoReflection")
-        @Nullable Method target = context.getExecutableMethod().getTargetMethod();
-        return target;
+        try {
+            return PlatformReflection.method(context.getExecutableMethod());
+        } catch (NoClassDefFoundError e) {
+            throw reflectionUnavailable("getMethod()", e);
+        }
     }
 
     /**

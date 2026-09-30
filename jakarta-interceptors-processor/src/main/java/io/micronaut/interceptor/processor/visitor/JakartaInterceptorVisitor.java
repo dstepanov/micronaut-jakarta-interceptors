@@ -87,6 +87,12 @@ import java.util.Set;
 public final class JakartaInterceptorVisitor implements TypeElementVisitor<Object, Object> {
 
     /**
+     * A type of {@code io.micronaut:micronaut-reflection}, whose presence on the classpath of the application being
+     * compiled is what makes the reflective accessors of {@code InvocationContext} available to it.
+     */
+    private static final String REFLECTION_MODULE_TYPE = "io.micronaut.reflection.ReflectionExecutables";
+
+    /**
      * The element types an interceptor binding is written on, which are the ones section 3.1.1 c) compares.
      */
     private static final Set<ElementType> BINDING_TARGETS =
@@ -343,12 +349,27 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
     }
 
     /**
+     * Whether the accessors of {@code InvocationContext} that return an object of the Java reflection API can be
+     * called in the application being compiled: {@code getMethod()}, {@code getConstructor()} and the ones that
+     * return the instances of the binding annotations.
+     *
+     * <p>They are answered by {@code io.micronaut:micronaut-reflection} and fail without it, so an application
+     * compiled without that module is not given the metadata that only they need, and keeps nothing for reflection
+     * that nothing can reflect on. The {@code @ReflectiveAccess} of an interceptor method generated code cannot
+     * call is another matter: that call is the interception itself, and is declared either way.</p>
+     */
+    private static boolean reflectiveAccessors(VisitorContext context) {
+        return context.getClassElement(REFLECTION_MODULE_TYPE).isPresent();
+    }
+
+    /**
      * Declares the interception of a class and of its methods.
      */
     private static void intercept(ClassElement element,
                                   InterceptorClassModel model,
                                   boolean declaredAsABean,
                                   VisitorContext context) {
+        boolean reflective = reflectiveAccessors(context);
         List<String> classInterceptors = namedInterceptors(element, context);
         MethodElement constructor = element.getPrimaryConstructor().orElse(null);
         List<String> constructorInterceptors = constructor == null ? List.of() : namedInterceptors(constructor, context);
@@ -421,17 +442,21 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
                         .toArray(AnnotationClassValue<?>[]::new));
                 }
             });
-            // the specification hands an @AroundConstruct interceptor method a java.lang.reflect.Constructor, which
-            // Micronaut looks up on the class by the argument types of the bean constructor. Reflection is permitted
-            // for it here so that the lookup answers inside a native image as it does on a virtual machine. The
-            // methods need nothing of the kind: their executable methods look them up by constants, which the image
-            // registers on its own
-            constructor.annotate(ReflectiveAccess.class);
+            if (reflective) {
+                // the specification hands an @AroundConstruct interceptor method a java.lang.reflect.Constructor,
+                // which Micronaut looks up on the class by the argument types of the bean constructor. Reflection
+                // is permitted for it here so that the lookup answers inside a native image as it does on a virtual
+                // machine. The methods need nothing of the kind: their executable methods look them up by
+                // constants, which the image registers on its own
+                constructor.annotate(ReflectiveAccess.class);
+            }
         }
         for (MethodElement method : methods) {
             interceptMethod(model, method, classInterceptors, classBindings, classDeclares, context);
         }
-        permitBindingSynthesis(element, constructor, methods, producers);
+        if (reflective) {
+            permitBindingSynthesis(element, constructor, methods, producers);
+        }
     }
 
     /**

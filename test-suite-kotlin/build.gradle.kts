@@ -15,6 +15,9 @@ dependencies {
     testImplementation(mn.micronaut.inject)
     testImplementation(mn.micronaut.aop)
     testRuntimeOnly(mn.micronaut.context)
+    // answers the accessors of InvocationContext that return an object of the Java reflection API, which the tests
+    // call; being on the compile classpath, it is also what has the processor declare the metadata they need
+    testImplementation(mn.micronaut.reflection)
 
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
 

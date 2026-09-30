@@ -20,25 +20,57 @@ Micronaut rethrows what a method reached that way threw, rather than the excepti
 so what such an interceptor method throws travels to the interceptors before it and to the caller exactly as an
 interceptor method of any other access would throw it.
 
-Three accessors of `InvocationContext` do reach for the reflection of the platform, because the types the
+That is all the reflection this module does by itself. With `micronaut-jakarta-interceptors` alone on the
+classpath, an application whose interceptor methods are within reach of generated code never reflects at all; the
+binding comparison the interception does is made against the annotation metadata Micronaut recorded at compilation
+time, and builds no annotation.
+
+== The accessors that need the reflection module
+
+Three accessors of `InvocationContext` return objects of the Java reflection API, because the types the
 specification has them return leave no choice:
 
 * `getMethod()` returns a `java.lang.reflect.Method`;
 * `getConstructor()` returns a `java.lang.reflect.Constructor`;
-* `getInterceptorBindings()` returns instances of the binding annotations.
+* `getInterceptorBindings()` returns instances of the binding annotations, and so do `getInterceptorBinding(Class)`
+and `getInterceptorBindings(Class)`, which the specification added beside the whole set and which build only the
+binding asked for rather than the set to filter it.
 
-`getInterceptorBinding(Class)` and `getInterceptorBindings(Class)`, which the specification added beside the whole
-set, build only the binding asked for rather than the set to filter it.
+This module does not answer them itself. They are answered by Micronaut's reflection module, which an application
+whose interceptors call them adds:
 
-All three are resolved only when an interceptor asks for them, and remembered afterwards. An application whose
-interceptors do not call them, and declare no interceptor method out of reach of generated code, never reflects at
-all; the binding
-comparison the interception does is made against the annotation metadata Micronaut recorded at compilation time,
-and builds no annotation.
+dependency:micronaut-reflection[groupId="io.micronaut"]
+
+An application that uses the interceptors through Micronaut CDI adds `io.micronaut.cdi:micronaut-cdi-reflection`
+instead, which brings the module with it.
+
+Without the module each of them throws an `UnsupportedOperationException`, whose message names the accessor that
+was called and the dependency to add:
+
+[source]
+----
+java.lang.UnsupportedOperationException: InvocationContext.getMethod() returns an object of the Java reflection API,
+which needs io.micronaut:micronaut-reflection on the classpath (or io.micronaut.cdi:micronaut-cdi-reflection, which
+brings it, when the interceptors are used through Micronaut CDI). Add that dependency, or read the interception
+through MicronautInvocationContext, which reflects on nothing.
+----
+
+Nothing else changes without it: the chains, the ordering, `proceed()`, the parameters, the context data, the
+target and the timer are all answered from what Micronaut compiled. The module is not looked for when the
+application starts. The failure is that of the first call of such an accessor, so an interceptor that calls none of
+them is never affected. Asking `getInterceptorBinding(Class)` or `getInterceptorBindings(Class)` for an annotation
+that is not a binding of the element is answered from the annotation metadata, builds nothing, and needs no
+module either.
+
+With the module, all three are resolved only when an interceptor asks for them.
+
+The module has to be on the classpath the application is compiled with as well as the one it runs with, which a
+dependency of the `implementation` scope is. That is where the processor finds out that the accessors can be
+called, and only then does it declare the reachability metadata they need inside a native image, described below.
 
 == Reading the interception without reflecting
 
-Nothing forces an interceptor through those three. Every context this module hands an interceptor method also
+Nothing forces an interceptor through those three, or an application to add the module. Every context this module hands an interceptor method also
 implements api:interceptor.MicronautInvocationContext[], which offers the same description as Micronaut compiled
 it - the executable method, the bean constructor and the annotation metadata - and reflects on nothing. An
 interceptor written that way needs no reachability metadata of its own. See
@@ -47,7 +79,10 @@ interceptor written that way needs no reachability metadata of its own. See
 == In a native image
 
 In a GraalVM native image such a lookup answers only for a member the image was told to keep, or one GraalVM finds
-looked up by constants while it compiles the image.
+looked up by constants while it compiles the image. What follows is about an application that has the reflection
+module. One without it is given none of this metadata, since nothing in it can reflect on what the metadata would
+keep, and its accessors fail inside an image with the same `UnsupportedOperationException` as on a virtual
+machine.
 
 `getMethod()` answers with the target method of the executable method Micronaut generates for the intercepted
 business method or lifecycle callback, and that executable method looks the method up by a constant class, name and
@@ -77,7 +112,10 @@ virtual machine, and an application declares nothing for it either.
 That is verified rather than asserted. The `test-suite-graalvm` and `test-suite-java` modules run inside a native
 image through the `nativeTest` task, their interceptors call all three accessors, `test-suite-java` declares a
 private interceptor method, and neither declares any reachability metadata: an interception that reached for
-reflection the image was not told about would fail there rather than pass unnoticed on the JVM.
+reflection the image was not told about would fail there rather than pass unnoticed on the JVM. The
+`test-suite-no-reflection` module is the application without the reflection module, on a virtual machine and inside
+an image: everything is intercepted, a private interceptor method included, and each of the accessors fails with the
+error above.
 
 An application whose interceptors call none of the three and declare no interceptor method out of reach of
 generated code needs nothing at all. Nothing else of the interception - the chains, the bindings, the ordering, the

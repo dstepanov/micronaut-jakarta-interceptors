@@ -1,0 +1,33 @@
+plugins {
+    id "io.micronaut.build.internal.jakarta-interceptors-native-test-suite"
+}
+
+// The application this module is written for: one with `micronaut-jakarta-interceptors` and without
+// `micronaut-reflection`. Every other test suite has that module, because their interceptors call the accessors of
+// InvocationContext that return an object of the Java reflection API. This one must never gain it: its tests hold
+// the interception to working without the module, and those accessors to failing with an error that names it.
+dependencies {
+    testAnnotationProcessor platform(libs.micronaut.core)
+    testAnnotationProcessor projects.micronautJakartaInterceptorsProcessor
+    testAnnotationProcessor mn.micronaut.inject.java
+    // turns the @ReflectiveAccess the processor declares on a private interceptor method into the reachability
+    // metadata of the image
+    testAnnotationProcessor mn.micronaut.graal
+
+    testImplementation platform(libs.micronaut.core)
+    testImplementation projects.micronautJakartaInterceptors
+    testImplementation mn.micronaut.core
+    testImplementation mn.micronaut.inject
+    testImplementation mn.micronaut.aop
+    testImplementation mn.micronaut.context
+
+    testImplementation platform(libs.junit.bom)
+    testImplementation libs.junit.jupiter
+    testRuntimeOnly libs.junit.jupiter.engine
+}
+
+// what the tests rely on: a reflection module that reached the classpath some other way would make them pass for
+// the wrong reason, or fail without saying why
+configurations.matching { it.name in ['testCompileClasspath', 'testRuntimeClasspath'] }.configureEach {
+    exclude group: 'io.micronaut', module: 'micronaut-reflection'
+}

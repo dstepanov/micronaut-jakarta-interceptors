@@ -1,8 +1,9 @@
 `jakarta.interceptor.InvocationContext` describes the intercepted element the way the specification does, which in
 three places means the reflection of the platform: `getMethod()` returns a `java.lang.reflect.Method`,
 `getConstructor()` a `java.lang.reflect.Constructor`, and `getInterceptorBindings()` instances of the binding
-annotations. The types leave no way around it, and resolving one is the only reflection an interception performs
-apart from invoking an interceptor method generated code cannot call, such as a `private` one, see <<reflection,When Reflection Is Used>>.
+annotations. The types leave no way around it, so those accessors are answered by Micronaut's reflection module,
+`io.micronaut:micronaut-reflection`, and fail in an application that does not have it, see
+<<reflection,When Reflection Is Used>>.
 
 Everything those three describe, Micronaut worked out while the application was compiled. Every context this module
 hands an interceptor method also implements api:interceptor.MicronautInvocationContext[], which offers it:
@@ -183,5 +184,5 @@ their types, and shows an interceptor only the arguments the intercepted element
 == Reflection
 
 An interceptor written against these accessors reflects on nothing, whatever it reads, and needs no reachability
-metadata of its own in a GraalVM native image. The accessors of the specification keep working beside them, and an
-interceptor may use both. See <<reflection,When Reflection Is Used>>.
+metadata of its own in a GraalVM native image, nor the reflection module. With that module the accessors of the
+specification work beside them, and an interceptor may use both. See <<reflection,When Reflection Is Used>>.

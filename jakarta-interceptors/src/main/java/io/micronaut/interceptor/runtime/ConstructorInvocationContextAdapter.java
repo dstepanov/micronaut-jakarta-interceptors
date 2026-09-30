@@ -87,9 +87,11 @@ final class ConstructorInvocationContextAdapter extends AbstractInvocationContex
     @Override
     public @Nullable Constructor<?> getConstructor() {
         // getConstructor returns a java.lang.reflect.Constructor, which only the platform makes
-        @SuppressWarnings("NoReflection")
-        @Nullable Constructor<?> constructor = context.getConstructor().getTargetConstructor();
-        return constructor;
+        try {
+            return PlatformReflection.constructor(context.getConstructor());
+        } catch (NoClassDefFoundError e) {
+            throw reflectionUnavailable("getConstructor()", e);
+        }
     }
 
     @Override

@@ -44,6 +44,14 @@ public class LoggingInterceptor {
 <3> The interceptor method. It must accept a single `InvocationContext`.
 <4> `proceed()` continues to the next interceptor and finally to the intercepted method.
 
+`getMethod()` returns a `java.lang.reflect.Method`, and is one of the accessors answered by Micronaut's reflection
+module, so this interceptor needs it as well:
+
+dependency:micronaut-reflection[groupId="io.micronaut"]
+
+An interceptor that reads the intercepted method as Micronaut compiled it needs no such module. See
+<<reflection,When Reflection Is Used>> and <<micronautApi,The Micronaut Invocation Context>>.
+
 Declare the bean to intercept:
 
 [source,java]

@@ -75,6 +75,17 @@ public @interface JakartaInterception {
     Class<?>[] associated() default {};
 
     /**
+     * What the binding annotations of the class of a constructor are compared by, recorded on the constructor. A
+     * constructor that declares a binding of a type its class declares is interposed on by the interceptors of its
+     * own binding, while the ones the binding of the class binds still interpose on the business methods: they are
+     * associated with the class, and section 2.3 has them created before an around-construct interceptor method
+     * runs.
+     *
+     * @return The bindings of the class, as strings
+     */
+    String[] associatedBindings() default {};
+
+    /**
      * The class that declares interceptor methods on itself, which the specification invokes after every
      * interceptor class. Its interceptor method is invoked on the intercepted instance rather than on an
      * interceptor of its own.

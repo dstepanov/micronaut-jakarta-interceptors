@@ -441,6 +441,11 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
                         .map(name -> new AnnotationClassValue<>(name))
                         .toArray(AnnotationClassValue<?>[]::new));
                 }
+                // so do the interceptors the bindings of the class bind, where the constructor declares a binding
+                // that replaces one of them for its own chain
+                if (classBindings.length > 0 && !Arrays.equals(classBindings, constructorBindings)) {
+                    builder.member("associatedBindings", classBindings);
+                }
             });
             if (reflective) {
                 // the specification hands an @AroundConstruct interceptor method a java.lang.reflect.Constructor,

@@ -123,7 +123,8 @@ public final class InterceptorChainResolver {
      * interceptor method they declare.
      *
      * <p>Read from the {@code associated} member the processor writes on the constructor, which lists the interceptor
-     * classes the class names whether or not the constructor excludes them, and from the bindings of the constructor.
+     * classes the class names whether or not the constructor excludes them, from the bindings of the constructor, and
+     * from the bindings of the class where the constructor replaces one of them with a binding of its own.
      * Every kind is resolved, so that an interceptor class declaring nothing but an {@code @AroundTimeout} method is
      * among them as well. Remembered apart from the chains: these are not chains that run.</p>
      *
@@ -137,13 +138,17 @@ public final class InterceptorChainResolver {
         }
         AssociatedKey key = new AssociatedKey(
             List.of(interception.classValues("associated")),
-            List.of(interception.stringValues("bindings")));
+            List.of(interception.stringValues("bindings")),
+            List.of(interception.stringValues("associatedBindings")));
         List<InterceptorReference> resolved = associated.get(key);
         if (resolved == null) {
             // as with the chains, two threads building the same list build equal lists
             List<InterceptorReference> all = new ArrayList<>();
             for (InterceptionKind kind : InterceptionKind.values()) {
                 all.addAll(build(new ChainKey(kind, key.interceptors(), key.bindings(), null, false)));
+                if (!key.classBindings().isEmpty()) {
+                    all.addAll(build(new ChainKey(kind, List.of(), key.classBindings(), null, false)));
+                }
             }
             resolved = List.copyOf(all);
             associated.put(key, resolved);
@@ -427,9 +432,11 @@ public final class InterceptorChainResolver {
      * What the interceptor classes associated with a class are resolved from.
      *
      * @param interceptors The interceptor classes the class names
-     * @param bindings     What the binding annotations of the constructor are compared by
+     * @param bindings      What the binding annotations of the constructor are compared by
+     * @param classBindings What the binding annotations of the class are compared by, where they are not those of
+     *                      the constructor
      */
-    private record AssociatedKey(List<Class<?>> interceptors, List<String> bindings) {
+    private record AssociatedKey(List<Class<?>> interceptors, List<String> bindings, List<String> classBindings) {
     }
 
     /**

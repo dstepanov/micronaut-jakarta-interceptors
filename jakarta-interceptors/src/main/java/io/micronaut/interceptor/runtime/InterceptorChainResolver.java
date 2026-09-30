@@ -20,8 +20,11 @@ import io.micronaut.context.BeanContext;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
+import io.micronaut.inject.AdvisedBeanType;
 import io.micronaut.inject.BeanDefinition;
+import io.micronaut.inject.BeanType;
 import io.micronaut.inject.ExecutableMethod;
+import io.micronaut.inject.ProxyBeanDefinition;
 import io.micronaut.interceptor.annotation.InterceptionKind;
 import io.micronaut.interceptor.annotation.JakartaInterception;
 import io.micronaut.interceptor.annotation.JakartaInterceptorIndex;
@@ -280,7 +283,10 @@ public final class InterceptorChainResolver {
     private @Nullable BeanDefinition<?> describe(Class<?> interceptorClass) {
         BeanDefinition<?> fallback = null;
         for (BeanDefinition<?> definition : beanContext.getBeanDefinitions(interceptorClass)) {
-            if (definition.getAnnotation(JakartaInterceptorMethods.class) == null) {
+            // a subclass that is an interceptor class too is a bean of this type as well, and describes itself:
+            // its bindings and its interceptor methods are not those of the class asked about
+            if (!isOfClass(definition, interceptorClass)
+                || definition.getAnnotation(JakartaInterceptorMethods.class) == null) {
                 continue;
             }
             if (!definition.getExecutableMethods().isEmpty()) {
@@ -289,6 +295,22 @@ public final class InterceptorChainResolver {
             fallback = definition;
         }
         return fallback;
+    }
+
+    /**
+     * Whether a bean is a bean of the class itself rather than of a subclass of it. A lookup by type finds both,
+     * and a subclass is another bean: what it declares is not what the class declares.
+     *
+     * <p>A bean Micronaut proxies is of the class when the class is the one it proxies.</p>
+     *
+     * @param bean The bean
+     * @param type The class
+     * @return Whether the bean is of the class
+     */
+    static boolean isOfClass(BeanType<?> bean, Class<?> type) {
+        return bean.getBeanType() == type
+            || bean instanceof AdvisedBeanType<?> advised && advised.getInterceptedType() == type
+            || bean instanceof ProxyBeanDefinition<?> proxy && proxy.getTargetType() == type;
     }
 
     /**

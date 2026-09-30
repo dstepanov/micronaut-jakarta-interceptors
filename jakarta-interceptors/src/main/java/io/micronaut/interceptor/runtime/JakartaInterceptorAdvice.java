@@ -27,13 +27,15 @@ import io.micronaut.context.BeanRegistration;
 import io.micronaut.context.BeanResolutionContext;
 import io.micronaut.context.DefaultBeanContext;
 import io.micronaut.context.DefaultBeanResolutionContext;
+import io.micronaut.context.Qualifier;
 import io.micronaut.context.annotation.Prototype;
-import io.micronaut.context.exceptions.NonUniqueBeanException;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.core.beans.BeanConstructor;
+import io.micronaut.core.type.Argument;
 import io.micronaut.inject.BeanDefinition;
+import io.micronaut.inject.BeanType;
 import io.micronaut.inject.ExecutableMethod;
 import io.micronaut.interceptor.annotation.JakartaInterception;
 import jakarta.annotation.PreDestroy;
@@ -44,6 +46,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 /**
  * The single Micronaut interceptor of the Jakarta Interceptors implementation.
@@ -170,12 +173,18 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
             }
             instancesCreated = true;
         }
-        BeanDefinition<?> definition;
-        try {
-            definition = beanContext.findBeanDefinition(context.getTarget().getClass()).orElse(null);
-        } catch (NonUniqueBeanException e) {
-            // the class is ambiguous: each method interceptor is still created as its method is first called
-            return;
+        Class<?> targetClass = context.getTarget().getClass();
+        BeanDefinition<?> definition = null;
+        for (BeanDefinition<?> candidate : beanContext.getBeanDefinitions(targetClass)) {
+            // a subclass of the target's class is a bean of its type as well, and is another bean
+            if (!InterceptorChainResolver.isOfClass(candidate, targetClass)) {
+                continue;
+            }
+            if (definition != null) {
+                // the class is ambiguous: each method interceptor is still created as its method is first called
+                return;
+            }
+            definition = candidate;
         }
         if (definition != null) {
             createInterceptorInstances(definition);
@@ -328,17 +337,20 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      * Creates the instance of an interceptor class.
      *
      * <p>Resolved by type rather than from one definition: an interceptor class may also be produced by a factory,
-     * and the instance the application configured there is the one to intercept with. Resolved in a resolution
+     * and the instance the application configured there is the one to intercept with. The type is the class itself:
+     * a subclass that is a bean too is another interceptor class, whose instance would run the interceptor methods
+     * it overrides. Resolved in a resolution
      * context of its own, which is where Micronaut records what it created as a dependency rather than found in a
      * scope, exactly as it does for the dependencies of any bean, so nothing here has to know the scopes.</p>
      */
-    private Object create(Class<?> interceptorClass) {
+    private <T> T create(Class<T> interceptorClass) {
+        Qualifier<T> exactly = new ExactBeanType<>(interceptorClass);
         if (!(beanContext instanceof DefaultBeanContext)) {
             // a context of another implementation records no dependents to read
-            return beanContext.getBean(interceptorClass);
+            return beanContext.getBean(interceptorClass, exactly);
         }
         try (BeanResolutionContext resolutionContext = new DefaultBeanResolutionContext(beanContext, null)) {
-            Object instance = resolutionContext.getBean(interceptorClass);
+            T instance = resolutionContext.getBean(Argument.of(interceptorClass), exactly);
             owned.addAll(resolutionContext.getAndResetDependentBeans());
             return instance;
         }
@@ -415,5 +427,22 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
     @SuppressWarnings("unchecked")
     private static <E extends Throwable> RuntimeException sneakyThrow(Throwable e) throws E {
         throw (E) e;
+    }
+
+    /**
+     * Qualifies the beans of a class that are of the class itself, leaving out the ones of its subclasses.
+     *
+     * @param type The class
+     * @param <T>  The bean type
+     */
+    private record ExactBeanType<T>(Class<T> type) implements Qualifier<T> {
+
+        @Override
+        public <B extends BeanType<T>> Stream<B> reduce(Class<T> beanType, Stream<B> candidates) {
+            // the class may be the proxy Micronaut generated for a scoped bean, which resolves the bean it
+            // proxies with this same qualifier: a bean of a class the proxy extends is that one, and stays
+            return candidates.filter(candidate -> InterceptorChainResolver.isOfClass(candidate, type)
+                || candidate.getBeanType().isAssignableFrom(type));
+        }
     }
 }

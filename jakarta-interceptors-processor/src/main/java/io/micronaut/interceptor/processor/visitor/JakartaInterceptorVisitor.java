@@ -763,6 +763,16 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         AnnotationMetadata own = InterceptorClassScanner.ownMetadataOf(element);
         Map<String, List<InterceptorBindingValues.Binding>> declared = new LinkedHashMap<>();
         groupByType(InterceptorBindingValues.of(own, excluded), declared);
+        if (owner != null) {
+            // the metadata of a method also holds the annotations of the method it overrides. A binding declared
+            // on an overridden method is not a binding of the override, so only the ones the member declares
+            // itself, or that an annotation it declares carries, are kept
+            Set<String> ownAnnotations = new HashSet<>(own.getDeclaredAnnotationNames());
+            ownAnnotations.addAll(own.getDeclaredStereotypeAnnotationNames());
+            // a repeatable binding is declared through its container, and is found by its occurrences
+            declared.keySet().removeIf(name -> !ownAnnotations.contains(name)
+                && own.getDeclaredAnnotationValuesByName(name).isEmpty());
+        }
         bindings.putAll(declared);
         return bindings.values()
             .stream()

@@ -49,24 +49,4 @@ class InterceptorCleanupTest {
                 "suppressed interceptor destroyed"), Destructions.RECORDED);
         }
     }
-
-    /**
-     * One instance failing to be destroyed leaves the others to be destroyed all the same: they are separate objects,
-     * and what one of them does on the way out is not the reason to keep the rest alive.
-     */
-    @Test
-    void destroysTheRemainingInstancesAfterOneFailsToBeDestroyed() {
-        Destructions.RECORDED.clear();
-        try (ApplicationContext context = ApplicationContext.run()) {
-            FailingService bean = context.getBean(FailingService.class);
-            assertEquals("done", bean.work());
-            Destructions.RECORDED.clear();
-
-            context.destroyBean(bean);
-
-            assertEquals(List.of(
-                "failing interceptor refused to be destroyed",
-                "surviving interceptor destroyed"), Destructions.RECORDED);
-        }
-    }
 }

@@ -461,10 +461,10 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     /**
      * Reads the current arguments of the intercepted element.
      *
-     * <p>A copy is returned: the specification has an interceptor replace the arguments through
-     * {@link #setParameters}, so writing into the array that was read must not reach the invocation. Only the
-     * arguments the element declared are shown; an argument the language added is none of the interceptor's
-     * business and could not be replaced meaningfully anyway.</p>
+     * <p>A copy is returned. The specification defines replacement through {@link #setParameters}, but does not
+     * specify array identity or aliasing. This implementation owns the argument array and requires an explicit
+     * setter call to replace its values. Only the arguments the element declared are shown; an argument the
+     * language added is not exposed.</p>
      *
      * @return The arguments
      */
@@ -492,15 +492,18 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
             throw new IllegalArgumentException("Expected " + declared
                 + " parameter(s) for " + description() + " but got " + (params == null ? 0 : params.length));
         }
+        // Validate the same snapshot that is installed. The caller still owns params and may change it;
+        // copying after validation would allow a changed, unchecked value to enter the invocation.
+        Object[] replacement = params.clone();
         Argument<?>[] arguments = context.getArguments();
-        for (int i = 0; i < params.length; i++) {
-            Object value = params[i];
+        for (int i = 0; i < replacement.length; i++) {
+            Object value = replacement[i];
             if (i < arguments.length && !isAssignable(arguments[i].getType(), value)) {
                 throw new IllegalArgumentException("Parameter [" + arguments[i].getName() + "] of " + description()
                     + " is of type " + arguments[i].getType().getName() + " and cannot be set to " + value);
             }
         }
-        System.arraycopy(params, 0, current, 0, params.length);
+        System.arraycopy(replacement, 0, current, 0, replacement.length);
     }
 
     private static boolean isAssignable(Class<?> type, @Nullable Object value) {

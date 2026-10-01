@@ -4,7 +4,7 @@ import io.micronaut.aop.Intercepted;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.context.BeanRegistration;
 import io.micronaut.context.DependentBeanProvider;
-import io.micronaut.interceptor.runtime.JakartaInterceptorAdvice;
+import io.micronaut.interceptor.internal.runtime.JakartaInterceptorAdvice;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

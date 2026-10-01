@@ -18,7 +18,7 @@ package io.micronaut.interceptor.processor;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.inject.ast.ClassElement;
 import io.micronaut.inject.ast.MethodElement;
-import io.micronaut.interceptor.annotation.InterceptionKind;
+import io.micronaut.interceptor.metadata.InterceptionKind;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;

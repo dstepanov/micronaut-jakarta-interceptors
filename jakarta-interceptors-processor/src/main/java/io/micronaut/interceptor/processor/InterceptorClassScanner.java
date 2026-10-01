@@ -24,8 +24,8 @@ import io.micronaut.inject.ast.ElementQuery;
 import io.micronaut.inject.ast.MethodElement;
 import io.micronaut.inject.ast.ParameterElement;
 import io.micronaut.inject.processing.ProcessingException;
-import io.micronaut.interceptor.annotation.InterceptionKind;
-import io.micronaut.interceptor.runtime.JakartaInterceptorSupport;
+import io.micronaut.interceptor.metadata.InterceptionKind;
+import io.micronaut.interceptor.internal.metadata.JakartaInterceptorSupport;
 
 import java.util.ArrayList;
 import java.util.Arrays;

@@ -13,9 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.micronaut.interceptor.runtime;
+package io.micronaut.interceptor.spi;
 
-import io.micronaut.core.annotation.Internal;
 import io.micronaut.inject.BeanDefinition;
 
 /**
@@ -36,7 +35,6 @@ import io.micronaut.inject.BeanDefinition;
  * @author Denis Stepanov
  * @since 1.0
  */
-@Internal
 public interface BoundInterceptorEnablement {
 
     /**

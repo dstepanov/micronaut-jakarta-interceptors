@@ -17,7 +17,7 @@ package io.micronaut.interceptor.test.index;
 
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.inject.BeanDefinition;
-import io.micronaut.interceptor.annotation.JakartaInterceptorIndex;
+import io.micronaut.interceptor.internal.metadata.JakartaInterceptorIndex;
 import jakarta.annotation.Priority;
 import jakarta.inject.Singleton;
 import jakarta.interceptor.AroundInvoke;

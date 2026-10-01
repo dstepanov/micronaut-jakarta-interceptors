@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 /**
- * The annotations written by the Jakarta Interceptors annotation processor onto the intercepted elements.
+ * The kinds of interception the processor records the interceptor methods of a class by, as the
+ * {@link io.micronaut.interceptor.spi.InterceptorMethods} of a module building on the interception asks for them.
  *
  * @author Denis Stepanov
  * @since 1.0
  */
 @NullMarked
-package io.micronaut.interceptor.annotation;
+package io.micronaut.interceptor.metadata;
 
 import org.jspecify.annotations.NullMarked;

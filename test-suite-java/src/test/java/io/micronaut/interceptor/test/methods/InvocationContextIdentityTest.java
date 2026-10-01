@@ -16,8 +16,8 @@
 package io.micronaut.interceptor.test.methods;
 
 import io.micronaut.context.ApplicationContext;
-import io.micronaut.interceptor.annotation.InterceptionKind;
-import io.micronaut.interceptor.runtime.InterceptorMethods;
+import io.micronaut.interceptor.metadata.InterceptionKind;
+import io.micronaut.interceptor.spi.InterceptorMethods;
 import jakarta.annotation.Priority;
 import jakarta.inject.Singleton;
 import jakarta.interceptor.AroundInvoke;

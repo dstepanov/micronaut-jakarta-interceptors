@@ -1,0 +1,10 @@
+plugins {
+    id "io.micronaut.build.internal.jakarta-interceptors-module"
+}
+
+// The annotations the processor writes onto the intercepted elements and the runtime reads, and the kinds of
+// interception they record. The interceptor binding they declare is Micronaut's, from micronaut-aop; nothing of the
+// runtime is needed, so the processor depends on this rather than on the runtime.
+dependencies {
+    api mn.micronaut.aop
+}

@@ -30,7 +30,7 @@ no `@Priority` is declared.
 
 On its own this module enables every interceptor class of the context, so an interceptor class bound by an
 annotation intercepts whether or not it declares a priority. A module with rules of enablement of its own provides a
-bean of `io.micronaut.interceptor.runtime.BoundInterceptorEnablement`, and the interceptor classes it does not enable
+bean of `io.micronaut.interceptor.spi.BoundInterceptorEnablement`, and the interceptor classes it does not enable
 are left out of the chains: Micronaut CDI does, since Jakarta Contexts and Dependency Injection enables an
 interceptor bound by an annotation only when it declares a priority. An interceptor class named with `@Interceptors`
 is enabled by being named, whatever such a module decides.

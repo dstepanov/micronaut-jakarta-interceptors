@@ -16,7 +16,7 @@
 package io.micronaut.interceptor.processor;
 
 import io.micronaut.core.annotation.Internal;
-import io.micronaut.interceptor.runtime.JakartaInterceptorSupport;
+import io.micronaut.interceptor.internal.metadata.JakartaInterceptorSupport;
 
 /**
  * The names of the annotations of the Jakarta Interceptors and the Jakarta Annotations specifications.

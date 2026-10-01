@@ -13,24 +13,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.micronaut.interceptor.annotation;
+package io.micronaut.interceptor.internal.runtime;
 
 import io.micronaut.core.annotation.Internal;
 
+import java.util.HashMap;
+
 /**
- * The type the interceptor classes of an application are found through.
+ * The map returned by {@code InvocationContext.getContextData()}.
  *
- * <p>The processor declares {@code @Indexed} of this type on every interceptor class, and the runtime asks the
- * context for the definitions of this type to find them, instead of reading every bean definition there is and
- * keeping the ones that are interceptor classes.</p>
- *
- * <p>An interceptor class of the specification implements nothing, and none of them implements this: a bean is
- * enumerable by a type it is indexed by whether or not it is one, which is all the index is for. Nothing is ever
- * resolved as an instance of it.</p>
+ * <p>It is a plain map; the type exists so that the map the interceptors of one invocation share can be told apart
+ * from any other attribute of the Micronaut interceptor chain.</p>
  *
  * @author Denis Stepanov
  * @since 1.0
  */
 @Internal
-public interface JakartaInterceptorIndex {
+final class ContextData extends HashMap<String, Object> {
+
+    private static final long serialVersionUID = 1L;
+
+    ContextData() {
+        super(4);
+    }
 }

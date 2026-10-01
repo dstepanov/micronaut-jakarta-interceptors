@@ -13,27 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.micronaut.interceptor.runtime;
-
-import io.micronaut.core.annotation.Internal;
-
-import java.util.HashMap;
-
 /**
- * The map returned by {@code InvocationContext.getContextData()}.
- *
- * <p>It is a plain map; the type exists so that the map the interceptors of one invocation share can be told apart
- * from any other attribute of the Micronaut interceptor chain.</p>
+ * The interfaces and helpers another module building on the interception uses, as micronaut-cdi does: which
+ * interceptor classes are enabled ({@link io.micronaut.interceptor.spi.BoundInterceptorEnablement}), and the
+ * interceptor methods of an interceptor class ({@link io.micronaut.interceptor.spi.InterceptorMethods}).
  *
  * @author Denis Stepanov
  * @since 1.0
  */
-@Internal
-final class ContextData extends HashMap<String, Object> {
+@NullMarked
+package io.micronaut.interceptor.spi;
 
-    private static final long serialVersionUID = 1L;
-
-    ContextData() {
-        super(4);
-    }
-}
+import org.jspecify.annotations.NullMarked;

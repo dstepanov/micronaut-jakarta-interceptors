@@ -13,8 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.micronaut.interceptor.runtime;
+package io.micronaut.interceptor.internal.runtime;
 
+import io.micronaut.interceptor.internal.metadata.JakartaInterceptorSupport;
+import io.micronaut.interceptor.spi.BoundInterceptorEnablement;
+import io.micronaut.interceptor.spi.InterceptorMethods;
 import io.micronaut.aop.InterceptorKind;
 import io.micronaut.context.BeanContext;
 import io.micronaut.core.annotation.AnnotationMetadata;
@@ -25,10 +28,10 @@ import io.micronaut.inject.BeanDefinition;
 import io.micronaut.inject.BeanType;
 import io.micronaut.inject.ExecutableMethod;
 import io.micronaut.inject.ProxyBeanDefinition;
-import io.micronaut.interceptor.annotation.InterceptionKind;
-import io.micronaut.interceptor.annotation.JakartaInterception;
-import io.micronaut.interceptor.annotation.JakartaInterceptorIndex;
-import io.micronaut.interceptor.annotation.JakartaInterceptorMethods;
+import io.micronaut.interceptor.metadata.InterceptionKind;
+import io.micronaut.interceptor.internal.metadata.JakartaInterception;
+import io.micronaut.interceptor.internal.metadata.JakartaInterceptorIndex;
+import io.micronaut.interceptor.internal.metadata.JakartaInterceptorMethods;
 import jakarta.inject.Singleton;
 import org.jspecify.annotations.Nullable;
 

@@ -4,7 +4,8 @@ plugins {
 
 dependencies {
     api mn.micronaut.core.processor
-    api projects.micronautJakartaInterceptors
+    // what the processor writes and the runtime reads, and not the runtime itself
+    api projects.micronautJakartaInterceptorsMetadata
 
     testImplementation platform(libs.junit.bom)
     testImplementation libs.junit.jupiter

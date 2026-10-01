@@ -25,7 +25,7 @@ import io.micronaut.inject.ast.ClassElement;
 import io.micronaut.inject.ast.ElementQuery;
 import io.micronaut.inject.ast.MethodElement;
 import io.micronaut.inject.visitor.VisitorContext;
-import io.micronaut.interceptor.runtime.JakartaInterceptorSupport;
+import io.micronaut.interceptor.internal.metadata.JakartaInterceptorSupport;
 import org.jspecify.annotations.Nullable;
 
 import java.lang.annotation.Annotation;

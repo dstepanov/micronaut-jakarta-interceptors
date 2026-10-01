@@ -43,7 +43,7 @@ public class ScheduledService {
 == The timer
 
 `InvocationContext.getTimer()` returns the schedule the method was registered with, as a
-api:interceptor.runtime.ScheduledTimer[], which is the nearest thing to the timer object of the specification:
+api:interceptor.ScheduledTimer[], which is the nearest thing to the timer object of the specification:
 
 [source,java]
 ----

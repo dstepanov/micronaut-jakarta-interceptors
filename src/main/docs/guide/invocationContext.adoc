@@ -15,7 +15,7 @@ callback. `null` inside an `@AroundConstruct` method, and for a lifecycle callba
 | The constructor of the target class inside an `@AroundConstruct` method, `null` otherwise.
 
 | `getTimer()`
-| The schedule of a method the scheduler invokes, as a api:interceptor.runtime.ScheduledTimer[]; `null` for
+| The schedule of a method the scheduler invokes, as a api:interceptor.ScheduledTimer[]; `null` for
 anything else. See <<timeout,Timeout Methods>>.
 
 | `getParameters()`

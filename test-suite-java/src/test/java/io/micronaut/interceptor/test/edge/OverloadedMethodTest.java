@@ -1,7 +1,7 @@
 package io.micronaut.interceptor.test.edge;
 
 import io.micronaut.context.ApplicationContext;
-import io.micronaut.interceptor.runtime.InterceptorChainResolver;
+import io.micronaut.interceptor.internal.runtime.InterceptorChainResolver;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

@@ -3,6 +3,7 @@ plugins {
 }
 
 dependencies {
+    api projects.micronautJakartaInterceptorsMetadata
     api libs.managed.jakarta.interceptor.api
     api libs.managed.jakarta.annotation.api
     api mn.micronaut.core

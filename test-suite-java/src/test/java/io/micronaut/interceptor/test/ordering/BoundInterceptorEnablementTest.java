@@ -18,7 +18,7 @@ package io.micronaut.interceptor.test.ordering;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.inject.BeanDefinition;
-import io.micronaut.interceptor.runtime.BoundInterceptorEnablement;
+import io.micronaut.interceptor.spi.BoundInterceptorEnablement;
 import jakarta.inject.Singleton;
 import jakarta.interceptor.AroundInvoke;
 import jakarta.interceptor.Interceptor;

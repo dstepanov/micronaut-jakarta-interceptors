@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.micronaut.interceptor.runtime;
+package io.micronaut.interceptor;
 
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
@@ -48,7 +48,7 @@ public record ScheduledTimer(String cron,
      * @return The timer
      */
     @Internal
-    static ScheduledTimer of(AnnotationValue<?> scheduled) {
+    public static ScheduledTimer of(AnnotationValue<?> scheduled) {
         return new ScheduledTimer(
             scheduled.stringValue("cron").orElse(""),
             scheduled.stringValue("zoneId").orElse(""),

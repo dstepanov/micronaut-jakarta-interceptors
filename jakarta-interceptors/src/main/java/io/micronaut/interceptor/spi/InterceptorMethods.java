@@ -13,8 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.micronaut.interceptor.runtime;
+package io.micronaut.interceptor.spi;
 
+import io.micronaut.interceptor.internal.metadata.JakartaInterceptorSupport;
 import io.micronaut.core.annotation.AnnotationClassValue;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
@@ -22,8 +23,8 @@ import io.micronaut.core.annotation.Internal;
 import io.micronaut.core.annotation.Order;
 import io.micronaut.inject.BeanDefinition;
 import io.micronaut.inject.ExecutableMethod;
-import io.micronaut.interceptor.annotation.InterceptionKind;
-import io.micronaut.interceptor.annotation.JakartaInterceptorMethods;
+import io.micronaut.interceptor.metadata.InterceptionKind;
+import io.micronaut.interceptor.internal.metadata.JakartaInterceptorMethods;
 import jakarta.interceptor.Interceptor;
 import jakarta.interceptor.InvocationContext;
 import org.jspecify.annotations.Nullable;
@@ -49,7 +50,6 @@ import java.util.Set;
  * @author Denis Stepanov
  * @since 1.0
  */
-@Internal
 public final class InterceptorMethods {
 
     private static final InterceptorMethods NONE = new InterceptorMethods(List.of());
@@ -146,7 +146,8 @@ public final class InterceptorMethods {
      *
      * @return The methods, in the order they are invoked in
      */
-    List<ExecutableMethod<Object, Object>> methods() {
+    @Internal
+    public List<ExecutableMethod<Object, Object>> methods() {
         return methods;
     }
 

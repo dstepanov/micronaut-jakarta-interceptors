@@ -42,16 +42,16 @@ import io.micronaut.inject.ast.PropertyElement;
 import io.micronaut.inject.processing.ProcessingException;
 import io.micronaut.inject.visitor.TypeElementVisitor;
 import io.micronaut.inject.visitor.VisitorContext;
-import io.micronaut.interceptor.annotation.InterceptionKind;
-import io.micronaut.interceptor.annotation.JakartaInterception;
-import io.micronaut.interceptor.annotation.JakartaInterceptorIndex;
-import io.micronaut.interceptor.annotation.JakartaInterceptorMethods;
+import io.micronaut.interceptor.metadata.InterceptionKind;
+import io.micronaut.interceptor.internal.metadata.JakartaInterception;
+import io.micronaut.interceptor.internal.metadata.JakartaInterceptorIndex;
+import io.micronaut.interceptor.internal.metadata.JakartaInterceptorMethods;
 import io.micronaut.interceptor.processor.BindingConflicts;
 import io.micronaut.interceptor.processor.InterceptorBindingValues;
 import io.micronaut.interceptor.processor.InterceptorClassModel;
 import io.micronaut.interceptor.processor.InterceptorClassScanner;
 import io.micronaut.interceptor.processor.JakartaInterceptors;
-import io.micronaut.interceptor.runtime.JakartaInterceptorSupport;
+import io.micronaut.interceptor.internal.metadata.JakartaInterceptorSupport;
 
 import org.jspecify.annotations.Nullable;
 

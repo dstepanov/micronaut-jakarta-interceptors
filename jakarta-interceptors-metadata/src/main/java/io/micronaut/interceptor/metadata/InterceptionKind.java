@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.micronaut.interceptor.annotation;
+package io.micronaut.interceptor.metadata;
 
 import io.micronaut.aop.InterceptorKind;
 import org.jspecify.annotations.Nullable;

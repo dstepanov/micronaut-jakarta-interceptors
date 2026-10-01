@@ -27,10 +27,14 @@
  * interceptors do not use them, and declare no interceptor method out of reach of generated code, never reflects
  * at all.
  *
+ * <p>Internal: not an API an application is meant to use, and it may change without notice.</p>
+ *
  * @author Denis Stepanov
  * @since 1.0
  */
+@Internal
 @NullMarked
-package io.micronaut.interceptor.runtime;
+package io.micronaut.interceptor.internal.runtime;
 
+import io.micronaut.core.annotation.Internal;
 import org.jspecify.annotations.NullMarked;

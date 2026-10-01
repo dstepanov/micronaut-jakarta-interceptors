@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.micronaut.interceptor.runtime;
+package io.micronaut.interceptor.internal.runtime;
 
 import io.micronaut.aop.ConstructorInterceptor;
 import io.micronaut.aop.ConstructorInvocationContext;
@@ -37,7 +37,7 @@ import io.micronaut.core.type.Argument;
 import io.micronaut.inject.BeanDefinition;
 import io.micronaut.inject.BeanType;
 import io.micronaut.inject.ExecutableMethod;
-import io.micronaut.interceptor.annotation.JakartaInterception;
+import io.micronaut.interceptor.internal.metadata.JakartaInterception;
 import jakarta.annotation.PreDestroy;
 import jakarta.interceptor.Interceptor;
 import org.jspecify.annotations.Nullable;

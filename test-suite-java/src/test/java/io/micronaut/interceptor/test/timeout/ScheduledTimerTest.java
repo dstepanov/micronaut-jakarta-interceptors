@@ -33,6 +33,8 @@ class ScheduledTimerTest {
 
     static final List<String> CALLS = new CopyOnWriteArrayList<>();
     static volatile CountDownLatch bothRan = new CountDownLatch(2);
+    // counted down by the direct call made before the schedule runs, and by the schedule
+    static volatile CountDownLatch laterRan = new CountDownLatch(2);
 
     @Test
     void eachScheduleShowsItsOwnTimer() throws Exception {
@@ -59,6 +61,32 @@ class ScheduledTimerTest {
 
             assertEquals(List.of("invoke DirectlyCalledService"),
                 CALLS.stream().filter(call -> call.contains("DirectlyCalledService")).toList());
+        }
+    }
+
+    /**
+     * The same method of the same object, called directly before and after the scheduler invokes it: each direct
+     * call is a business method invocation and the scheduled one a timeout, whichever came first.
+     */
+    @Test
+    void keepsTheTimeoutAndTheBusinessInvocationsOfOneMethodApart() throws Exception {
+        CALLS.clear();
+        laterRan = new CountDownLatch(2);
+        try (ApplicationContext context = ApplicationContext.run()) {
+            LaterScheduledService service = context.getBean(LaterScheduledService.class);
+            service.onSchedule();
+            assertTrue(laterRan.await(5, TimeUnit.SECONDS), "the schedule ran");
+            service.onSchedule();
+
+            List<String> calls = CALLS.stream()
+                .filter(call -> call.contains("LaterScheduledService"))
+                .map(call -> call.startsWith("timeout") ? "timeout" : call)
+                .toList();
+            // the schedule normally runs between the two direct calls, but a slow start may let it run first:
+            // either way each call is interposed on as what it is, and the last direct call is a business one
+            assertEquals(List.of("invoke LaterScheduledService", "invoke LaterScheduledService", "timeout"),
+                calls.stream().sorted().toList());
+            assertEquals("invoke LaterScheduledService", calls.get(calls.size() - 1));
         }
     }
 
@@ -102,6 +130,16 @@ class ScheduledTimerTest {
 
         @Scheduled(fixedDelay = "1h", initialDelay = "1h")
         public void onSchedule() {
+        }
+    }
+
+    @Singleton
+    @TwiceTimed
+    public static class LaterScheduledService {
+
+        @Scheduled(fixedDelay = "1h", initialDelay = "1s")
+        public void onSchedule() {
+            laterRan.countDown();
         }
     }
 }

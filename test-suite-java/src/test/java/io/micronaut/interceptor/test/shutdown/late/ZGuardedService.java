@@ -7,7 +7,8 @@ import jakarta.inject.Singleton;
 
 /**
  * A singleton bound to the interceptor by an annotation alone: it holds no reference to the interceptor, so nothing
- * of its definition says that the interceptor is still needed while this bean is destroyed.
+ * of its definition says that the interceptor is still needed while this bean is destroyed. Only what its advice
+ * resolved while it lived does.
  */
 @Singleton
 @Guarded

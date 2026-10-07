@@ -12,41 +12,37 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * 2.3 cc): a pre-destroy interceptor method is invoked before the target instance and the interceptor instances
- * associated with it are destroyed. That holds for the interceptor instances this module owns, which it destroys
- * itself once the object they intercepted is gone. An interceptor class the application declares a {@code @Singleton}
- * is not one of them: it is a bean of the context, and the order a closing context destroys its singletons in is
+ * associated with it are destroyed. An interceptor class the application declares a {@code @Singleton} is a bean of
+ * the context rather than of the object it intercepts, and the order a closing context destroys its singletons in is
  * Micronaut's to decide.
  *
- * <p>Micronaut derives that order from what the definition of a bean requires - its injection points and
- * {@code @DependsOn} - and a bean bound to an interceptor by an annotation requires nothing: the interceptor classes
- * of an element are resolved when it is intercepted, from the bean index, which the definition knows nothing of. The
- * two are then destroyed in the order of the names of their definitions, which is what these tests pin down, rather
- * than the order the specification asks for. The limitations section of the guide describes it.</p>
+ * <p>Micronaut derives that order from what a bean requires: its injection points, {@code @DependsOn}, and what was
+ * resolved for it while it lived. The interceptor instances of an object are resolved as dependencies of its advice,
+ * so a singleton interceptor is among what the object requires, and outlives it whichever way the names of the two
+ * definitions sort.</p>
  */
 class ShutdownOrderingTest {
 
     /**
-     * The interceptor is closed before the bean whose destruction it interposes on, because nothing says otherwise
-     * and its definition is the one that sorts first. The pre-destroy interception then runs on a closed instance,
-     * which is the whole of the difference.
+     * Nothing the application declares orders the two, and the definition of the interceptor is the one that sorts
+     * first. The interceptor still outlives the bean whose destruction it interposes on.
      */
     @Test
-    void closesASingletonInterceptorBeforeTheBeanWhenNothingOrdersTheTwo() {
+    void keepsASingletonInterceptorUntilTheBeanItInterceptsIsDestroyed() {
         AGuardingInterceptor.reset();
         try (ApplicationContext context = ApplicationContext.run()) {
             assertEquals("done", context.getBean(ZGuardedService.class).work());
         }
 
         assertEquals(List.of(
-            "interceptor closed",
-            "intercepted a destruction after being closed",
-            "service destroyed"), AGuardingInterceptor.RECORDED);
+            "intercepted a destruction",
+            "service destroyed",
+            "interceptor closed"), AGuardingInterceptor.RECORDED);
     }
 
     /**
-     * A bean that declares the interceptor class among the beans it depends on is destroyed first, and the
-     * interception of its destruction runs on an interceptor that is still open. That is what an application whose
-     * singleton interceptor holds resources has to declare.
+     * A bean that declares the interceptor class among the beans it depends on is destroyed first as well, and the
+     * interception of its destruction runs on an interceptor that is still open.
      */
     @Test
     void keepsASingletonInterceptorUntilABeanThatDependsOnItIsDestroyed() {

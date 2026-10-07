@@ -23,6 +23,8 @@ import io.micronaut.aop.InvocationContext;
 import io.micronaut.aop.MethodInterceptor;
 import io.micronaut.aop.MethodInvocationContext;
 import io.micronaut.context.BeanContext;
+import io.micronaut.context.BeanDependencyGroup;
+import io.micronaut.context.BeanDependencyResolver;
 import io.micronaut.context.BeanRegistration;
 import io.micronaut.context.BeanResolutionContext;
 import io.micronaut.context.DefaultBeanContext;
@@ -75,13 +77,19 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
 
     private final InterceptorChainResolver resolver;
     private final BeanContext beanContext;
+    /**
+     * What the interceptor instances are resolved through. What Micronaut creates through it rather than finds in a
+     * scope belongs to this advice, and Micronaut destroys it with the advice, latest first - also when the object
+     * fails to be created. An interceptor with a scope of its own - a {@code @Singleton}, or a bean of a custom scope,
+     * shared by every object it intercepts - stays in its scope.
+     */
+    private final BeanDependencyResolver dependencies;
     private final Map<Class<?>, Object> instances = new HashMap<>(4);
     /**
-     * The registrations of what Micronaut created for the instances rather than found in a scope, in the order they
-     * were created. An interceptor with a scope of its own - a {@code @Singleton}, or a bean of a custom scope, shared
-     * by every object it intercepts - is not the object's to destroy: see {@link #destroy()}.
+     * The registrations of what was created for the instances once {@link #dependencies} no longer resolves anything,
+     * see {@link #createOutsideOfTheDependencies}, in the order they were created. Empty but for that.
      */
-    private final List<BeanRegistration<?>> owned = new ArrayList<>(2);
+    private final List<BeanRegistration<?>> createdLate = new ArrayList<>(0);
     /**
      * Whether the interceptor instances of the object have been created as the object was, see
      * {@link #createInterceptorInstancesOnce}.
@@ -89,12 +97,15 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
     private volatile boolean instancesCreated;
 
     /**
-     * @param resolver    The resolver of the interceptor chains
-     * @param beanContext The context the interceptor classes are beans of
+     * @param resolver     The resolver of the interceptor chains
+     * @param beanContext  The context the interceptor classes are beans of
+     * @param dependencies What the interceptor instances are resolved through, which owns those it creates
      */
-    public JakartaInterceptorAdvice(InterceptorChainResolver resolver, BeanContext beanContext) {
+    public JakartaInterceptorAdvice(InterceptorChainResolver resolver, BeanContext beanContext,
+                                    BeanDependencyResolver dependencies) {
         this.resolver = resolver;
         this.beanContext = beanContext;
+        this.dependencies = dependencies;
     }
 
     @Override
@@ -103,7 +114,9 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
     }
 
     /**
-     * Destroys the interceptor instances of the object this advice was created for.
+     * Destroys the interceptor instances of the object this advice was created for that were created once
+     * {@link #dependencies} no longer resolved anything. Those it did resolve go after them, with the dependents of
+     * this advice.
      *
      * <p>Micronaut destroys this advice together with that object, as a dependent created for it alone, once the
      * pre-destroy event of the object has been intercepted, or skipped by an ordinary Micronaut interceptor of the
@@ -111,7 +124,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      */
     @PreDestroy
     void destroyInterceptorInstances() {
-        destroy();
+        destroyCreatedLate();
     }
 
     // implementing both MethodInterceptor and ConstructorInterceptor inherits two declarations of this method,
@@ -339,42 +352,78 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      * <p>Resolved by type rather than from one definition: an interceptor class may also be produced by a factory,
      * and the instance the application configured there is the one to intercept with. The type is the class itself:
      * a subclass that is a bean too is another interceptor class, whose instance would run the interceptor methods
-     * it overrides. Resolved in a resolution
-     * context of its own, which is where Micronaut records what it created as a dependency rather than found in a
-     * scope, exactly as it does for the dependencies of any bean, so nothing here has to know the scopes.</p>
+     * it overrides. Resolved through {@link #dependencies}, which keeps what Micronaut created rather than found in a
+     * scope as a dependent of this advice, exactly as it keeps the dependencies of any bean, so nothing here has to
+     * know the scopes.</p>
      */
     private <T> T create(Class<T> interceptorClass) {
         Qualifier<T> exactly = new ExactBeanType<>(interceptorClass);
+        try {
+            return dependencies.getBean(Argument.of(interceptorClass), exactly);
+        } catch (IllegalStateException e) {
+            if (!dependenciesClosed()) {
+                throw e;
+            }
+        }
+        return createOutsideOfTheDependencies(interceptorClass, exactly);
+    }
+
+    /**
+     * Whether {@link #dependencies} rejects every lookup: the destruction of the object this advice was created for
+     * has begun, or the context is shutting down. Asked only once a lookup failed, to tell that apart from an
+     * interceptor that failed to be created.
+     */
+    private boolean dependenciesClosed() {
+        if (dependencies instanceof BeanDependencyGroup group && group.isClosed()) {
+            return true;
+        }
+        try {
+            // the context rejects a new group exactly when it rejects new lookups for its shutdown
+            beanContext.createDependencyGroup().close();
+            return false;
+        } catch (IllegalStateException e) {
+            return true;
+        } catch (UnsupportedOperationException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Creates the instance of an interceptor class once {@link #dependencies} no longer resolves anything.
+     *
+     * <p>Every interceptor instance of an object is normally created as the object is, while the dependencies of its
+     * advice are open. One may still be needed after they closed: the object is first created while the context
+     * shuts down - by the destruction callback of another bean - or an interceptor of its pre-destroy event is first
+     * reached as the object is destroyed, because nothing knew the object's class as it was created. The interception
+     * goes on as it would have then: the instance is resolved in a resolution context of its own, which records what
+     * Micronaut created as a dependency rather than found in a scope, and that is destroyed as this advice is.</p>
+     */
+    private <T> T createOutsideOfTheDependencies(Class<T> interceptorClass, Qualifier<T> exactly) {
         if (!(beanContext instanceof DefaultBeanContext)) {
             // a context of another implementation records no dependents to read
             return beanContext.getBean(interceptorClass, exactly);
         }
         try (BeanResolutionContext resolutionContext = new DefaultBeanResolutionContext(beanContext, null)) {
             T instance = resolutionContext.getBean(Argument.of(interceptorClass), exactly);
-            owned.addAll(resolutionContext.getAndResetDependentBeans());
+            createdLate.addAll(resolutionContext.getAndResetDependentBeans());
             return instance;
         }
     }
 
     /**
-     * Destroys the interceptor instances that belong to the object alone, latest first, as Micronaut destroys the
+     * Destroys what {@link #createOutsideOfTheDependencies} created, latest first, as Micronaut destroys the
      * dependents of a bean, and forgets every instance. Destroying them twice destroys them once. One failing to be
      * destroyed does not keep the rest alive: the first failure is reported once all are destroyed.
-     *
-     * <p>Each is destroyed as a dependent, the way Micronaut destroys the dependents of a bean. A bean of a custom
-     * scope that resolves through a proxy is reported as that proxy, while the bean behind it belongs to the scope
-     * and serves every object the interceptor is bound to: destroyed as a dependent, the proxy and its own
-     * dependents go, and the bean stays in its scope.</p>
      */
-    private void destroy() {
+    private void destroyCreatedLate() {
         List<BeanRegistration<?>> destroyed;
         synchronized (this) {
             instances.clear();
-            if (owned.isEmpty()) {
+            if (createdLate.isEmpty()) {
                 return;
             }
-            destroyed = new ArrayList<>(owned);
-            owned.clear();
+            destroyed = new ArrayList<>(createdLate);
+            createdLate.clear();
         }
         RuntimeException failure = null;
         // outside of the lock: what an interceptor does as it is destroyed is its own code

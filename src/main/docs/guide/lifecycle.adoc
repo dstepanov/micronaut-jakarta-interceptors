@@ -81,5 +81,6 @@ resolves its target lazily, may swap it, or fronts a target that already existed
 interceptors of a target with the target, and the proxy intercepts each call with those of its target.
 
 An interceptor declared `@Singleton` is shared by every object it intercepts and belongs to none of them, so it
-is destroyed with the context, as any other singleton is. The interceptor instances of a prototype that is never
+is destroyed with the context, as any other singleton is - after the objects it intercepted, so that the
+pre-destroy interception of each of them runs on an instance that is still open. The interceptor instances of a prototype that is never
 destroyed are never destroyed either, as nothing else Micronaut created for that prototype is.

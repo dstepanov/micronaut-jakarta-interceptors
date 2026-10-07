@@ -14,7 +14,7 @@ import java.util.List;
  *
  * <p>It lives in a package that sorts before the package of the bean it intercepts: Micronaut destroys the singletons
  * of a closing context in the order of the names of their definitions wherever nothing makes one of them depend on
- * another, so this is the one that would go first.</p>
+ * another, so this is the one that would go first if nothing did.</p>
  */
 @Singleton
 @Interceptor

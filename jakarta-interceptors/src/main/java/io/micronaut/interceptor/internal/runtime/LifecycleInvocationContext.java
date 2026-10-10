@@ -77,8 +77,9 @@ final class LifecycleInvocationContext extends AbstractInvocationContext
      * <p>That is what the executable method of the interception already is. A chain runs for the event rather than
      * for a callback, and it describes itself by the last callback it invokes - the one the intercepted class
      * declares - so the method of the specification and the method of the interception are the same. A bean bound
-     * for a kind it declares no callback of has the event itself, whose target method is {@code null}, which is
-     * the answer the specification asks for there.</p>
+     * for a kind it declares no callback of has the event itself, which stands for no method, and {@code null} is
+     * the answer the specification asks for there. Micronaut tells that without a lookup, so that answer needs no
+     * reflection of the platform.</p>
      *
      * <p>Resolving it is the one place a lifecycle interception reaches for the reflection of the platform, and it
      * only happens when an interceptor asks for the method. It used to be a walk up the class hierarchy, looking
@@ -90,9 +91,13 @@ final class LifecycleInvocationContext extends AbstractInvocationContext
      */
     @Override
     public @Nullable Method getMethod() {
+        ExecutableMethod<?, ?> method = context.getExecutableMethod();
+        if (!method.hasTargetMethod()) {
+            return null;
+        }
         // getMethod returns a java.lang.reflect.Method, which only the platform can produce
         try {
-            return PlatformReflection.method(context.getExecutableMethod());
+            return PlatformReflection.method(method);
         } catch (NoClassDefFoundError e) {
             throw reflectionUnavailable("getMethod()", e);
         }

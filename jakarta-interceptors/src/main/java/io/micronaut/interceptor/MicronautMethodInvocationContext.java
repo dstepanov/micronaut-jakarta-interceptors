@@ -49,7 +49,7 @@ public interface MicronautMethodInvocationContext extends MicronautInvocationCon
      * which is the most derived - the one the intercepted class declares, where it declares one - and that is what
      * this answers with. It agrees with {@link #getMethod()}, which the specification defines the same way. A bean
      * bound for a kind it declares no callback of has neither: this answers with the event itself, named
-     * {@code initialize} or {@code dispose}, whose {@code getTargetMethod()} is {@code null}.</p>
+     * {@code initialize} or {@code dispose}, whose {@code hasTargetMethod()} is {@code false}.</p>
      *
      * @return The executable method, never {@code null}
      */

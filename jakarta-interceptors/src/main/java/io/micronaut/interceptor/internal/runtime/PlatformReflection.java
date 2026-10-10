@@ -57,12 +57,14 @@ final class PlatformReflection {
     }
 
     /**
-     * @param method The intercepted method
-     * @return The method of the platform. A lifecycle event of a class that declares no callback has none, and
-     * Micronaut answers {@code null} for it
+     * @param method The intercepted method, one that stands for a method of the platform. A lifecycle event of a
+     *               class that declares no callback stands for none, which
+     *               {@link MethodReference#hasTargetMethod()} tells without this class
+     * @return The method of the platform
      */
     static Method method(MethodReference<?, ?> method) {
-        return ReflectionExecutables.targetMethod(method);
+        return Objects.requireNonNull(ReflectionExecutables.targetMethod(method),
+            "The intercepted method stands for no method of the platform");
     }
 
     /**

@@ -1,5 +1,6 @@
 package io.micronaut.interceptor.test.micronautapi;
 
+import io.micronaut.aop.ConstructorInvocationContext;
 import io.micronaut.aop.MethodInvocationContext;
 import io.micronaut.interceptor.MicronautConstructorInvocationContext;
 import io.micronaut.interceptor.MicronautInvocationContext;
@@ -21,12 +22,12 @@ public class CompiledInterceptor {
     @AroundConstruct
     public void construct(InvocationContext context) throws Exception {
         if (context instanceof MicronautConstructorInvocationContext micronaut) {
-            Recorded.VALUES.add(micronaut.getInterceptorKind() + " "
-                + micronaut.getBeanConstructor().getDeclaringBeanType().getSimpleName()
-                + "(" + micronaut.getBeanConstructor().getArguments().length + ")"
-                // the same constructor reached through the whole Micronaut construction
-                + " same=" + (micronaut.getMicronautInvocation().getConstructor()
-                    == micronaut.getBeanConstructor()));
+            ConstructorInvocationContext<Object> construction = micronaut.getMicronautInvocation();
+            Recorded.VALUES.add(construction.getKind() + " "
+                + construction.getConstructor().getDeclaringBeanType().getSimpleName()
+                + "(" + construction.getConstructor().getArguments().length + ")"
+                // the metadata of the constructor, which the construction itself does not carry
+                + " region=" + region(micronaut));
         }
         context.proceed();
     }
@@ -45,13 +46,14 @@ public class CompiledInterceptor {
 
     private static void record(InvocationContext context) {
         if (context instanceof MicronautMethodInvocationContext micronaut) {
-            Recorded.VALUES.add(micronaut.getInterceptorKind() + " "
-                + micronaut.getExecutableMethod().getDeclaringType().getSimpleName() + "."
-                + micronaut.getExecutableMethod().getMethodName()
+            MethodInvocationContext<Object, Object> invocation = micronaut.getMicronautInvocation();
+            Recorded.VALUES.add(invocation.getKind() + " "
+                + invocation.getExecutableMethod().getDeclaringType().getSimpleName() + "."
+                + invocation.getExecutableMethod().getMethodName()
                 // the members of the binding, read without building the annotation
                 + " region=" + region(micronaut)
                 // the whole Micronaut invocation, for what the other accessors do not reach
-                + named(micronaut.getMicronautInvocation()));
+                + named(invocation));
         }
     }
 

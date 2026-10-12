@@ -44,7 +44,7 @@ import jakarta.interceptor.InvocationContext;
  *     @AroundInvoke
  *     public Object invoke(InvocationContext context) throws Exception {
  *         if (context instanceof MicronautMethodInvocationContext micronaut) {
- *             ExecutableMethod<?, ?> method = micronaut.getExecutableMethod();
+ *             ExecutableMethod<Object, Object> method = micronaut.getMicronautInvocation().getExecutableMethod();
  *             String region = micronaut.getAnnotationMetadata()
  *                 .stringValue(Cached.class, "region")
  *                 .orElse("default");
@@ -59,7 +59,7 @@ import jakarta.interceptor.InvocationContext;
  * {@link MicronautMethodInvocationContext} for a business method, a timeout method or a lifecycle callback, and
  * {@link MicronautConstructorInvocationContext} for the construction of a bean. An interceptor that interposes on
  * one kind can name that sub-interface directly; one that interposes on several can test for this interface and
- * branch on {@link #getInterceptorKind()}.</p>
+ * branch on the {@link io.micronaut.aop.InvocationContext#getKind() kind} of {@link #getMicronautInvocation()}.</p>
  *
  * <p>An interceptor written against these accessors reflects on nothing, whatever it reads, and needs no
  * reachability metadata of its own in a GraalVM native image. The accessors of the specification keep working
@@ -85,24 +85,44 @@ public interface MicronautInvocationContext extends InvocationContext {
      *
      * <p>For a method it is the metadata of the method over that of its class, so a binding a method declares is
      * seen ahead of the one it would otherwise inherit. For the construction of a bean it is the metadata of the
-     * constructor, which the processor completes with the bindings of the class.</p>
+     * constructor, which the processor completes with the bindings of the class. That is why it is offered here
+     * rather than left to {@link #getMicronautInvocation()}: a Micronaut construction carries no metadata of its
+     * own, its constructor does.</p>
      *
      * @return The metadata, never {@code null}
      */
     AnnotationMetadata getAnnotationMetadata();
 
     /**
-     * Which of the interceptions of Micronaut this one is.
+     * The Micronaut invocation this interception is part of.
      *
-     * <p>{@link InterceptorKind#AROUND} for a business or timeout method, {@link InterceptorKind#AROUND_CONSTRUCT}
-     * for the construction of a bean, {@link InterceptorKind#POST_CONSTRUCT} and
-     * {@link InterceptorKind#PRE_DESTROY} for the lifecycle callbacks.</p>
+     * <p>It describes the intercepted element as Micronaut compiled it, and reaches what the specification has no
+     * accessor for. Its {@link io.micronaut.aop.InvocationContext#getKind() kind} tells which interception this is:
+     * {@link InterceptorKind#AROUND} for a business or timeout method ({@link InterceptorKind#INTRODUCTION} for
+     * one of a bean Micronaut implements with introduction advice), {@link InterceptorKind#AROUND_CONSTRUCT} for
+     * the construction of a bean, {@link InterceptorKind#POST_CONSTRUCT} and {@link InterceptorKind#PRE_DESTROY}
+     * for the lifecycle callbacks. The specification lets one interceptor method interpose on more than one
+     * lifecycle event - a single method annotated both {@code @PostConstruct} and {@code @PreDestroy} - and gives
+     * it no way to ask which event it was invoked for. The kind is that way.</p>
      *
-     * <p>The specification lets one interceptor method interpose on more than one lifecycle event - a single method
-     * annotated both {@code @PostConstruct} and {@code @PreDestroy} - and gives it no way to ask which event it was
-     * invoked for. This is that way.</p>
+     * <pre>{@code
+     * switch (micronaut.getMicronautInvocation().getKind()) {
+     *     case POST_CONSTRUCT -> opened(context.getTarget());
+     *     case PRE_DESTROY -> closed(context.getTarget());
+     *     default -> { }
+     * }
+     * }</pre>
      *
-     * @return The kind, never {@code null}
+     * <p>{@link MicronautMethodInvocationContext} and {@link MicronautConstructorInvocationContext} narrow it to
+     * the {@link io.micronaut.aop.MethodInvocationContext} or the {@link io.micronaut.aop.ConstructorInvocationContext}
+     * it is.</p>
+     *
+     * <p>Do not call {@link io.micronaut.aop.InvocationContext#proceed()} on it. That is what the last interceptor
+     * method of the chain proceeds into, so proceeding it directly skips every interceptor method the specification
+     * has yet to invoke. Call {@link #proceed()} on this context instead, which is the chain the specification
+     * describes.</p>
+     *
+     * @return The invocation, never {@code null}
      */
-    InterceptorKind getInterceptorKind();
+    io.micronaut.aop.InvocationContext<Object, Object> getMicronautInvocation();
 }

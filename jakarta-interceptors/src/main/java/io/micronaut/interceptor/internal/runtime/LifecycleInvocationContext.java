@@ -15,7 +15,6 @@
  */
 package io.micronaut.interceptor.internal.runtime;
 
-import io.micronaut.aop.InterceptorKind;
 import io.micronaut.aop.MethodInvocationContext;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.inject.ExecutableMethod;
@@ -51,17 +50,6 @@ final class LifecycleInvocationContext extends AbstractInvocationContext
     @Override
     public Object getTarget() {
         return context.getTarget();
-    }
-
-    @Override
-    public InterceptorKind getInterceptorKind() {
-        return context.getKind();
-    }
-
-    @SuppressWarnings("unchecked")
-    @Override
-    public ExecutableMethod<Object, Object> getExecutableMethod() {
-        return (ExecutableMethod<Object, Object>) context.getExecutableMethod();
     }
 
     @SuppressWarnings("unchecked")

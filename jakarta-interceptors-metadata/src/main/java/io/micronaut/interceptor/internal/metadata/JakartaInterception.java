@@ -75,15 +75,17 @@ public @interface JakartaInterception {
     Class<?>[] associated() default {};
 
     /**
-     * What the binding annotations of the class of a constructor are compared by, recorded on the constructor. A
+     * The binding annotations of the class of a constructor, recorded on the constructor. A
      * constructor that declares a binding of a type its class declares is interposed on by the interceptors of its
      * own binding, while the ones the binding of the class binds still interpose on the business methods: they are
      * associated with the class, and section 2.3 has them created before an around-construct interceptor method
      * runs.
      *
-     * @return The bindings of the class, as strings
+     * <p>Recorded as the {@link #bindings()} are.</p>
+     *
+     * @return The bindings of the class
      */
-    String[] associatedBindings() default {};
+    BoundBinding[] associatedBindings() default {};
 
     /**
      * The class that declares interceptor methods on itself, which the specification invokes after every
@@ -112,13 +114,15 @@ public @interface JakartaInterception {
     boolean timeout() default false;
 
     /**
-     * The binding annotations in effect on the element, each written out as one string by the processor.
+     * The binding annotations in effect on the element.
      *
-     * <p>An interceptor class is bound to the element when every binding it declares is one of these. Comparing
-     * the two is comparing strings: what a binding is compared by - the members it declares, the ones it defaults
-     * to, less the ones excluded from the binding - was worked out at compilation time.</p>
+     * <p>An interceptor class is bound to the element when every binding it declares is one of these. Each is
+     * recorded as the value of its binding annotation, reduced by the processor to what it binds by - the members it
+     * declares and the ones it defaults to, less the ones excluded from the binding, which it lists - as
+     * {@link BoundBinding} describes, and the two are compared by
+     * {@code io.micronaut.interceptor.spi.InterceptorBindings}.</p>
      *
      * @return The bindings of the element
      */
-    String[] bindings() default {};
+    BoundBinding[] bindings() default {};
 }

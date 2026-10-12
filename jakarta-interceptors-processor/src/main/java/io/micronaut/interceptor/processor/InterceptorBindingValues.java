@@ -21,6 +21,7 @@ import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationUtil;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
+import io.micronaut.core.expressions.EvaluatedExpressionReference;
 import io.micronaut.inject.ast.ClassElement;
 import io.micronaut.inject.ast.ElementQuery;
 import io.micronaut.inject.ast.MethodElement;
@@ -38,7 +39,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
+import java.util.TreeSet;
 
 /**
  * Reads the interceptor bindings of an element and reduces each of them to what it is compared by.
@@ -49,8 +50,11 @@ import java.util.TreeMap;
  * defaults to are filled in first, so that {@code @Logged} and {@code @Logged(level = "INFO")} are the same binding
  * when {@code "INFO"} is the default.</p>
  *
- * <p>None of that depends on the running application, so it happens here rather than there: what each binding is
- * compared by is written out on the element, and the runtime compares the strings.</p>
+ * <p>Which members take part in a binding does not depend on the running application, so it is worked out here: each
+ * binding is written out on the element as the value of its annotation with the defaults filled in, the excluded
+ * members left out and listed under {@value AnnotationUtil#NON_BINDING_ATTRIBUTE}, and an enum constant or a class
+ * spelt as Micronaut records it, by its name. The runtime compares those values, through
+ * {@code io.micronaut.interceptor.spi.InterceptorBindings}.</p>
  *
  * @author Denis Stepanov
  * @since 1.0
@@ -69,9 +73,11 @@ public final class InterceptorBindingValues {
      * the list of its elements is what makes it behave as any other member does.</p>
      *
      * <p>An annotation held as the value of a member is reduced to what it binds by, exactly as the binding that
-     * holds it is: the members it defaults to filled in and the ones excluded from it left out. It is reduced here
-     * rather than where a binding is written out, so that a binding is canonicalized once, by one function, however
-     * deeply its members nest.</p>
+     * holds it is: the members it defaults to filled in and the ones excluded from it left out.</p>
+     *
+     * <p>An enum constant is read as its name and a class as its {@link AnnotationClassValue}: Micronaut records
+     * them that way in some places and as themselves in others, and a member has one type, so the two are the same
+     * value. An evaluated expression is read as the expression it was written as.</p>
      *
      * <p>The array types are listed out rather than read through {@code java.lang.reflect.Array}, so that
      * comparing bindings stays as free of the reflection of the platform as the rest of the interception.</p>
@@ -85,6 +91,9 @@ public final class InterceptorBindingValues {
         return switch (value) {
             case null -> null;
             case AnnotationValue<?> annotation -> of(annotation, excluded);
+            case Enum<?> constant -> constant.name();
+            case Class<?> type -> new AnnotationClassValue<>(type.getName());
+            case EvaluatedExpressionReference expression -> normalize(expression.annotationValue(), excluded);
             case Object[] array -> Arrays.stream(array).map(element -> normalize(element, excluded)).toList();
             case int[] array -> Arrays.stream(array).boxed().toList();
             case long[] array -> Arrays.stream(array).boxed().toList();
@@ -200,29 +209,80 @@ public final class InterceptorBindingValues {
      * @return The binding
      */
     public static Binding of(AnnotationValue<?> annotation, ExcludedMembers excluded) {
+        String name = annotation.getAnnotationName();
         // the keys are read as strings so that two bindings compare by the names of their members, which a
         // CharSequence does not promise to do
-        Map<String, Object> values = new LinkedHashMap<>();
+        Map<String, Object> members = new LinkedHashMap<>();
         Set<String> defaulted = new HashSet<>();
         Map<CharSequence, Object> defaults = annotation.getDefaultValues();
         if (defaults != null) {
             defaults.forEach((member, value) -> {
-                values.put(member.toString(), normalize(value, excluded));
+                members.put(member.toString(), value);
                 defaulted.add(member.toString());
             });
         }
-        annotation.getValues().forEach((member, value) -> values.put(member.toString(), normalize(value, excluded)));
+        annotation.getValues().forEach((member, value) -> members.put(member.toString(), value));
         // an empty string no default was recorded for is left out, which is what makes a default of "" compare
         // equal whether it is declared or not; see isEmptyString
-        values.entrySet().removeIf(entry -> !defaulted.contains(entry.getKey()) && isEmptyString(entry.getValue()));
-        for (String nonBinding : annotation.stringValues(AnnotationUtil.NON_BINDING_ATTRIBUTE)) {
-            values.remove(nonBinding);
+        members.entrySet().removeIf(entry -> !defaulted.contains(entry.getKey()) && isEmptyString(entry.getValue()));
+        Set<String> nonBinding =
+            new TreeSet<>(Arrays.asList(annotation.stringValues(AnnotationUtil.NON_BINDING_ATTRIBUTE)));
+        nonBinding.addAll(excluded.of(name));
+        members.keySet().removeAll(nonBinding);
+        members.remove(AnnotationUtil.NON_BINDING_ATTRIBUTE);
+        members.remove(AnnotationUtil.STEREOTYPES_MEMBER);
+        Map<String, Object> values = new LinkedHashMap<>(members.size());
+        Map<CharSequence, Object> written = new LinkedHashMap<>(members.size() + 1);
+        members.forEach((member, value) -> {
+            values.put(member, normalize(value, excluded));
+            written.put(member, writable(value, excluded));
+        });
+        // the excluded members are listed for whatever the binding is compared with at runtime, which may be the
+        // value of an annotation instance that carries all of its members and says nothing of which bind
+        if (!nonBinding.isEmpty()) {
+            written.put(AnnotationUtil.NON_BINDING_ATTRIBUTE, nonBinding.toArray(String[]::new));
         }
-        for (String nonBinding : excluded.of(annotation.getAnnotationName())) {
-            values.remove(nonBinding);
+        return new Binding(name, values, AnnotationValue.builder(name).members(written).build());
+    }
+
+    /**
+     * Spells a member value the way the binding is written out: as Micronaut records it, an enum constant by its
+     * name and a class as an {@link AnnotationClassValue}, with an annotation it holds written out as a binding is.
+     * An array keeps its type, which is what Micronaut writes the metadata of an annotation from.
+     *
+     * @param value    The value of a member
+     * @param excluded The members excluded from a binding annotation, by its name
+     * @return The value to write
+     */
+    private static Object writable(Object value, ExcludedMembers excluded) {
+        if (value instanceof AnnotationValue<?> annotation) {
+            return of(annotation, excluded).written();
         }
-        values.remove(AnnotationUtil.NON_BINDING_ATTRIBUTE);
-        return new Binding(annotation.getAnnotationName(), values);
+        if (value instanceof AnnotationValue<?>[] annotations) {
+            AnnotationValue<?>[] written = new AnnotationValue<?>[annotations.length];
+            for (int i = 0; i < annotations.length; i++) {
+                written[i] = of(annotations[i], excluded).written();
+            }
+            return written;
+        }
+        if (value instanceof Enum<?> constant) {
+            return constant.name();
+        }
+        if (value instanceof Enum<?>[] constants) {
+            return Arrays.stream(constants).map(Enum::name).toArray(String[]::new);
+        }
+        if (value instanceof Class<?> type) {
+            return new AnnotationClassValue<>(type.getName());
+        }
+        if (value instanceof Class<?>[] types) {
+            return Arrays.stream(types)
+                .map(type -> new AnnotationClassValue<>(type.getName()))
+                .toArray(AnnotationClassValue<?>[]::new);
+        }
+        if (value instanceof EvaluatedExpressionReference expression) {
+            return writable(expression.annotationValue(), excluded);
+        }
+        return value;
     }
 
     /**
@@ -268,7 +328,7 @@ public final class InterceptorBindingValues {
      * context offers for it answers all of them for Java, none for Kotlin, and for Groovy only the ones that are
      * a single constant.</p>
      *
-     * @param value The normalized value of a member
+     * @param value The value of a member
      * @return Whether the value is an empty string
      */
     private static boolean isEmptyString(@Nullable Object value) {
@@ -301,89 +361,26 @@ public final class InterceptorBindingValues {
 
     /**
      * A binding annotation reduced to what it binds by: its name and the member values that take part in the
-     * binding.
+     * binding, together with the value it is written out as.
      *
-     * @param name   The annotation name
-     * @param values The member values
+     * <p>Two bindings are equal when their names and their member values are; the value written out follows from
+     * those and takes no part. The member values hold an array as the list of its elements, so that two of them
+     * compare by their contents.</p>
+     *
+     * @param name    The annotation name
+     * @param values  The member values
+     * @param written The binding as it is written out on an element, named by its annotation
      */
-    public record Binding(String name, Map<String, Object> values) {
+    public record Binding(String name, Map<String, Object> values, AnnotationValue<?> written) {
 
-        /**
-         * Writes the binding out as one string, so that two of them can be compared without reading either
-         * annotation again.
-         *
-         * <p>The members are written in the order of their names rather than the order they were declared in, so
-         * that an interceptor and the element it intercepts produce the same string for the same binding however
-         * either of them wrote it.</p>
-         *
-         * <p>No two bindings that differ are written the same way. Every value that is not an array or an
-         * annotation is written between double quotes, with a backslash before a double quote or a backslash it
-         * holds, so a value is read back as exactly the characters between its quotes whatever punctuation it
-         * carries. Without the quotes, a value holding a comma or an equals sign would read as two members -
-         * {@code @Sized(a = "1,b=2")} as {@code @Sized(a = "1", b = "2")} - and an empty string would be written as
-         * nothing at all, which made {@code @Tags({""})}, an array of one empty string, read as {@code @Tags({})},
-         * an empty one. Names are written as they are: the name of an annotation or of a member is made of
-         * identifiers, which hold no quote, comma, parenthesis or bracket, so whether a value is a string, an
-         * array, an annotation or {@code null} is told by the character it starts with.</p>
-         *
-         * <p>A class and its name, and an enum constant and its name, are written alike, as are a character and
-         * the string of that one character. A member has one type, so none of those pairs can tell two bindings
-         * of the same member apart, and Micronaut records a class or an enum constant by its name in some places
-         * and as itself in others.</p>
-         *
-         * @return The binding as a string
-         */
-        public String canonical() {
-            StringBuilder builder = new StringBuilder();
-            write(builder);
-            return builder.toString();
+        @Override
+        public boolean equals(@Nullable Object o) {
+            return this == o || (o instanceof Binding other && name.equals(other.name) && values.equals(other.values));
         }
 
-        private void write(StringBuilder builder) {
-            builder.append(name).append('(');
-            boolean first = true;
-            for (Map.Entry<String, Object> entry : new TreeMap<>(values).entrySet()) {
-                if (!first) {
-                    builder.append(',');
-                }
-                first = false;
-                builder.append(entry.getKey()).append('=');
-                render(builder, entry.getValue());
-            }
-            builder.append(')');
-        }
-
-        private static void render(StringBuilder builder, @Nullable Object value) {
-            switch (value) {
-                case null -> builder.append("null");
-                case AnnotationClassValue<?> classValue -> quote(builder, classValue.getName());
-                case Class<?> type -> quote(builder, type.getName());
-                case Binding binding -> binding.write(builder);
-                case Enum<?> constant -> quote(builder, constant.name());
-                case List<?> list -> {
-                    builder.append('[');
-                    for (int i = 0; i < list.size(); i++) {
-                        if (i > 0) {
-                            builder.append(',');
-                        }
-                        render(builder, list.get(i));
-                    }
-                    builder.append(']');
-                }
-                default -> quote(builder, value.toString());
-            }
-        }
-
-        private static void quote(StringBuilder builder, String text) {
-            builder.append('"');
-            for (int i = 0; i < text.length(); i++) {
-                char character = text.charAt(i);
-                if (character == '"' || character == '\\') {
-                    builder.append('\\');
-                }
-                builder.append(character);
-            }
-            builder.append('"');
+        @Override
+        public int hashCode() {
+            return 31 * name.hashCode() + values.hashCode();
         }
     }
 }

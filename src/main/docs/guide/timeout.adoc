@@ -40,6 +40,13 @@ public class ScheduledService {
 <3> A scheduled method: the `@AroundTimeout` method interposes on it.
 <4> A business method: the `@AroundInvoke` method interposes on it.
 
+A method declaring `@Scheduled` is a timeout method only while the scheduler invokes it: a call the application makes
+to it directly is a business method invocation, and its `@AroundInvoke` methods interpose on it. The two are told
+apart by the api:scheduling.ScheduledExecution[] the scheduler puts in the propagated context of the call, which is
+the one place the scheduler says it made the call - the invocation itself carries nothing that does. Only the
+scheduled method is answered from it: a method it calls, or work it propagates to another thread, sees the same
+propagated context and is still invoked as a business method.
+
 == The timer
 
 `InvocationContext.getTimer()` returns the schedule the method was registered with, as a

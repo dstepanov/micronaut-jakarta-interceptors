@@ -178,6 +178,8 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
         // interceptors of the chain would then no longer share
         ContextData data = contextDataOf(attributes);
         if (data == null) {
+            // the attributes cannot put a value only where there is none, so the map is created under their lock
+            // and looked for again once it is held. See the guide, "Waiting on Micronaut core"
             synchronized (attributes) {
                 data = contextDataOf(attributes);
                 if (data == null) {

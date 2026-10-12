@@ -68,14 +68,18 @@ public final class InterceptorChainResolver {
     private final Map<Class<?>, Optional<BeanDefinition<?>>> describing = new ConcurrentHashMap<>();
     private final Map<ReferenceKey, List<InterceptorReference>> references = new ConcurrentHashMap<>();
     private final Map<AssociatedKey, List<InterceptorReference>> associated = new ConcurrentHashMap<>();
-    // what decides whether an interceptor class a binding binds is enabled, looked up once: none on its own
-    private volatile @Nullable List<BoundInterceptorEnablement> enablements;
+    // what decides whether an interceptor class a binding binds is enabled: none on its own. Injected rather than
+    // looked up on the first chain, so that the resolver holds no state it fills in after it is created
+    private final List<BoundInterceptorEnablement> enablements;
 
     /**
      * @param beanContext The bean context the interceptor classes are beans of
+     * @param enablements What decides whether an interceptor class a binding binds is enabled, none unless a module
+     *                    with rules of enablement provides one
      */
-    public InterceptorChainResolver(BeanContext beanContext) {
+    public InterceptorChainResolver(BeanContext beanContext, List<BoundInterceptorEnablement> enablements) {
         this.beanContext = beanContext;
+        this.enablements = List.copyOf(enablements);
     }
 
     /**
@@ -246,13 +250,12 @@ public final class InterceptorChainResolver {
      * order of the list. On its own the module has no such list, and the order by priority stands.
      */
     private List<BeanDefinition<?>> listedLast(List<BeanDefinition<?>> byPriority) {
-        List<BoundInterceptorEnablement> resolved = enablements();
-        if (resolved.isEmpty()) {
+        if (enablements.isEmpty()) {
             return byPriority;
         }
         Map<BeanDefinition<?>, Integer> positions = new HashMap<>();
         for (BeanDefinition<?> definition : byPriority) {
-            for (BoundInterceptorEnablement enablement : resolved) {
+            for (BoundInterceptorEnablement enablement : enablements) {
                 int position = enablement.position(definition);
                 if (position >= 0) {
                     positions.put(definition, position);
@@ -278,17 +281,8 @@ public final class InterceptorChainResolver {
      * Whether an interceptor class a binding binds takes part in interception: every one does, unless a module
      * that has rules of enablement provided a {@link BoundInterceptorEnablement} that leaves it out.
      */
-    private List<BoundInterceptorEnablement> enablements() {
-        List<BoundInterceptorEnablement> resolved = enablements;
-        if (resolved == null) {
-            resolved = List.copyOf(beanContext.getBeansOfType(BoundInterceptorEnablement.class));
-            enablements = resolved;
-        }
-        return resolved;
-    }
-
     private boolean isEnabled(BeanDefinition<?> definition) {
-        for (BoundInterceptorEnablement enablement : enablements()) {
+        for (BoundInterceptorEnablement enablement : enablements) {
             if (!enablement.isEnabled(definition)) {
                 return false;
             }

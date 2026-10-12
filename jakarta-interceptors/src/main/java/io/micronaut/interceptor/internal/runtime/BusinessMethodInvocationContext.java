@@ -36,9 +36,9 @@ final class BusinessMethodInvocationContext extends AbstractInvocationContext
     implements MicronautMethodInvocationContext {
 
     private final MethodInvocationContext<Object, ?> context;
-    private @Nullable Object timer;
-    private boolean timerResolved;
-    private final @Nullable AnnotationValue<?> schedule;
+    // read out of the schedule as the invocation is created rather than on the first getTimer(): only an invocation
+    // the scheduler makes has one, and reading it then leaves the context nothing to fill in later
+    private final @Nullable ScheduledTimer timer;
 
     BusinessMethodInvocationContext(MethodInvocationContext<Object, ?> context,
                                     List<InterceptorReference> chain,
@@ -46,7 +46,7 @@ final class BusinessMethodInvocationContext extends AbstractInvocationContext
                                     @Nullable AnnotationValue<?> schedule) {
         super(context, chain, advice);
         this.context = context;
-        this.schedule = schedule;
+        this.timer = schedule == null ? null : ScheduledTimer.of(schedule);
     }
 
     @Override
@@ -87,10 +87,6 @@ final class BusinessMethodInvocationContext extends AbstractInvocationContext
      */
     @Override
     public @Nullable Object getTimer() {
-        if (!timerResolved) {
-            timerResolved = true;
-            timer = schedule == null ? null : ScheduledTimer.of(schedule);
-        }
         return timer;
     }
 

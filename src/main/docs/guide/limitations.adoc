@@ -189,6 +189,11 @@ binding it declares, members included, is one of the element's, so the bindings 
 are not meta-annotated with Micronaut's own `@InterceptorBinding` for the same reason, and because doing so would
 have Micronaut proxy every class carrying a binding, interceptor classes included.
 
+The map `InvocationContext.getContextData()` returns is created the first time an interceptor of the invocation asks
+for it, and kept among the attributes of the Micronaut invocation, which every advice of that invocation shares.
+Those attributes offer a way to put a value and to read one, but none to put a value only where there is none yet,
+so the map is created under a lock on the attributes and looked for again once the lock is held.
+
 == Languages
 
 Java, Groovy and Kotlin are supported, and each has a test suite of its own in this repository. The processor only

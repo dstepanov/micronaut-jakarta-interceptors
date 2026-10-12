@@ -427,16 +427,48 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
      * <p>{@link PlatformReflection} is what links to that module, and it fails to load without it. That failure is
      * how the absence is found out: nothing looks for the module beforehand.</p>
      *
+     * <p>Only a class of that module going missing is reported so. Building a binding annotation or looking up a
+     * member may fail for a class of the application that is missing just as well, and calling that a missing
+     * module would send whoever reads it after the wrong dependency, so such an error is rethrown as it is.</p>
+     *
+     * <p>This is not a method of {@link PlatformReflection}: calling one initializes that class, which is the very
+     * thing that fails without the module.</p>
+     *
      * @param accessor The accessor of {@code InvocationContext} that was called
-     * @param cause    What loading the module failed with
+     * @param cause    What the accessor failed with
      * @return The exception to throw
+     * @throws NoClassDefFoundError the cause itself, when the class it misses is not one of the module
      */
     static UnsupportedOperationException reflectionUnavailable(String accessor, NoClassDefFoundError cause) {
+        if (!missesTheReflectionModule(cause)) {
+            throw cause;
+        }
         return new UnsupportedOperationException("InvocationContext." + accessor + " returns an object of the Java"
             + " reflection API, which needs io.micronaut:micronaut-reflection on the classpath (or"
             + " io.micronaut.cdi:micronaut-cdi-reflection, which brings it, when the interceptors are used through"
             + " Micronaut CDI). Add that dependency, or read the interception through MicronautInvocationContext,"
             + " which reflects on nothing.", cause);
+    }
+
+    /**
+     * Whether an error is the reflection module missing.
+     *
+     * <p>The first use of {@link PlatformReflection} fails naming the class of the module it links to. Every later
+     * use fails saying that the class could not be initialized, and the virtual machine hands the first error along
+     * as the cause of that one; a native image may not, and that class links to nothing but the module, so its
+     * failing to initialize says the same.</p>
+     */
+    private static boolean missesTheReflectionModule(NoClassDefFoundError error) {
+        String platformReflection = PlatformReflection.class.getName();
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            String message = cause.getMessage();
+            if (message != null && (message.contains("io/micronaut/reflection/")
+                || message.contains("io.micronaut.reflection.")
+                || message.contains(platformReflection))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

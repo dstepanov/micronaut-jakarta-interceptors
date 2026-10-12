@@ -179,6 +179,11 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      * interceptor would then be created only once its own method is called. The first call is the earliest the advice
      * of such a target is seen, so the instances of every method are created then, from the definition the listener
      * would have been handed: the one the target's class resolves to.</p>
+     *
+     * <p>That definition is looked up among the definitions of the target's class, because nothing hands it to the
+     * advice: Micronaut has no hook for the moment a lazy proxy resolves its target, and the invocation describes
+     * the method rather than the bean. The lookup runs once per advice, on its first intercepted call, and is
+     * abandoned where the class is ambiguous. See the guide, "Waiting on Micronaut core".</p>
      */
     private void createInterceptorInstancesOnce(MethodInvocationContext<Object, Object> context) {
         if (instancesCreated) {
@@ -313,6 +318,30 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
                 createInstancesOf(InterceptorKind.AROUND, methodMetadata);
             }
         }
+    }
+
+    /**
+     * Whether this module intercepts anything of the object the given definition creates: its lifecycle, read from
+     * the class, or one of its methods.
+     *
+     * <p>It is the filter {@link #createInterceptorInstances(BeanDefinition)} applies element by element, asked of
+     * the whole definition. Where it is {@code false} there is no interceptor instance to create, so
+     * {@link InterceptorCreationListener}, which is handed every bean the context creates, need not look among the
+     * dependents of the object for an advice to ask.</p>
+     *
+     * @param definition The definition of the object
+     * @return Whether the class or one of its executable methods declares the interception of this module
+     */
+    static boolean intercepts(BeanDefinition<?> definition) {
+        if (definition.getAnnotationMetadata().hasAnnotation(JakartaInterception.class)) {
+            return true;
+        }
+        for (ExecutableMethod<?, ?> method : definition.getExecutableMethods()) {
+            if (method.getAnnotationMetadata().hasAnnotation(JakartaInterception.class)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void createInstancesOf(InterceptorKind kind, AnnotationMetadata metadata) {

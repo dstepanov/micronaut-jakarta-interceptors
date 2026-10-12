@@ -161,6 +161,34 @@ the final methods of `Object` are left out. The one case not reported is a final
 its own: the binding is not applied, and the class is not proxied at all when that method is the only one bound.
 See <<conformance,Conformance>>, section 3.3.
 
+== Waiting on Micronaut core
+
+A few things are done here in a way Micronaut itself does not yet offer a better one for. None of them changes what
+an application sees; each is recorded so that it can be replaced once Micronaut publishes what it needs.
+
+The interceptor instances of an object are created as the object is created by a listener of every bean the
+context creates, because Micronaut has no creation listener narrowed to the beans an annotation is declared on, and
+no hook of its own for the advice of a proxy to act on as its target is created. The listener returns at once for a
+bean whose definition declares nothing this module intercepts, before looking at anything the bean depends on.
+
+The advice of a proxy with a separate target is a dependent of that target, and the listener finds it through the
+registration of the target the proxy holds. That registration offers its dependents only through
+`DependentBeanProvider`, which Micronaut marks internal: neither `BeanRegistration` nor `InterceptedProxy` lists the
+dependents of a registration publicly, and the event of the proxy lists only those of the proxy.
+
+A proxy that resolves its target lazily - `@Around(proxyTarget = true, lazy = true)`, or a bean of a scope that
+resolves through a proxy - has no target when it is created, so the instances of its interceptors are created on
+its first intercepted call instead, from the definition of the target. Nothing hands that definition to the advice,
+so it is looked up among the definitions of the target's class, once per advice; where the class is ambiguous, each
+interceptor instance is created as its method is first called.
+
+Micronaut compares interceptor bindings through its own interceptor binding qualifier, which qualifies an
+interceptor bound by any one of the bindings of an element. The specification binds an interceptor only when every
+binding it declares, members included, is one of the element's, so the bindings are compared by this module's
+`InterceptorBindings` instead, through a qualifier of its own; see <<bindings,Interceptor Bindings>>. Binding types
+are not meta-annotated with Micronaut's own `@InterceptorBinding` for the same reason, and because doing so would
+have Micronaut proxy every class carrying a binding, interceptor classes included.
+
 == Languages
 
 Java, Groovy and Kotlin are supported, and each has a test suite of its own in this repository. The processor only

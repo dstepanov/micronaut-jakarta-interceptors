@@ -18,7 +18,8 @@ public class CachingInterceptor {
     @AroundInvoke
     public Object invoke(InvocationContext context) throws Exception {
         if (context instanceof MicronautMethodInvocationContext micronaut) { // <1>
-            ExecutableMethod<?, ?> method = micronaut.getExecutableMethod();  // <2>
+            ExecutableMethod<Object, Object> method =                         // <2>
+                micronaut.getMicronautInvocation().getExecutableMethod();
             String region = micronaut.getAnnotationMetadata()                 // <3>
                 .stringValue(Cached.class, "region")
                 .orElse("default");
@@ -39,7 +40,7 @@ class CachingInterceptor {
     @AroundInvoke
     Object invoke(InvocationContext context) throws Exception {
         if (context instanceof MicronautMethodInvocationContext) {           // <1>
-            def method = context.executableMethod                            // <2>
+            def method = context.micronautInvocation.executableMethod        // <2>
             def region = context.annotationMetadata                          // <3>
                 .stringValue(Cached, "region")
                 .orElse("default")
@@ -60,7 +61,7 @@ open class CachingInterceptor {
     @AroundInvoke
     open fun invoke(context: InvocationContext): Any? {
         if (context is MicronautMethodInvocationContext) {                   // <1>
-            val method = context.executableMethod                            // <2>
+            val method = context.micronautInvocation.executableMethod        // <2>
             val region = context.annotationMetadata                          // <3>
                 .stringValue(Cached::class.java, "region")
                 .orElse("default")
@@ -76,8 +77,8 @@ open class CachingInterceptor {
 generated them
 <3> the members of a binding read straight from the metadata
 
-Kotlin and Groovy reach the accessors as properties, so `context.executableMethod` reads what
-`getExecutableMethod()` returns.
+Kotlin and Groovy reach the accessors as properties, so `context.micronautInvocation.executableMethod` reads what
+`getMicronautInvocation().getExecutableMethod()` returns.
 
 == What each of them offers
 
@@ -88,28 +89,33 @@ Kotlin and Groovy reach the accessors as properties, so `context.executableMetho
 | `getInterceptorBindings()`, and the members of a binding
 | api:interceptor.MicronautInvocationContext[]
 
-| `getInterceptorKind()`
+| `getMicronautInvocation()`
+| nothing - the whole Micronaut invocation, for what the specification does not reach
+| api:interceptor.MicronautInvocationContext[], narrowed by both sub-interfaces
+
+| `getMicronautInvocation().getKind()`
 | nothing - the specification has no counterpart
 | api:interceptor.MicronautInvocationContext[]
 
-| `getExecutableMethod()`
+| `getMicronautInvocation().getExecutableMethod()`
 | `getMethod()`
 | api:interceptor.MicronautMethodInvocationContext[]
 
-| `getBeanConstructor()`
+| `getMicronautInvocation().getConstructor()`
 | `getConstructor()`
 | api:interceptor.MicronautConstructorInvocationContext[]
-
-| `getMicronautInvocation()`
-| nothing - the whole Micronaut invocation, for what the others do not reach
-| both sub-interfaces
 |===
 
 api:interceptor.MicronautMethodInvocationContext[] is the context of a business method, a timeout method or a
-lifecycle callback; api:interceptor.MicronautConstructorInvocationContext[] is the context of an
-`@AroundConstruct` interception. An interceptor that interposes on one kind names that interface directly; one that
-interposes on several tests for api:interceptor.MicronautInvocationContext[] and branches on
-`getInterceptorKind()`.
+lifecycle callback, and its `getMicronautInvocation()` is a `MethodInvocationContext`;
+api:interceptor.MicronautConstructorInvocationContext[] is the context of an `@AroundConstruct` interception, and its
+`getMicronautInvocation()` is a `ConstructorInvocationContext`. An interceptor that interposes on one kind names that
+interface directly; one that interposes on several tests for api:interceptor.MicronautInvocationContext[] and branches
+on `getMicronautInvocation().getKind()`.
+
+`getAnnotationMetadata()` stays on the context itself because a Micronaut construction carries no metadata of its
+own: the metadata of an `@AroundConstruct` interception is the one of the constructor, completed with the bindings of
+the class.
 
 == Reading the bindings
 
@@ -146,7 +152,7 @@ ask which event it was invoked for:
 @PreDestroy
 public void lifecycle(InvocationContext context) throws Exception {
     if (context instanceof MicronautInvocationContext micronaut) {
-        switch (micronaut.getInterceptorKind()) {
+        switch (micronaut.getMicronautInvocation().getKind()) {
             case POST_CONSTRUCT -> opened(context.getTarget());
             case PRE_DESTROY -> closed(context.getTarget());
             default -> { }
@@ -159,15 +165,16 @@ public void lifecycle(InvocationContext context) throws Exception {
 == The constructor of a proxied bean
 
 A bean with around advice as well as constructor interception is constructed through the proxy Micronaut generated,
-whose constructor takes a handful of arguments of its own after the ones the bean declares. `getBeanConstructor()`
-is the constructor of the target class regardless: the declaring type is the bean, and the arguments are the ones
-the bean declares, which is what `getParameters()` lines up with.
+whose constructor takes a handful of arguments of its own after the ones the bean declares.
+`getMicronautInvocation().getConstructor()` is the constructor of the target class regardless: the declaring type is
+the bean, and the arguments are the ones the bean declares, which is what `getParameters()` lines up with.
 
 == The whole Micronaut invocation
 
 `getMicronautInvocation()` carries the `MethodInvocationContext` or `ConstructorInvocationContext` the interception
-is part of, for what the other accessors do not reach - the arguments as a named map, the attributes shared with
-every other advice on the same invocation, and whatever a later version of Micronaut adds:
+is part of, for what the specification does not reach - the generated executable method or bean constructor, the
+kind of the interception, the arguments as a named map, the attributes shared with every other advice on the same
+invocation, and whatever a later version of Micronaut adds:
 
 [source,java]
 ----

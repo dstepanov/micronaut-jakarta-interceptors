@@ -15,7 +15,7 @@ class KotlinMicronautApiTest {
 
             assertEquals(
                 listOf(
-                    "AROUND_CONSTRUCT CompiledService(1) same=true",
+                    "AROUND_CONSTRUCT CompiledService(1) region=users",
                     "POST_CONSTRUCT CompiledService.started region=users",
                     "AROUND CompiledService.greet region=users parameters=[greeting]"
                 ),

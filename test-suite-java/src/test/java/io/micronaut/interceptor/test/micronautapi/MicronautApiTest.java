@@ -22,7 +22,7 @@ class MicronautApiTest {
             assertEquals("hello Denis", service.greet("hello"));
 
             assertEquals(
-                List.of("AROUND_CONSTRUCT CompiledService(1) same=true",
+                List.of("AROUND_CONSTRUCT CompiledService(1) region=users",
                     "POST_CONSTRUCT CompiledService.started region=users",
                     "AROUND CompiledService.greet region=users parameters=[greeting]"),
                 List.copyOf(Recorded.VALUES));

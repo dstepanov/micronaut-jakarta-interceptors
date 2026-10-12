@@ -55,6 +55,9 @@ brings it, when the interceptors are used through Micronaut CDI). Add that depen
 through MicronautInvocationContext, which reflects on nothing.
 ----
 
+Only a class of the module going missing is reported that way. A `NoClassDefFoundError` for any other class, one
+of the application that a binding annotation refers to for instance, is thrown as it is, naming that class.
+
 Nothing else changes without it: the chains, the ordering, `proceed()`, the parameters, the context data, the
 target and the timer are all answered from what Micronaut compiled. The module is not looked for when the
 application starts. The failure is that of the first call of such an accessor, so an interceptor that calls none of

@@ -24,7 +24,7 @@ import io.micronaut.core.annotation.AnnotationValueBuilder;
 import io.micronaut.inject.BeanDefinition;
 import io.micronaut.interceptor.metadata.InterceptionKind;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorMethods;
-import io.micronaut.interceptor.processor.InterceptorBindingValues;
+import io.micronaut.interceptor.spi.InterceptorBindings;
 import jakarta.enterprise.context.spi.CreationalContext;
 import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.inject.spi.Bean;
@@ -56,7 +56,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -71,7 +70,6 @@ import java.util.TreeMap;
 public abstract class AbstractTest {
 
     private static final String INTERCEPTOR = "jakarta.interceptor.Interceptor";
-    private static final String INTERCEPTOR_BINDING = "jakarta.interceptor.InterceptorBinding";
     private static final String ARQUILLIAN_DEPLOYMENT = "org.jboss.arquillian.container.test.api.Deployment";
     private static final String SHOULD_THROW_EXCEPTION =
         "org.jboss.arquillian.container.test.api.ShouldThrowException";
@@ -295,41 +293,27 @@ public abstract class AbstractTest {
      * Resolves the interceptors of a set of binding annotations, which is what {@code BeanManager} offers and what
      * the resolution tests of the kit assert against.
      *
-     * <p>This cannot delegate to the resolver of the module, and the reason is the design rather than an omission.
-     * The module resolves a chain from the annotation metadata of an <em>element</em>, reading the interceptor
-     * classes its processor already selected and wrote there while the application was compiled; it never compares
-     * a binding against an interceptor at runtime, which is the whole point of resolving the interception at
-     * compilation. The question this method is asked - given these binding annotations, which interceptor classes
-     * apply? - has no runtime counterpart to call.</p>
-     *
-     * <p>What it does share is the comparison: {@link InterceptorBindingValues} is the module's own, so a binding
-     * is matched here exactly as the processor matches one. The selection around it is this bridge's, so the
-     * resolution tests of the kit hold that comparison to the specification rather than holding the module's chain
-     * building to it. The chains themselves are covered by every other test here, which runs interceptors rather
-     * than enumerating them.</p>
+     * <p>The comparison is the module's own: {@link InterceptorBindings} is what its chains compare an interceptor
+     * with an element by, so a binding is matched here exactly as it is matched there, against the bindings the
+     * processor recorded on the interceptor class. The selection around it is this bridge's, so the resolution
+     * tests of the kit hold that comparison to the specification rather than holding the module's chain building
+     * to it. The chains themselves are covered by every other test here, which runs interceptors rather than
+     * enumerating them.</p>
      *
      * @param type        The interception type
      * @param annotations The binding annotations
      * @return The interceptor classes that apply, as the kit's own {@code Interceptor} beans
      */
     private List<Interceptor<?>> resolveInterceptors(InterceptionType type, Annotation[] annotations) {
-        Set<InterceptorBindingValues.Binding> requested = new LinkedHashSet<>();
-        Arrays.stream(annotations).map(AbstractTest::bindingValue).forEach(requested::add);
+        InterceptorBindings requested = InterceptorBindings.ofValues(
+            Arrays.stream(annotations).map(AbstractTest::bindingValue).toList());
         List<Interceptor<?>> resolved = new ArrayList<>();
         for (BeanDefinition<?> definition : context.getAllBeanDefinitions()) {
             AnnotationMetadata metadata = definition.getAnnotationMetadata();
             if (!metadata.hasAnnotation(INTERCEPTOR) || !supports(metadata, type)) {
                 continue;
             }
-            Set<InterceptorBindingValues.Binding> bindings = new LinkedHashSet<>();
-            for (String name : metadata.getAnnotationNamesByStereotype(INTERCEPTOR_BINDING)) {
-                if (!INTERCEPTOR_BINDING.equals(name)) {
-                    metadata.findAnnotation(name)
-                        .map(binding -> InterceptorBindingValues.of(binding, AbstractTest::nonBindingMembers))
-                        .ifPresent(bindings::add);
-                }
-            }
-            if (!bindings.isEmpty() && requested.containsAll(bindings)) {
+            if (InterceptorBindings.of(definition).isBoundBy(requested)) {
                 resolved.add(interceptor(definition.getBeanType()));
             }
         }
@@ -353,30 +337,10 @@ public abstract class AbstractTest {
     }
 
     /**
-     * The members of a binding annotation excluded from the binding, read off the annotation type.
-     *
-     * <p>The metadata of an interceptor class records an excluded member only where the class declares a value for
-     * it. The processor compares bindings by every member the annotation type excludes, which it reads off the type
-     * as it compiles; the bridge reads them off the loaded type instead, as {@link #bindingValue} does for the
-     * bindings it is asked about.</p>
+     * The value of a binding annotation instance, listing the members its type excludes from the binding, as the
+     * values the processor records do.
      */
-    private static List<String> nonBindingMembers(String annotationName) {
-        Class<?> annotationType;
-        try {
-            annotationType = Class.forName(annotationName, false, AbstractTest.class.getClassLoader());
-        } catch (ClassNotFoundException e) {
-            throw new IllegalStateException("Cannot load binding annotation " + annotationName, e);
-        }
-        List<String> nonBinding = new ArrayList<>();
-        for (Method member : annotationType.getDeclaredMethods()) {
-            if (member.isAnnotationPresent(jakarta.enterprise.util.Nonbinding.class)) {
-                nonBinding.add(member.getName());
-            }
-        }
-        return nonBinding;
-    }
-
-    private static InterceptorBindingValues.Binding bindingValue(Annotation annotation) {
+    private static AnnotationValue<?> bindingValue(Annotation annotation) {
         AnnotationValueBuilder<?> builder = AnnotationValue.builder(annotation.annotationType().getName());
         List<String> nonBinding = new ArrayList<>();
         Map<CharSequence, Object> values = new LinkedHashMap<>();
@@ -394,7 +358,7 @@ public abstract class AbstractTest {
         if (!nonBinding.isEmpty()) {
             builder.member(AnnotationUtil.NON_BINDING_ATTRIBUTE, nonBinding.toArray(String[]::new));
         }
-        return InterceptorBindingValues.of(builder.build());
+        return builder.build();
     }
 
     @SuppressWarnings("unchecked")

@@ -16,6 +16,7 @@
 package io.micronaut.interceptor.metadata;
 
 import io.micronaut.aop.InterceptorKind;
+import io.micronaut.core.annotation.Internal;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -69,8 +70,13 @@ public enum InterceptionKind {
     /**
      * The member of {@link JakartaInterceptorMethods} that records the interceptor method of this kind.
      *
+     * <p>Internal: the members are how the processor and the runtime of this module lay out the metadata, which
+     * may change between releases. Read the recorded interceptor methods through
+     * {@code io.micronaut.interceptor.spi.InterceptorMethods} instead.</p>
+     *
      * @return The member name
      */
+    @Internal
     public String member() {
         return member;
     }
@@ -81,6 +87,7 @@ public enum InterceptionKind {
      *
      * @return The member name
      */
+    @Internal
     public String declaringTypesMember() {
         return declaringTypesMember;
     }

@@ -116,10 +116,10 @@ public @interface JakartaInterceptorMethods {
     Class<?>[] preDestroyDeclaringTypes() default {};
 
     /**
-     * The binding annotations the interceptor class declares, each written out as one string by the processor,
-     * the same way the ones of an intercepted element are.
+     * The binding annotations the interceptor class declares, recorded the same way the ones of an intercepted
+     * element are: as the value of each binding annotation, as {@link BoundBinding} describes.
      *
      * @return The bindings of the interceptor class
      */
-    String[] bindings() default {};
+    BoundBinding[] bindings() default {};
 }

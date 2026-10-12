@@ -19,12 +19,13 @@ class CompiledInterceptor {
     @AroundConstruct
     void construct(InvocationContext context) throws Exception {
         if (context instanceof MicronautConstructorInvocationContext) {
-            String kind = context.interceptorKind
-            String type = context.beanConstructor.declaringBeanType.simpleName
-            int arguments = context.beanConstructor.arguments.length
-            // the same constructor, reached through the whole Micronaut construction
-            boolean same = context.micronautInvocation.constructor.is(context.beanConstructor)
-            Calls.RECORDED.add("$kind $type($arguments) same=$same".toString())
+            def construction = context.micronautInvocation
+            String kind = construction.kind
+            String type = construction.constructor.declaringBeanType.simpleName
+            int arguments = construction.constructor.arguments.length
+            // the metadata of the constructor, which the construction itself does not carry
+            String region = context.annotationMetadata.stringValue(Compiled, "region").orElse("none")
+            Calls.RECORDED.add("$kind $type($arguments) region=$region".toString())
         }
         context.proceed()
     }
@@ -43,12 +44,13 @@ class CompiledInterceptor {
 
     private static void record(InvocationContext context) {
         if (context instanceof MicronautMethodInvocationContext) {
-            String kind = context.interceptorKind
-            String method = "${context.executableMethod.declaringType.simpleName}.${context.executableMethod.methodName}"
+            def invocation = context.micronautInvocation
+            String kind = invocation.kind
+            String method = "${invocation.executableMethod.declaringType.simpleName}.${invocation.executableMethod.methodName}"
             // the members of the binding, read without building the annotation
             String region = context.annotationMetadata.stringValue(Compiled, "region").orElse("none")
             // an argument by name, which the specification's own accessors have no way to reach
-            Set<String> names = context.micronautInvocation.parameters.keySet()
+            Set<String> names = invocation.parameters.keySet()
             String parameters = names.isEmpty() ? "" : " parameters=$names"
             Calls.RECORDED.add("$kind $method region=$region$parameters".toString())
         }

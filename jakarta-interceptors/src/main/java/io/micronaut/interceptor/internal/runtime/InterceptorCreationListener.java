@@ -41,6 +41,15 @@ import java.util.List;
  * as it was constructed, as a dependent of the target: a target whose own construction and lifecycle are not
  * intercepted had none yet as it was created. It is found among the dependents of the target the proxy holds.</p>
  *
+ * <p>Micronaut offers no listener narrowed to the beans an annotation is declared on, so this one is handed every
+ * bean the context creates. It returns at once for an object whose definition declares nothing this module
+ * intercepts, before looking at any of its dependents.</p>
+ *
+ * <p>The dependents of the target a proxy holds are read through {@link DependentBeanProvider}, which Micronaut
+ * marks internal: a {@link BeanRegistration} does not offer its dependents publicly, and
+ * {@link BeanCreatedEvent#getDependentBeans()} only lists those of the bean the event is for. See the guide,
+ * "Waiting on Micronaut core".</p>
+ *
  * @author Denis Stepanov
  * @since 1.0
  */
@@ -50,6 +59,10 @@ final class InterceptorCreationListener implements BeanCreatedEventListener<Obje
 
     @Override
     public Object onCreated(BeanCreatedEvent<Object> event) {
+        if (!JakartaInterceptorAdvice.intercepts(event.getBeanDefinition())) {
+            // nothing of the object is intercepted by this module, so it has no interceptor instance to create
+            return event.getBean();
+        }
         createInterceptorInstances(event.getDependentBeans(), event);
         if (event.getBean() instanceof InterceptedProxy<?> proxy
             && proxy.interceptedTargetRegistration() instanceof DependentBeanProvider target) {

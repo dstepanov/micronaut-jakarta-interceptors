@@ -71,6 +71,16 @@ interceptor declaring `@Tag("one")`, and not by one declaring `@Tag("one")` and 
 occurrences are declared in says nothing. A method declaring occurrences of a binding its class declares as well
 replaces all of the class's occurrences of it, as a single binding declared twice would be replaced.
 
+What is compared is worked out while the application compiles. The processor records the bindings of an
+interceptor class and of each element it may intercept as the values of the binding annotations, with the members
+they default to filled in and the members excluded from the binding left out, and the runtime compares those
+values member by member as it resolves the chain of an element. Nothing is built from the annotations and nothing
+reflects to compare them.
+
+A module that has to answer the same question - which interceptors apply to these bindings? - asks
+api:interceptor.spi.InterceptorBindings[], which is the comparison the chains use. Micronaut CDI does so when its
+`BeanManager` is asked for the interceptors of a set of bindings, so the two answers are the same.
+
 == Bindings that come from elsewhere
 
 A binding annotation declared on *another* binding annotation binds transitively: an element declaring

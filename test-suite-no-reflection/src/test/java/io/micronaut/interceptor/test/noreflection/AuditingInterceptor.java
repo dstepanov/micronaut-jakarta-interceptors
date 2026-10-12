@@ -1,5 +1,7 @@
 package io.micronaut.interceptor.test.noreflection;
 
+import io.micronaut.aop.ConstructorInvocationContext;
+import io.micronaut.aop.MethodInvocationContext;
 import io.micronaut.interceptor.MicronautConstructorInvocationContext;
 import io.micronaut.interceptor.MicronautInvocationContext;
 import io.micronaut.interceptor.MicronautMethodInvocationContext;
@@ -26,9 +28,10 @@ public class AuditingInterceptor {
         Probe.CALLS.add("aroundConstruct");
         Probe.attempt("getConstructor()", context::getConstructor);
         MicronautConstructorInvocationContext micronaut = (MicronautConstructorInvocationContext) context;
-        Probe.attempt("constructor kind", micronaut::getInterceptorKind);
-        Probe.attempt("constructor type", () -> micronaut.getBeanConstructor().getDeclaringBeanType());
-        Probe.attempt("constructor arguments", () -> micronaut.getBeanConstructor().getArguments().length);
+        ConstructorInvocationContext<Object> construction = micronaut.getMicronautInvocation();
+        Probe.attempt("constructor kind", construction::getKind);
+        Probe.attempt("constructor type", () -> construction.getConstructor().getDeclaringBeanType());
+        Probe.attempt("constructor arguments", () -> construction.getConstructor().getArguments().length);
         Probe.attempt("constructor binding", () -> micronaut.getAnnotationMetadata().hasAnnotation(Audited.class));
         context.proceed();
     }
@@ -38,8 +41,9 @@ public class AuditingInterceptor {
         Probe.CALLS.add("postConstruct");
         Probe.attempt("postConstruct getMethod()", context::getMethod);
         MicronautMethodInvocationContext micronaut = (MicronautMethodInvocationContext) context;
-        Probe.attempt("postConstruct kind", micronaut::getInterceptorKind);
-        Probe.attempt("postConstruct method", () -> micronaut.getExecutableMethod().getMethodName());
+        MethodInvocationContext<Object, Object> invocation = micronaut.getMicronautInvocation();
+        Probe.attempt("postConstruct kind", invocation::getKind);
+        Probe.attempt("postConstruct method", () -> invocation.getExecutableMethod().getMethodName());
         context.proceed();
     }
 
@@ -64,9 +68,10 @@ public class AuditingInterceptor {
         Probe.attempt("getInterceptorBinding(Class) of no binding", () -> context.getInterceptorBinding(Deprecated.class));
         Probe.attempt("getInterceptorBindings(Class) of no binding", () -> context.getInterceptorBindings(Deprecated.class));
         MicronautMethodInvocationContext micronaut = (MicronautMethodInvocationContext) context;
-        Probe.attempt("method kind", micronaut::getInterceptorKind);
-        Probe.attempt("method", () -> micronaut.getExecutableMethod().getMethodName());
-        Probe.attempt("method declaring type", () -> micronaut.getExecutableMethod().getDeclaringType());
+        MethodInvocationContext<Object, Object> invocation = micronaut.getMicronautInvocation();
+        Probe.attempt("method kind", invocation::getKind);
+        Probe.attempt("method", () -> invocation.getExecutableMethod().getMethodName());
+        Probe.attempt("method declaring type", () -> invocation.getExecutableMethod().getDeclaringType());
         Probe.attempt("method binding", () -> micronaut.getAnnotationMetadata().hasAnnotation(Audited.class));
         Probe.attempt("parameter", () -> context.getParameters()[0]);
         context.setParameters(new Object[]{"replaced"});

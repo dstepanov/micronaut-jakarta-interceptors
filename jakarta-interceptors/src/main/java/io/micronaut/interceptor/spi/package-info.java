@@ -15,8 +15,10 @@
  */
 /**
  * The interfaces and helpers another module building on the interception uses, as micronaut-cdi does: which
- * interceptor classes are enabled ({@link io.micronaut.interceptor.spi.BoundInterceptorEnablement}), and the
- * interceptor methods of an interceptor class ({@link io.micronaut.interceptor.spi.InterceptorMethods}).
+ * interceptor classes are enabled ({@link io.micronaut.interceptor.spi.BoundInterceptorEnablement}), the
+ * interceptor methods of an interceptor class ({@link io.micronaut.interceptor.spi.InterceptorMethods}), and
+ * whether an interceptor class is bound to an interception point
+ * ({@link io.micronaut.interceptor.spi.InterceptorBindings}).
  *
  * @author Denis Stepanov
  * @since 1.0

@@ -16,7 +16,6 @@
 package io.micronaut.interceptor;
 
 import io.micronaut.aop.ConstructorInvocationContext;
-import io.micronaut.core.beans.BeanConstructor;
 
 /**
  * The {@link MicronautInvocationContext} of an {@code @AroundConstruct} interception.
@@ -28,36 +27,27 @@ import io.micronaut.core.beans.BeanConstructor;
 public interface MicronautConstructorInvocationContext extends MicronautInvocationContext {
 
     /**
-     * The constructor Micronaut instantiates the bean with, as it compiled it.
+     * The Micronaut construction this interception is part of.
      *
-     * <p>It describes what {@link #getConstructor()} describes - the declaring type, the arguments and the
-     * annotation metadata of the constructor - and reading any of that reflects on nothing.</p>
+     * <p>Its {@link ConstructorInvocationContext#getConstructor() constructor} is the one Micronaut instantiates
+     * the bean with, as it compiled it. It describes what {@link #getConstructor()} describes - the declaring type,
+     * the arguments and the annotation metadata of the constructor - and reading any of that reflects on
+     * nothing.</p>
      *
      * <pre>{@code
-     * BeanConstructor<?> constructor = micronaut.getBeanConstructor();
+     * BeanConstructor<Object> constructor = micronaut.getMicronautInvocation().getConstructor();
      * constructor.getDeclaringBeanType();   // the bean being constructed
      * constructor.getArguments();           // the arguments it declares
      * }</pre>
      *
      * <p>Where the bean is one Micronaut also generated a proxy of, because it has around advice as well as
-     * constructor interception, this is the constructor of the target class rather than the one of the proxy: the
+     * constructor interception, that is the constructor of the target class rather than the one of the proxy: the
      * declaring type is the bean, and the arguments are the ones the bean declares rather than those followed by
      * the handful the proxy adds. That is the constructor the specification shows an interceptor, and it is what
-     * {@link #getParameters()} lines up with.</p>
+     * {@link #getParameters()} lines up with. {@link #getAnnotationMetadata()} is its metadata.</p>
      *
      * <p>{@link #getTarget()} is {@code null} until the chain has proceeded, since the instance does not exist
      * before then. The constructor is known throughout.</p>
-     *
-     * @return The constructor, never {@code null}
-     */
-    BeanConstructor<Object> getBeanConstructor();
-
-    /**
-     * The Micronaut construction this interception is part of.
-     *
-     * <p>{@link #getBeanConstructor()} and {@link #getAnnotationMetadata()} answer what an interceptor usually
-     * wants and are the same objects this carries. The whole construction is here for what they do not reach, and
-     * for whatever a later version of Micronaut adds.</p>
      *
      * <p>Do not call {@link ConstructorInvocationContext#proceed()} on it: that is what the last interceptor
      * method of the chain proceeds into, and proceeding it directly constructs the bean while skipping every
@@ -66,5 +56,6 @@ public interface MicronautConstructorInvocationContext extends MicronautInvocati
      *
      * @return The construction, never {@code null}
      */
+    @Override
     ConstructorInvocationContext<Object> getMicronautInvocation();
 }

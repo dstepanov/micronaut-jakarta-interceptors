@@ -57,11 +57,6 @@ public final class JakartaInterceptors {
     public static final String EXCLUDE_CLASS_INTERCEPTORS = "jakarta.interceptor.ExcludeClassInterceptors";
 
     /**
-     * {@code jakarta.interceptor.ExcludeDefaultInterceptors}.
-     */
-    public static final String EXCLUDE_DEFAULT_INTERCEPTORS = "jakarta.interceptor.ExcludeDefaultInterceptors";
-
-    /**
      * {@code jakarta.annotation.PostConstruct}.
      */
     public static final String POST_CONSTRUCT = "jakarta.annotation.PostConstruct";

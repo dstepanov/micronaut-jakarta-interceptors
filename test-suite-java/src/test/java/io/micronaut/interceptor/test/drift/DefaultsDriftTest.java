@@ -7,18 +7,21 @@ import io.micronaut.interceptor.spi.InterceptorBindings;
 import io.micronaut.reflection.ReflectionAnnotations;
 import org.junit.jupiter.api.Test;
 
+import java.lang.annotation.RetentionPolicy;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Micronaut keeps the defaults of an annotation in a registry shared by the whole application, and the reflection
- * module registers more of them - an empty string among them - the first time it builds an instance of the
- * annotation. The bindings read from what the processor recorded must not change with it: an element read before
- * and after would otherwise be two different interceptions, and an interceptor bound to it before would not be
- * after.
+ * module registers more of them - an empty string among them, and the others in the shapes it reads them in - the
+ * first time it builds an instance of the annotation. The bindings must not change with it, whether read from what
+ * the processor recorded or from a value of the annotation read from the metadata, which carries the defaults the
+ * registry held when it was read: an element read before and after would otherwise be two different interceptions,
+ * and an interceptor bound to it before would not be after.
  */
 class DefaultsDriftTest {
 
@@ -36,10 +39,16 @@ class DefaultsDriftTest {
 
             Drifting instance = ReflectionAnnotations.synthesize(Drifting.class, declared);
             assertEquals("", instance.value());
+            // a value keeps the defaults it was first asked for, so the declaration is read again to be read with
+            // the defaults the registry holds now - which are not the ones it held before
+            AnnotationValue<Drifting> redeclared = service.getAnnotationMetadata().getAnnotation(Drifting.class);
+            assertNotNull(redeclared);
+            assertFalse(declared.getDefaultValues().containsKey("value"));
+            assertEquals("", redeclared.getDefaultValues().get("value"));
 
             InterceptorBindings pointAfter = InterceptorBindings.ofInterceptionPoint(service.getAnnotationMetadata());
             InterceptorBindings interceptorAfter = InterceptorBindings.of(interceptor);
-            InterceptorBindings declaredAfter = InterceptorBindings.ofValues(List.of(declared));
+            InterceptorBindings declaredAfter = InterceptorBindings.ofValues(List.of(redeclared));
 
             assertEquals(pointBefore, pointAfter);
             assertEquals(pointBefore.values(), pointAfter.values());
@@ -50,8 +59,14 @@ class DefaultsDriftTest {
             assertTrue(interceptorBefore.isBoundBy(pointAfter));
             assertTrue(interceptorAfter.isBoundBy(declaredBefore));
             assertTrue(interceptorBefore.isBoundBy(declaredAfter));
-            assertTrue(interceptorAfter.isBoundBy(InterceptorBindings.ofValues(
-                List.of(AnnotationValue.builder(Drifting.class).member("value", "").member("level", "INFO").build()))));
+            assertTrue(interceptorAfter.isBoundBy(InterceptorBindings.ofValues(List.of(AnnotationValue.builder(Drifting.class)
+                .member("value", "")
+                .member("level", "INFO")
+                .member("tags", new String[0])
+                .member("kind", Object.class)
+                .member("policy", RetentionPolicy.CLASS)
+                .member("sizes", new int[0])
+                .build()))));
 
             assertEquals("drifting work", context.getBean(DriftingService.class).work());
         }

@@ -105,7 +105,12 @@ public final class InterceptorBindings {
     /**
      * Reads a set of bindings from the values of the binding annotations, which may have been read from the
      * metadata of an element or built from annotation instances. The members a value leaves out are filled in from
-     * the defaults it carries.
+     * the defaults it carries, {@link AnnotationValue#getDefaultValues()}, and from nothing else: the registry of
+     * defaults Micronaut shares across the application is not asked again. A value read from metadata carries the
+     * defaults that registry held when it was read, and the reflection module adds to the registry as it builds an
+     * instance of an annotation - an empty string, which is compared as the member left out, and the defaults it
+     * reads in the shapes it reads them in, which are compared as one - so a value read before and one read after
+     * are the same bindings.
      *
      * <p>A value lists the members excluded from its binding under
      * {@value AnnotationUtil#NON_BINDING_ATTRIBUTE}. Those are left out wherever it is compared, and so are the

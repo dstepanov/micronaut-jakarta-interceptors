@@ -72,7 +72,6 @@ public final class InterceptorBindings {
     private static final InterceptorBindings NONE = new InterceptorBindings(List.of());
 
     private final List<BindingValue> bindings;
-    private volatile @Nullable List<AnnotationValue<?>> values;
 
     private InterceptorBindings(List<BindingValue> bindings) {
         this.bindings = bindings;
@@ -189,20 +188,17 @@ public final class InterceptorBindings {
      * what the interceptor is bound by. Read back through {@link #ofValues(Collection)}, the values are these
      * bindings again.</p>
      *
+     * <p>Every call builds the values anew, and an array a value holds is the caller's: what is done to it changes
+     * nothing of these bindings, nor of the values another call returns.</p>
+     *
      * @return The values, unmodifiable
      */
     public List<AnnotationValue<?>> values() {
-        List<AnnotationValue<?>> read = values;
-        if (read == null) {
-            // two threads may build the list at once, and build equal lists
-            List<AnnotationValue<?>> built = new ArrayList<>(bindings.size());
-            for (BindingValue binding : bindings) {
-                built.add(binding.toAnnotationValue());
-            }
-            read = Collections.unmodifiableList(built);
-            values = read;
+        List<AnnotationValue<?>> built = new ArrayList<>(bindings.size());
+        for (BindingValue binding : bindings) {
+            built.add(binding.toAnnotationValue());
         }
-        return read;
+        return Collections.unmodifiableList(built);
     }
 
     /**

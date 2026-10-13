@@ -179,8 +179,8 @@ public final class InterceptorChainResolver {
         }
         AssociatedKey key = new AssociatedKey(
             List.of(interception.classValues("associated")),
-            InterceptorBindings.ofValues(interception.getAnnotations("bindings")),
-            InterceptorBindings.ofValues(interception.getAnnotations("associatedBindings")));
+            InterceptorBindings.ofRecorded(interception.getAnnotations("bindings")),
+            InterceptorBindings.ofRecorded(interception.getAnnotations("associatedBindings")));
         readInterceptions.increment();
         resolved = associated.get(key);
         if (resolved == null) {
@@ -489,7 +489,7 @@ public final class InterceptorChainResolver {
             }
             return new ChainKey(kind,
                 List.of(interception.classValues("interceptors")),
-                InterceptorBindings.ofValues(interception.getAnnotations("bindings")),
+                InterceptorBindings.ofRecorded(interception.getAnnotations("bindings")),
                 interception.classValue("self").filter(type -> type != void.class).orElse(null),
                 interception.booleanValue("excluded").orElse(false));
         }

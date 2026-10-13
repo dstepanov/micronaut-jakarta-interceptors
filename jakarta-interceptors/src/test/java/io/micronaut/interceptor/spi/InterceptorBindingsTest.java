@@ -155,6 +155,32 @@ class InterceptorBindingsTest {
             bindings(value(TAG, Map.of("value", "one")), value(TAG, Map.of("value", "one"))));
     }
 
+    /**
+     * The values read back are the bindings again, spelt as the processor records them, with the excluded members
+     * listed rather than held, and a binding declared twice there once.
+     */
+    @Test
+    void theValuesAreTheBindingsSpeltAsRecorded() {
+        AnnotationValue<?> logged = AnnotationValue.builder(LOGGED)
+            .member("unit", TimeUnit.SECONDS)
+            .member("comment", "anything")
+            .member(AnnotationUtil.NON_BINDING_ATTRIBUTE, new String[]{"comment"})
+            .defaultValues(Map.of("level", "INFO"))
+            .build();
+        InterceptorBindings bindings = bindings(logged, value(AUDITED, Map.of()), logged);
+
+        List<AnnotationValue<?>> values = bindings.values();
+        assertEquals(2, values.size());
+        AnnotationValue<?> read = values.get(0);
+        assertEquals(LOGGED, read.getAnnotationName());
+        assertEquals("SECONDS", read.getValues().get("unit"));
+        assertEquals("INFO", read.getValues().get("level"));
+        assertFalse(read.contains("comment"));
+        assertEquals(List.of("comment"), List.of(read.stringValues(AnnotationUtil.NON_BINDING_ATTRIBUTE)));
+        assertEquals(bindings, InterceptorBindings.ofValues(values));
+        assertEquals(List.of(), InterceptorBindings.ofValues(List.of()).values());
+    }
+
     @Test
     void theQualifierComparesByThePoint() {
         InterceptorBindings point = bindings(value(LOGGED, Map.of("level", "INFO")));

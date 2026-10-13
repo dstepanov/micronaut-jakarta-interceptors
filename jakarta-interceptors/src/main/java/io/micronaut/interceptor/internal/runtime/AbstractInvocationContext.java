@@ -40,6 +40,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * The part of {@link InvocationContext} that is the same whichever element is being intercepted.
@@ -199,7 +200,7 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     }
 
     /**
-     * The annotation metadata of the intercepted element, which is what the chain was resolved by.
+     * The annotation metadata of the intercepted element, as Micronaut hands it to the advice.
      *
      * @return The metadata
      */
@@ -329,6 +330,38 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     }
 
     /**
+     * The bindings in effect on the element as values, read from the layers of the metadata as the binding
+     * accessors read them, and built into nothing.
+     *
+     * @return The values of the bindings
+     */
+    @Override
+    public List<AnnotationValue<?>> getInterceptorBindingValues() {
+        AnnotationMetadata annotationMetadata = bindingMetadata();
+        List<String> names = annotationMetadata.getAnnotationNamesByStereotype(JakartaInterceptorSupport.INTERCEPTOR_BINDING);
+        if (names.isEmpty()) {
+            return List.of();
+        }
+        List<AnnotationValue<?>> values = new ArrayList<>(names.size());
+        for (String name : names) {
+            if (annotationMetadata.findRepeatableAnnotation(name).isPresent()) {
+                List<AnnotationValue<Annotation>> repeated =
+                    nearestLayer(annotationMetadata, layer -> nonEmpty(layer.getAnnotationValuesByName(name)));
+                if (repeated != null) {
+                    values.addAll(repeated);
+                }
+            } else {
+                AnnotationValue<Annotation> single =
+                    nearestLayer(annotationMetadata, layer -> layer.<Annotation>findAnnotation(name).orElse(null));
+                if (single != null) {
+                    values.add(single);
+                }
+            }
+        }
+        return Collections.unmodifiableList(values);
+    }
+
+    /**
      * The one binding of an annotation type the nearest layer of the metadata carries, built as an instance.
      *
      * <p>As with a repeatable binding, the layers are read one at a time, the element before its class: the
@@ -338,16 +371,7 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     private static <T extends Annotation> @Nullable T synthesizeBinding(AnnotationMetadata metadata,
                                                                         Class<T> annotationType,
                                                                         String accessor) {
-        if (metadata instanceof AnnotationMetadataHierarchy hierarchy) {
-            for (AnnotationMetadata layer : nearestFirst(hierarchy)) {
-                T binding = synthesizeBinding(layer, annotationType, accessor);
-                if (binding != null) {
-                    return binding;
-                }
-            }
-            return null;
-        }
-        AnnotationValue<T> value = metadata.getAnnotation(annotationType);
+        AnnotationValue<T> value = nearestLayer(metadata, layer -> layer.getAnnotation(annotationType));
         // the binding is the annotation itself, so it has to be built
         return value == null ? null : instanceOf(annotationType, value, accessor);
     }
@@ -363,22 +387,46 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     private static <T extends Annotation> List<T> nearestRepeated(AnnotationMetadata metadata,
                                                                   Class<T> annotationType,
                                                                   String accessor) {
-        if (metadata instanceof AnnotationMetadataHierarchy hierarchy) {
-            for (AnnotationMetadata layer : nearestFirst(hierarchy)) {
-                List<T> repeated = nearestRepeated(layer, annotationType, accessor);
-                if (!repeated.isEmpty()) {
-                    return repeated;
-                }
-            }
+        List<AnnotationValue<T>> values =
+            nearestLayer(metadata, layer -> nonEmpty(layer.getAnnotationValuesByType(annotationType)));
+        if (values == null) {
             return List.of();
         }
-        List<AnnotationValue<T>> values = metadata.getAnnotationValuesByType(annotationType);
         List<T> repeated = new ArrayList<>(values.size());
         for (AnnotationValue<T> value : values) {
             // the bindings are the annotations themselves, so they have to be built
             repeated.add(instanceOf(annotationType, value, accessor));
         }
         return repeated;
+    }
+
+    /**
+     * Reads the nearest layer of the metadata that answers: the element's own where it answers, its class's
+     * otherwise. The metadata of a method is a hierarchy of the metadata of its class and its own, and asked as a
+     * whole it merges the members of a binding both declare and joins the occurrences of a repeatable one, where the
+     * declaration of the method replaces the one of its class whole.
+     *
+     * @param metadata The metadata, a hierarchy or a single layer
+     * @param read     Reads one layer, answering {@code null} where the layer has nothing to say
+     * @param <V>      What is read
+     * @return What the nearest layer that answers read, or {@code null} where none does
+     */
+    private static <V> @Nullable V nearestLayer(AnnotationMetadata metadata,
+                                                Function<AnnotationMetadata, @Nullable V> read) {
+        if (metadata instanceof AnnotationMetadataHierarchy hierarchy) {
+            for (AnnotationMetadata layer : nearestFirst(hierarchy)) {
+                V answer = nearestLayer(layer, read);
+                if (answer != null) {
+                    return answer;
+                }
+            }
+            return null;
+        }
+        return read.apply(metadata);
+    }
+
+    private static <V> @Nullable List<V> nonEmpty(List<V> values) {
+        return values.isEmpty() ? null : values;
     }
 
     /**

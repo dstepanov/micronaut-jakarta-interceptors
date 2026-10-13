@@ -76,7 +76,8 @@ open class CachingInterceptor {
 <1> every context of this module implements one of these, so the test always succeeds
 <2> the declaring type, the name, the arguments and the annotation metadata of the intercepted method, as Micronaut
 generated them
-<3> the members of a binding read straight from the metadata
+<3> the members of a binding read straight from the metadata; "Reading the bindings" below says where the
+metadata and the bindings in effect differ
 
 Kotlin and Groovy reach the accessors as properties, so `context.micronautInvocation.executableMethod` reads what
 `getMicronautInvocation().getExecutableMethod()` returns.
@@ -86,8 +87,12 @@ Kotlin and Groovy reach the accessors as properties, so `context.micronautInvoca
 |===
 | Accessor | Instead of | Interface
 
+| `getInterceptorBindingValues()`
+| `getInterceptorBindings()`, and the typed `getInterceptorBinding(Class)` and `getInterceptorBindings(Class)`
+| api:interceptor.MicronautInvocationContext[]
+
 | `getAnnotationMetadata()`
-| `getInterceptorBindings()`, and the members of a binding
+| nothing - every annotation of the element, read as Micronaut reads metadata everywhere
 | api:interceptor.MicronautInvocationContext[]
 
 | `getMicronautInvocation()`
@@ -121,7 +126,8 @@ the class.
 == Reading the bindings
 
 `getInterceptorBindings()` returns annotation instances, and Micronaut builds one as a dynamic proxy of the
-annotation type. Reading a member through the metadata instead builds nothing:
+annotation type, unless a builder was generated for it. `getInterceptorBindingValues()` answers with the same bindings
+as the values of their annotations instead, and builds nothing:
 
 [source,java]
 ----
@@ -133,14 +139,25 @@ String region = context.getInterceptorBindings().stream()
     .map(Cached::region)
     .orElse("default");
 
-// the same answer, from what the chain was resolved by
-String region = micronaut.getAnnotationMetadata()
-    .stringValue(Cached.class, "region")
+// the same answer, from the values of the bindings
+String region = micronaut.getInterceptorBindingValues().stream()
+    .filter(binding -> binding.getAnnotationName().equals(Cached.class.getName()))
+    .findFirst()
+    .flatMap(binding -> binding.stringValue("region"))
     .orElse("default");
 ----
 
-The metadata is what the interception itself compares to decide the chain, so an interceptor reading it sees
-exactly what bound it.
+Each value is the nearest declaration of its binding, the method's where it declares one and its class's otherwise,
+taken whole, which is how the bindings selected the interceptors; a repeatable binding is the occurrences of that
+declaration. A member a declaration leaves to its default is left out of the value rather than filled in from the
+class, and the members that do not bind are there as they were declared.
+
+`getAnnotationMetadata()` is ordinary Micronaut metadata, and reads a binding as Micronaut reads any annotation: for a
+method it answers from the method and its class together, merging a member the method leaves to its default with the
+one the class gave it, and joining the occurrences of a repeatable binding of both. On a class declaring
+`@Cached(region = "users")`, a method declaring `@Cached` is bound by the region `default`, while
+`getAnnotationMetadata().stringValue(Cached.class, "region")` says `users`. Where the two differ, the values are what
+bound the interceptor.
 
 == Telling one lifecycle event from another
 

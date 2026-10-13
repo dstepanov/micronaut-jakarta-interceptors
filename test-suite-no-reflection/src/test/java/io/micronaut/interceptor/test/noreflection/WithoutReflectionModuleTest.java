@@ -184,6 +184,7 @@ class WithoutReflectionModuleTest {
         assertEquals("work", Probe.ANSWERS.get("method"));
         assertEquals(AuditedService.class, Probe.ANSWERS.get("method declaring type"));
         assertEquals(true, Probe.ANSWERS.get("method binding"));
+        assertEquals(List.of(Audited.class.getName()), Probe.ANSWERS.get("method binding values"));
         assertEquals("task", Probe.ANSWERS.get("parameter"));
     }
 

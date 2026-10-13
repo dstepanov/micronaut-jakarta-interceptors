@@ -3,6 +3,7 @@ package io.micronaut.interceptor.processor;
 import io.micronaut.core.annotation.AnnotationClassValue;
 import io.micronaut.core.annotation.AnnotationUtil;
 import io.micronaut.core.annotation.AnnotationValue;
+import io.micronaut.interceptor.internal.metadata.BindingValue;
 import io.micronaut.interceptor.spi.InterceptorBindings;
 import org.junit.jupiter.api.Test;
 
@@ -25,12 +26,12 @@ class InterceptorBindingValuesTest {
 
     private static final String BINDING = "test.Tags";
 
-    private static InterceptorBindingValues.Binding binding(Map<CharSequence, Object> values) {
-        return InterceptorBindingValues.of(AnnotationValue.builder(BINDING).members(values).build());
+    private static BindingValue binding(Map<CharSequence, Object> values) {
+        return InterceptorBindingValues.of(AnnotationValue.builder(BINDING).members(values).build(), name -> List.of());
     }
 
-    private static InterceptorBindings written(InterceptorBindingValues.Binding binding) {
-        return InterceptorBindings.ofValues(List.of(binding.written()));
+    private static InterceptorBindings written(BindingValue binding) {
+        return InterceptorBindings.ofRecorded(List.of(binding.toAnnotationValue()));
     }
 
     @Test
@@ -96,15 +97,15 @@ class InterceptorBindingValuesTest {
      */
     @Test
     void aClassAndAnEnumConstantAreTheirNames() {
-        InterceptorBindingValues.Binding byClass = binding(Map.of("value", String.class));
-        InterceptorBindingValues.Binding byEnum = binding(Map.of("value", TimeUnit.SECONDS));
+        BindingValue byClass = binding(Map.of("value", String.class));
+        BindingValue byEnum = binding(Map.of("value", TimeUnit.SECONDS));
 
         assertEquals(binding(Map.of("value", new AnnotationClassValue<>("java.lang.String"))), byClass);
         assertEquals(binding(Map.of("value", "SECONDS")), byEnum);
-        assertEquals(new AnnotationClassValue<>("java.lang.String"), byClass.written().getValues().get("value"));
-        assertEquals("SECONDS", byEnum.written().getValues().get("value"));
+        assertEquals(new AnnotationClassValue<>("java.lang.String"), byClass.toAnnotationValue().getValues().get("value"));
+        assertEquals("SECONDS", byEnum.toAnnotationValue().getValues().get("value"));
         assertArrayEquals(new String[]{"SECONDS", "MINUTES"}, (Object[]) binding(
-            Map.of("value", new TimeUnit[]{TimeUnit.SECONDS, TimeUnit.MINUTES})).written().getValues().get("value"));
+            Map.of("value", new TimeUnit[]{TimeUnit.SECONDS, TimeUnit.MINUTES})).toAnnotationValue().getValues().get("value"));
     }
 
     /**
@@ -120,11 +121,11 @@ class InterceptorBindingValuesTest {
             .member(AnnotationUtil.NON_BINDING_ATTRIBUTE, new String[]{"comment"})
             .build();
 
-        InterceptorBindingValues.Binding binding =
+        BindingValue binding =
             InterceptorBindingValues.of(declared, name -> List.of("note"));
 
-        assertEquals(Map.of("value", "a"), binding.values());
-        AnnotationValue<?> written = binding.written();
+        assertEquals(Map.of("value", "a"), binding.members());
+        AnnotationValue<?> written = binding.toAnnotationValue();
         assertFalse(written.contains("comment"));
         assertFalse(written.contains("note"));
         assertArrayEquals(new String[]{"comment", "note"}, written.stringValues(AnnotationUtil.NON_BINDING_ATTRIBUTE));
@@ -139,6 +140,6 @@ class InterceptorBindingValuesTest {
     @Test
     void anEmptyStringWithoutADefaultIsTheMemberLeftOut() {
         assertEquals(binding(Map.of()), binding(Map.of("value", "")));
-        assertFalse(binding(Map.of("value", "")).written().contains("value"));
+        assertFalse(binding(Map.of("value", "")).toAnnotationValue().contains("value"));
     }
 }

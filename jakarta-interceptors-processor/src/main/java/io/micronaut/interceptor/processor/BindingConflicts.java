@@ -21,6 +21,7 @@ import io.micronaut.core.annotation.Internal;
 import io.micronaut.inject.ast.ClassElement;
 import io.micronaut.inject.ast.Element;
 import io.micronaut.inject.visitor.VisitorContext;
+import io.micronaut.interceptor.internal.metadata.BindingValue;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorSupport;
 import org.jspecify.annotations.Nullable;
 
@@ -122,9 +123,9 @@ public final class BindingConflicts {
                                     Set<String> resolving,
                                     List<String> cuts) {
         // what the element says itself, which is the answer for the element
-        Map<String, InterceptorBindingValues.Binding> declared = new LinkedHashMap<>();
+        Map<String, BindingValue> declared = new LinkedHashMap<>();
         // what the annotations of the element pass along, which is only the answer where the element is silent
-        Map<String, InterceptorBindingValues.Binding> passed = new LinkedHashMap<>();
+        Map<String, BindingValue> passed = new LinkedHashMap<>();
         Set<String> conflicts = new LinkedHashSet<>();
         Set<String> declaredNames = metadata.getDeclaredAnnotationNames();
         for (String name : names) {
@@ -148,7 +149,7 @@ public final class BindingConflicts {
             Bindings carried = of(name, type, context, excluded, resolved, resolving, cuts);
             conflicts.addAll(carried.conflicts());
             carried.bindings().forEach((carriedName, binding) -> {
-                InterceptorBindingValues.Binding existing = passed.putIfAbsent(carriedName, binding);
+                BindingValue existing = passed.putIfAbsent(carriedName, binding);
                 if (existing != null && !existing.equals(binding)) {
                     conflicts.add(carriedName);
                 }
@@ -157,7 +158,7 @@ public final class BindingConflicts {
         // a binding the element declares is what that binding is here, so two annotations passing it along with
         // different values no longer disagree: the element has already said which value it has
         conflicts.removeAll(declared.keySet());
-        Map<String, InterceptorBindingValues.Binding> bindings = new LinkedHashMap<>(passed);
+        Map<String, BindingValue> bindings = new LinkedHashMap<>(passed);
         bindings.putAll(declared);
         return new Bindings(bindings, conflicts);
     }
@@ -215,7 +216,7 @@ public final class BindingConflicts {
      * @param bindings  The bindings, by annotation name
      * @param conflicts The names of the bindings that disagree
      */
-    private record Bindings(Map<String, InterceptorBindingValues.Binding> bindings, Set<String> conflicts) {
+    private record Bindings(Map<String, BindingValue> bindings, Set<String> conflicts) {
 
         private static final Bindings EMPTY = new Bindings(Map.of(), Set.of());
     }

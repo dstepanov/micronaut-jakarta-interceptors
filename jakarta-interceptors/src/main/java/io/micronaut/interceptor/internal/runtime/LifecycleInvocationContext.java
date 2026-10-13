@@ -84,11 +84,8 @@ final class LifecycleInvocationContext extends AbstractInvocationContext
             return null;
         }
         // getMethod returns a java.lang.reflect.Method, which only the platform can produce
-        try {
-            return PlatformReflection.method(method);
-        } catch (NoClassDefFoundError e) {
-            throw reflectionUnavailable("getMethod()", e);
-        }
+        requireReflectionModule("getMethod()");
+        return PlatformReflection.method(method);
     }
 
     /**

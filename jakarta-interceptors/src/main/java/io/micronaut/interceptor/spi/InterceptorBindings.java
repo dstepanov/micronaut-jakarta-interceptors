@@ -69,7 +69,6 @@ import java.util.function.Function;
  */
 public final class InterceptorBindings {
 
-    private static final String BINDINGS = "bindings";
     private static final InterceptorBindings NONE = new InterceptorBindings(List.of());
 
     private final List<BindingValue> bindings;
@@ -88,7 +87,7 @@ public final class InterceptorBindings {
     public static InterceptorBindings of(BeanType<?> interceptor) {
         AnnotationValue<JakartaInterceptorMethods> recorded =
             interceptor.getAnnotation(JakartaInterceptorMethods.class);
-        return recorded == null ? NONE : ofRecorded(recorded.getAnnotations(BINDINGS));
+        return recorded == null ? NONE : ofRecorded(recorded.getAnnotations(JakartaInterceptorMethods.BINDINGS));
     }
 
     /**
@@ -100,7 +99,7 @@ public final class InterceptorBindings {
      */
     public static InterceptorBindings ofInterceptionPoint(AnnotationMetadata metadata) {
         AnnotationValue<JakartaInterception> interception = metadata.getAnnotation(JakartaInterception.class);
-        return interception == null ? NONE : ofRecorded(interception.getAnnotations(BINDINGS));
+        return interception == null ? NONE : ofRecorded(interception.getAnnotations(JakartaInterception.BINDINGS));
     }
 
     /**

@@ -35,6 +35,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
 
@@ -158,6 +159,11 @@ public final class InterceptorMethods {
      * include the ones it inherits, and a class and its superclass may each declare a private interceptor method of
      * the same name and signature; looked up by name alone, both would be whichever of them came first.</p>
      *
+     * <p>The methods of the name are asked of the definition rather than every executable method of it being read.
+     * That leaves out the methods Micronaut invokes as the post-construct and pre-destroy callbacks of the bean
+     * itself, which an interceptor method is not: it takes the {@code InvocationContext} of the element it
+     * interposes on, and Micronaut does not call it back as the interceptor instance is created or destroyed.</p>
+     *
      * @param definition    The definition of the interceptor class
      * @param name          The name of the method
      * @param declaringType The name of the class that declares it, or {@code null} where it was not recorded
@@ -166,14 +172,16 @@ public final class InterceptorMethods {
     private static ExecutableMethod<Object, Object> interceptorMethod(BeanDefinition<?> definition,
                                                                      String name,
                                                                      @Nullable String declaringType) {
-        for (ExecutableMethod<?, ?> method : definition.getExecutableMethods()) {
-            Class<?>[] argumentTypes = method.getArgumentTypes();
-            if (method.getMethodName().equals(name)
-                && argumentTypes.length == 1
-                && argumentTypes[0] == InvocationContext.class
-                && (declaringType == null || method.getDeclaringType().getName().equals(declaringType))) {
-                return (ExecutableMethod<Object, Object>) method;
-            }
+        Optional<? extends ExecutableMethod<?, ?>> found = definition.findPossibleMethods(name)
+            .filter(method -> {
+                Class<?>[] argumentTypes = method.getArgumentTypes();
+                return argumentTypes.length == 1
+                    && argumentTypes[0] == InvocationContext.class
+                    && (declaringType == null || method.getDeclaringType().getName().equals(declaringType));
+            })
+            .findFirst();
+        if (found.isPresent()) {
+            return (ExecutableMethod<Object, Object>) found.get();
         }
         throw new IllegalStateException("The interceptor method [" + name + "] of ["
             + (declaringType == null ? definition.getBeanType().getName() : declaringType)

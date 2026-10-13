@@ -173,8 +173,8 @@ class InterceptorBindingsTest {
         assertEquals(2, values.size());
         AnnotationValue<?> read = values.get(0);
         assertEquals(LOGGED, read.getAnnotationName());
-        assertEquals("SECONDS", read.getValues().get("unit"));
-        assertEquals("INFO", read.getValues().get("level"));
+        assertEquals("SECONDS", read.stringValue("unit").orElse(null));
+        assertEquals("INFO", read.stringValue("level").orElse(null));
         assertFalse(read.contains("comment"));
         assertEquals(List.of("comment"), List.of(read.stringValues(AnnotationUtil.NON_BINDING_ATTRIBUTE)));
         assertEquals(bindings, InterceptorBindings.ofValues(values));

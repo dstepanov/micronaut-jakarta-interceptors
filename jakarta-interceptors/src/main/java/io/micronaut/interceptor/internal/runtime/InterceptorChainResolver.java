@@ -119,7 +119,7 @@ public final class InterceptorChainResolver {
      */
     List<InterceptorReference> resolve(InterceptorKind interceptorKind, AnnotationMetadata metadata, boolean scheduled) {
         AnnotationValue<JakartaInterception> interception = recordedInterception(metadata);
-        boolean timeout = scheduled && interception != null && interception.booleanValue("timeout").orElse(false);
+        boolean timeout = scheduled && interception != null && interception.booleanValue(JakartaInterception.TIMEOUT).orElse(false);
         InterceptionKind kind = InterceptionKind.of(interceptorKind, timeout);
         if (kind == null) {
             return List.of();
@@ -178,9 +178,9 @@ public final class InterceptorChainResolver {
             return resolved;
         }
         AssociatedKey key = new AssociatedKey(
-            List.of(interception.classValues("associated")),
-            InterceptorBindings.ofRecorded(interception.getAnnotations("bindings")),
-            InterceptorBindings.ofRecorded(interception.getAnnotations("associatedBindings")));
+            List.of(interception.classValues(JakartaInterception.ASSOCIATED)),
+            InterceptorBindings.ofRecorded(interception.getAnnotations(JakartaInterception.BINDINGS)),
+            InterceptorBindings.ofRecorded(interception.getAnnotations(JakartaInterception.ASSOCIATED_BINDINGS)));
         readInterceptions.increment();
         resolved = associated.get(key);
         if (resolved == null) {
@@ -488,10 +488,10 @@ public final class InterceptorChainResolver {
                 return new ChainKey(kind, List.of(), InterceptorBindings.ofValues(List.of()), null, false);
             }
             return new ChainKey(kind,
-                List.of(interception.classValues("interceptors")),
-                InterceptorBindings.ofRecorded(interception.getAnnotations("bindings")),
-                interception.classValue("self").filter(type -> type != void.class).orElse(null),
-                interception.booleanValue("excluded").orElse(false));
+                List.of(interception.classValues(JakartaInterception.INTERCEPTORS)),
+                InterceptorBindings.ofRecorded(interception.getAnnotations(JakartaInterception.BINDINGS)),
+                interception.classValue(JakartaInterception.SELF).filter(type -> type != void.class).orElse(null),
+                interception.booleanValue(JakartaInterception.EXCLUDED).orElse(false));
         }
     }
 

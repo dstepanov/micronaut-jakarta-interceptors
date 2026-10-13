@@ -66,7 +66,9 @@ public final class ProducesVisitor implements TypeElementVisitor<Object, Object>
         element.annotate(Factory.class);
         for (MethodElement producer : producers) {
             producer.annotate(Bean.class);
-            // a producer method is dependent scoped unless it says otherwise, as a Micronaut prototype is
+            // every producer method is read as dependent scoped, which a Micronaut prototype is, whatever scope it
+            // declares: the scenarios this harness deploys produce dependent beans alone, and a producer declaring a
+            // scope of its own would need the scope mapped as well, which nothing here does
             producer.annotate(Prototype.class);
         }
     }

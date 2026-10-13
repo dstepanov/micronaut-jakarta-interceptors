@@ -172,9 +172,11 @@ no hook of its own for the advice of a proxy to act on as its target is created.
 bean whose definition declares nothing this module intercepts, before looking at anything the bean depends on.
 
 The advice of a proxy with a separate target is a dependent of that target, and the listener finds it through the
-registration of the target the proxy holds. That registration offers its dependents only through
-`DependentBeanProvider`, which Micronaut marks internal: neither `BeanRegistration` nor `InterceptedProxy` lists the
-dependents of a registration publicly, and the event of the proxy lists only those of the proxy.
+registration of the target the proxy holds. The proxy hands that registration out through
+`interceptedTargetRegistration()`, which `InterceptedProxy` inherits from `InterceptedBeanProxy`, an interface
+Micronaut marks internal. The registration in turn offers its dependents only through `DependentBeanProvider`,
+which Micronaut marks internal as well: neither `BeanRegistration` nor `InterceptedProxy` lists the dependents of a
+registration publicly, and the event of the proxy lists only those of the proxy.
 
 A proxy that resolves its target lazily - `@Around(proxyTarget = true, lazy = true)`, or a bean of a scope that
 resolves through a proxy - has no target when it is created, so the instances of its interceptors are created on

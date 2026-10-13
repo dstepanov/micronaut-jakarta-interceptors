@@ -57,6 +57,41 @@ import java.lang.annotation.Target;
 public @interface JakartaInterception {
 
     /**
+     * The name of {@link #interceptors()}, by which the processor writes the member and the runtime reads it.
+     */
+    String INTERCEPTORS = "interceptors";
+
+    /**
+     * The name of {@link #associated()}.
+     */
+    String ASSOCIATED = "associated";
+
+    /**
+     * The name of {@link #associatedBindings()}.
+     */
+    String ASSOCIATED_BINDINGS = "associatedBindings";
+
+    /**
+     * The name of {@link #self()}.
+     */
+    String SELF = "self";
+
+    /**
+     * The name of {@link #excluded()}.
+     */
+    String EXCLUDED = "excluded";
+
+    /**
+     * The name of {@link #timeout()}.
+     */
+    String TIMEOUT = "timeout";
+
+    /**
+     * The name of {@link #bindings()}.
+     */
+    String BINDINGS = "bindings";
+
+    /**
      * The interceptor classes the intercepted element names with {@code jakarta.interceptor.Interceptors}, in the
      * order the specification invokes them in: the ones the class names first, then the ones the member names.
      *

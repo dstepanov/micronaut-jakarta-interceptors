@@ -37,9 +37,10 @@ import java.util.Optional;
  * <p>It is answered by {@code io.micronaut:micronaut-reflection}, which this module compiles against and does not
  * depend on. The class links to that module, so it initializes only where the module is on the classpath, and it is
  * loaded only when an interceptor calls one of the accessors of {@code InvocationContext} that return such an
- * object. Where the module is absent its use fails with a {@link NoClassDefFoundError}, which the accessor reports
- * as an {@link UnsupportedOperationException} that names the module. Nothing probes for the module beforehand, and
- * an application whose interceptors call none of those accessors never loads this class at all.</p>
+ * object. Such an accessor first asks whether the module is there, which is looked for once, the first time one of
+ * them is called, and throws an {@link UnsupportedOperationException} that names the module where it is not, so this
+ * class is never used without it. An application whose interceptors call none of those accessors never looks for the
+ * module, and never loads this class at all.</p>
  *
  * @author Denis Stepanov
  * @since 1.0

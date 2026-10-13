@@ -71,11 +71,8 @@ final class BusinessMethodInvocationContext extends AbstractInvocationContext
     @Override
     public Method getMethod() {
         // getMethod returns a java.lang.reflect.Method, which only the platform can produce
-        try {
-            return PlatformReflection.method(context.getExecutableMethod());
-        } catch (NoClassDefFoundError e) {
-            throw reflectionUnavailable("getMethod()", e);
-        }
+        requireReflectionModule("getMethod()");
+        return PlatformReflection.method(context.getExecutableMethod());
     }
 
     /**

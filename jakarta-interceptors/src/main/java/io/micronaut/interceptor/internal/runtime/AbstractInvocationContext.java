@@ -232,12 +232,13 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     }
 
     /**
-     * The bindings are instances of the binding annotations, which the specification asks for as such. Building
-     * them is the one thing the interception does that needs the reflection of the platform, and it only happens
-     * when an interceptor asks for the bindings; the interception itself compares the bindings that Micronaut
-     * recorded at compilation time, and never builds an annotation.
+     * The bindings are instances of the binding annotations, which the specification asks for as such, built from
+     * {@link #getInterceptorBindingValues()}, the bindings that selected the chain. An annotation is built only when
+     * an interceptor asks for the bindings - by the builder Micronaut generated for it with
+     * {@code @RegisterAnnotations} where there is one, by the reflection module otherwise; the interception itself
+     * compares the bindings the processor recorded, and never builds an annotation.
      *
-     * @return The binding annotations in effect on the intercepted element
+     * @return The binding annotations that selected the chain of the intercepted element
      */
     @Override
     public Set<Annotation> getInterceptorBindings() {

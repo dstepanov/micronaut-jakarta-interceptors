@@ -48,8 +48,10 @@ import java.util.List;
  *     public Object invoke(InvocationContext context) throws Exception {
  *         if (context instanceof MicronautMethodInvocationContext micronaut) {
  *             ExecutableMethod<Object, Object> method = micronaut.getMicronautInvocation().getExecutableMethod();
- *             String region = micronaut.getAnnotationMetadata()
- *                 .stringValue(Cached.class, "region")
+ *             String region = micronaut.getInterceptorBindingValues().stream()
+ *                 .filter(binding -> binding.getAnnotationName().equals(Cached.class.getName()))
+ *                 .findFirst()
+ *                 .flatMap(binding -> binding.stringValue("region"))
  *                 .orElse("default");
  *             cache(region, method.getDeclaringType(), method.getMethodName());
  *         }

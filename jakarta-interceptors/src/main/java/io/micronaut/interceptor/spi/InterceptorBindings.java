@@ -72,10 +72,15 @@ public final class InterceptorBindings {
     private static final InterceptorBindings NONE = new InterceptorBindings(List.of());
 
     private final List<BindingValue> bindings;
-    private volatile @Nullable List<AnnotationValue<?>> values;
+    private final int hash;
 
     private InterceptorBindings(List<BindingValue> bindings) {
         this.bindings = bindings;
+        Set<String> names = new HashSet<>();
+        for (BindingValue binding : bindings) {
+            names.add(binding.name());
+        }
+        this.hash = names.hashCode();
     }
 
     /**
@@ -105,7 +110,12 @@ public final class InterceptorBindings {
     /**
      * Reads a set of bindings from the values of the binding annotations, which may have been read from the
      * metadata of an element or built from annotation instances. The members a value leaves out are filled in from
-     * the defaults it carries.
+     * the defaults it carries, {@link AnnotationValue#getDefaultValues()}, and from nothing else: the registry of
+     * defaults Micronaut shares across the application is not asked again. A value read from metadata carries the
+     * defaults that registry held when it was read, and the reflection module adds to the registry as it builds an
+     * instance of an annotation - an empty string, which is compared as the member left out, and the defaults it
+     * reads in the shapes it reads them in, which are compared as one - so a value read before and one read after
+     * are the same bindings.
      *
      * <p>A value lists the members excluded from its binding under
      * {@value AnnotationUtil#NON_BINDING_ATTRIBUTE}. Those are left out wherever it is compared, and so are the
@@ -184,20 +194,17 @@ public final class InterceptorBindings {
      * what the interceptor is bound by. Read back through {@link #ofValues(Collection)}, the values are these
      * bindings again.</p>
      *
+     * <p>Every call builds the values anew, and an array a value holds is the caller's: what is done to it changes
+     * nothing of these bindings, nor of the values another call returns.</p>
+     *
      * @return The values, unmodifiable
      */
     public List<AnnotationValue<?>> values() {
-        List<AnnotationValue<?>> read = values;
-        if (read == null) {
-            // two threads may build the list at once, and build equal lists
-            List<AnnotationValue<?>> built = new ArrayList<>(bindings.size());
-            for (BindingValue binding : bindings) {
-                built.add(binding.toAnnotationValue());
-            }
-            read = Collections.unmodifiableList(built);
-            values = read;
+        List<AnnotationValue<?>> built = new ArrayList<>(bindings.size());
+        for (BindingValue binding : bindings) {
+            built.add(binding.toAnnotationValue());
         }
-        return read;
+        return Collections.unmodifiableList(built);
     }
 
     /**
@@ -265,11 +272,7 @@ public final class InterceptorBindings {
      */
     @Override
     public int hashCode() {
-        Set<String> names = new HashSet<>();
-        for (BindingValue binding : bindings) {
-            names.add(binding.name());
-        }
-        return names.hashCode();
+        return hash;
     }
 
     @Override

@@ -84,7 +84,12 @@ A module that has to answer the same question - which interceptors apply to thes
 api:interceptor.spi.InterceptorBindings[], which is the comparison the chains use. Micronaut CDI does so when its
 `BeanManager` is asked for the interceptors of a set of bindings, so the two answers are the same. Its `values()`
 reads the bindings back as the values of their annotations, as the processor recorded them, which is what a module
-describing the bindings of an interceptor describes them from.
+describing the bindings of an interceptor describes them from. A module comparing bindings one at a time - telling
+whether two are equivalent, or comparing qualifiers that leave out their `@Nonbinding` members as bindings do - asks
+api:interceptor.spi.BindingValues[], whose `normalize`, `matches` and `hashCode` compare one binding exactly as
+`InterceptorBindings` compares a set of them: the defaults a value carries filled in, the members either side lists
+as excluded left out, an empty string compared as the member left out, and of the members whose names start with
+`$` only the two Micronaut reserves, `$nonBinding` and `$stereotypes`, left out.
 
 == Bindings that come from elsewhere
 

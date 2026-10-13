@@ -20,4 +20,12 @@ public @interface Drifting {
     String value() default "";
 
     String level() default "INFO";
+
+    String[] tags() default {};
+
+    Class<?> kind() default Object.class;
+
+    RetentionPolicy policy() default RetentionPolicy.CLASS;
+
+    int[] sizes() default {};
 }

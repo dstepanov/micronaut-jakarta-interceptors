@@ -142,4 +142,34 @@ class InterceptorBindingValuesTest {
         assertEquals(binding(Map.of()), binding(Map.of("value", "")));
         assertFalse(binding(Map.of("value", "")).toAnnotationValue().contains("value"));
     }
+
+    /**
+     * An empty string where the annotation defaults to another value is written out, and is not that default: it is
+     * compared as the member left out, against a default that is there.
+     */
+    @Test
+    void anEmptyStringWhereTheDefaultIsAnotherValueIsNotTheDefault() {
+        AnnotationValue<?> empty = new AnnotationValue<>(BINDING, Map.of("value", ""), Map.of("value", "eu"));
+        AnnotationValue<?> defaulted = new AnnotationValue<>(BINDING, Map.of(), Map.of("value", "eu"));
+
+        BindingValue reduced = InterceptorBindingValues.of(empty, name -> List.of());
+        assertEquals("", reduced.toAnnotationValue().getValues().get("value"));
+        assertNotEquals(reduced, InterceptorBindingValues.of(defaulted, name -> List.of()));
+        assertFalse(written(reduced).isBoundBy(InterceptorBindings.ofValues(List.of(defaulted))));
+        assertTrue(written(reduced).isBoundBy(InterceptorBindings.ofValues(List.of(empty))));
+    }
+
+    /**
+     * What a binding is written out as is the caller's: changing an array it holds changes nothing of the binding.
+     */
+    @Test
+    void theValueWrittenOutSharesNoArrayWithTheBinding() {
+        BindingValue binding = binding(Map.of("value", new String[]{"a"}, "sizes", new int[]{1}));
+
+        ((String[]) binding.toAnnotationValue().getValues().get("value"))[0] = "b";
+        ((int[]) binding.toAnnotationValue().getValues().get("sizes"))[0] = 2;
+
+        assertArrayEquals(new String[]{"a"}, (String[]) binding.toAnnotationValue().getValues().get("value"));
+        assertArrayEquals(new int[]{1}, (int[]) binding.toAnnotationValue().getValues().get("sizes"));
+    }
 }

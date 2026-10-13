@@ -21,9 +21,12 @@ import io.micronaut.context.DependentBeanProvider;
 import io.micronaut.context.event.BeanCreatedEvent;
 import io.micronaut.context.event.BeanCreatedEventListener;
 import io.micronaut.core.annotation.Internal;
+import io.micronaut.inject.BeanDefinition;
 import jakarta.inject.Singleton;
 
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Creates the interceptor instances of an object as the object is created.
@@ -43,7 +46,9 @@ import java.util.List;
  *
  * <p>Micronaut offers no listener narrowed to the beans an annotation is declared on, so this one is handed every
  * bean the context creates. It returns at once for an object whose definition declares nothing this module
- * intercepts, before looking at any of its dependents.</p>
+ * intercepts, before looking at any of its dependents. Whether a definition declares anything is read once for it,
+ * rather than from each of its executable methods every time a bean of it is created: a definition Micronaut
+ * compiled is equal to every other instance of its class, so the answer is remembered once for each.</p>
  *
  * <p>The dependents of the target a proxy holds are read through {@link DependentBeanProvider}, which Micronaut
  * marks internal: a {@link BeanRegistration} does not offer its dependents publicly, and
@@ -57,9 +62,11 @@ import java.util.List;
 @Internal
 final class InterceptorCreationListener implements BeanCreatedEventListener<Object> {
 
+    private final Map<BeanDefinition<?>, Boolean> intercepted = new ConcurrentHashMap<>();
+
     @Override
     public Object onCreated(BeanCreatedEvent<Object> event) {
-        if (!JakartaInterceptorAdvice.intercepts(event.getBeanDefinition())) {
+        if (!intercepted.computeIfAbsent(event.getBeanDefinition(), JakartaInterceptorAdvice::intercepts)) {
             // nothing of the object is intercepted by this module, so it has no interceptor instance to create
             return event.getBean();
         }

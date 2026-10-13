@@ -48,8 +48,10 @@ import java.util.List;
  *     public Object invoke(InvocationContext context) throws Exception {
  *         if (context instanceof MicronautMethodInvocationContext micronaut) {
  *             ExecutableMethod<Object, Object> method = micronaut.getMicronautInvocation().getExecutableMethod();
- *             String region = micronaut.getAnnotationMetadata()
- *                 .stringValue(Cached.class, "region")
+ *             String region = micronaut.getInterceptorBindingValues().stream()
+ *                 .filter(binding -> binding.getAnnotationName().equals(Cached.class.getName()))
+ *                 .findFirst()
+ *                 .flatMap(binding -> binding.stringValue("region"))
  *                 .orElse("default");
  *             cache(region, method.getDeclaringType(), method.getMethodName());
  *         }
@@ -104,10 +106,13 @@ public interface MicronautInvocationContext extends InvocationContext {
      * The interceptor bindings in effect on the intercepted element, as the values of their binding annotations, read
      * without reflecting and without building an annotation.
      *
-     * <p>This is the reflection-free answer to {@link #getInterceptorBindings()}, and holds the same bindings: each
-     * binding annotation the element carries, read from the nearest declaration of it - the method's where it
-     * declares one, its class's otherwise - with a repeatable binding as the occurrences of that declaration. A member
-     * a declaration leaves to its default is not filled in from the declaration of the class; it is left out, and
+     * <p>This is the reflection-free answer to {@link #getInterceptorBindings()}, and holds the same bindings: the
+     * ones that selected the interceptors of the element, as the processor recorded them on it. A binding the element
+     * only inherits from the method it overrides is not one of them, nor is a binding of the factory that produced
+     * the bean, although the metadata of the element holds both; and occurrences of a repeatable binding that differ
+     * only in a member that does not bind are one binding, reported once. Each is reported as the nearest
+     * declaration of it - the method's where it declares one, its class's otherwise. A member a declaration leaves to
+     * its default is not filled in from the declaration of the class; it is left out, and
      * {@link AnnotationValue#getDefaultValues()} holds its default. The members that do not bind are reported as
      * declared, since an interceptor may read them, and an evaluated expression is reported as the expression, as
      * the comparison that bound the interceptor read it.</p>
@@ -120,7 +125,8 @@ public interface MicronautInvocationContext extends InvocationContext {
      * }
      * }</pre>
      *
-     * @return The bindings, in the order the metadata lists their annotations, empty where the element has none
+     * @return The bindings, in the order the processor recorded them - by the name of the annotation - empty where the
+     * element has none
      */
     List<AnnotationValue<?>> getInterceptorBindingValues();
 

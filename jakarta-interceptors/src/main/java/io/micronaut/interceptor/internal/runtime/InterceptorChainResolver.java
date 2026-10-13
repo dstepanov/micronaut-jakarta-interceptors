@@ -72,6 +72,8 @@ public final class InterceptorChainResolver {
     // an interceptor class describes itself the same way whichever element its chain was resolved for, so what is
     // read of it is read once rather than once for every element it intercepts
     private final Map<Class<?>, Optional<BeanDefinition<?>>> describing = new ConcurrentHashMap<>();
+    // the bindings an interceptor class declares, by its indexed definition, which every chain resolved asks of it
+    private final Map<BeanType<?>, InterceptorBindings> interceptorBindings = new ConcurrentHashMap<>();
     private final Map<ReferenceKey, List<InterceptorReference>> references = new ConcurrentHashMap<>();
     private final Map<AssociatedKey, List<InterceptorReference>> associated = new ConcurrentHashMap<>();
     // what decides whether an interceptor class a binding binds is enabled: none on its own. Injected rather than
@@ -279,7 +281,7 @@ public final class InterceptorChainResolver {
         }
         List<BeanDefinition<?>> matching = new ArrayList<>();
         for (BeanDefinition<JakartaInterceptorIndex> bound : beanContext.getBeanDefinitions(
-            JakartaInterceptorIndex.class, InterceptorBindings.boundTo(bindingsOfElement))) {
+            JakartaInterceptorIndex.class, new BoundInterceptorQualifier<>(bindingsOfElement, this::bindingsOf))) {
             BeanDefinition<?> definition = describing(bound.getBeanType());
             // a class that declares an interceptor method without declaring itself an interceptor class is one
             // only where it is named directly, and takes no part in what a binding annotation binds
@@ -291,6 +293,15 @@ public final class InterceptorChainResolver {
         matching.sort(Comparator.<BeanDefinition<?>>comparingInt(InterceptorMethods::priorityOf)
             .thenComparing(definition -> definition.getBeanType().getName()));
         return listedLast(matching);
+    }
+
+    /**
+     * The bindings an interceptor class declares, read off its definition once rather than for every chain that is
+     * resolved: they are what the processor recorded on the definition, which does not change. A definition
+     * Micronaut compiled is equal to every other instance of its class, so each is read once.
+     */
+    private InterceptorBindings bindingsOf(BeanType<?> interceptor) {
+        return interceptorBindings.computeIfAbsent(interceptor, InterceptorBindings::of);
     }
 
     /**

@@ -17,6 +17,7 @@ package io.micronaut.interceptor;
 
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
+import io.micronaut.scheduling.TaskExecutors;
 
 /**
  * What {@code InvocationContext.getTimer()} returns for a method the scheduler invokes.
@@ -30,7 +31,8 @@ import io.micronaut.core.annotation.Internal;
  * @param fixedDelay   The delay between the end of one invocation and the start of the next, empty when unset
  * @param fixedRate    The interval between the starts of two invocations, empty when unset
  * @param initialDelay The delay before the first invocation, empty when unset
- * @param scheduler    The name of the scheduler that invokes the method
+ * @param scheduler    The name of the scheduler that invokes the method, {@value TaskExecutors#SCHEDULED} unless the
+ *                     method names another
  * @author Denis Stepanov
  * @since 1.0
  */
@@ -55,6 +57,8 @@ public record ScheduledTimer(String cron,
             scheduled.stringValue("fixedDelay").orElse(""),
             scheduled.stringValue("fixedRate").orElse(""),
             scheduled.stringValue("initialDelay").orElse(""),
-            scheduled.stringValue("scheduler").orElse(""));
+            // the scheduler Micronaut runs a schedule on when it names none, as its processor of scheduled methods
+            // reads it. The name is a constant, so this class needs nothing of micronaut-context at runtime
+            scheduled.stringValue("scheduler").orElse(TaskExecutors.SCHEDULED));
     }
 }

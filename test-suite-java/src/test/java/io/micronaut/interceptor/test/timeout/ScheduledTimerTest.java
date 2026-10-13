@@ -1,6 +1,8 @@
 package io.micronaut.interceptor.test.timeout;
 
 import io.micronaut.context.ApplicationContext;
+import io.micronaut.interceptor.ScheduledTimer;
+import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.annotation.Scheduled;
 import jakarta.inject.Singleton;
 import jakarta.interceptor.AroundInvoke;
@@ -32,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ScheduledTimerTest {
 
     static final List<String> CALLS = new CopyOnWriteArrayList<>();
+    static final List<ScheduledTimer> TIMERS = new CopyOnWriteArrayList<>();
     static volatile CountDownLatch bothRan = new CountDownLatch(2);
     // counted down by the direct call made before the schedule runs, and by the schedule
     static volatile CountDownLatch laterRan = new CountDownLatch(2);
@@ -50,6 +53,24 @@ class ScheduledTimerTest {
                 }
             }
             assertEquals(2, timers.size(), "one timer per schedule: " + CALLS);
+        }
+    }
+
+    /**
+     * A schedule that names no scheduler is run by the one Micronaut runs every schedule on by default, and the timer
+     * names it rather than leaving the name empty.
+     */
+    @Test
+    void theTimerNamesTheDefaultScheduler() throws Exception {
+        TIMERS.clear();
+        bothRan = new CountDownLatch(2);
+        try (ApplicationContext context = ApplicationContext.run()) {
+            assertTrue(bothRan.await(5, TimeUnit.SECONDS), "both schedules ran");
+
+            assertTrue(TIMERS.size() >= 2, "a timer per schedule: " + TIMERS);
+            for (ScheduledTimer timer : TIMERS) {
+                assertEquals(TaskExecutors.SCHEDULED, timer.scheduler(), timer.toString());
+            }
         }
     }
 
@@ -108,6 +129,9 @@ class ScheduledTimerTest {
 
         @AroundTimeout
         public Object timeout(InvocationContext context) throws Exception {
+            if (context.getTimer() instanceof ScheduledTimer timer) {
+                TIMERS.add(timer);
+            }
             CALLS.add("timeout " + context.getMethod().getDeclaringClass().getSimpleName() + " " + context.getTimer());
             return context.proceed();
         }

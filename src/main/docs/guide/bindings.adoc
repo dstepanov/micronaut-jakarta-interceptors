@@ -81,10 +81,16 @@ reflection module adds to the first time it builds an instance of the annotation
 read the same before and after that.
 
 A module that has to answer the same question - which interceptors apply to these bindings? - asks
-api:interceptor.spi.InterceptorBindings[], which is the comparison the chains use. Micronaut CDI does so when its
-`BeanManager` is asked for the interceptors of a set of bindings, so the two answers are the same. Its `values()`
-reads the bindings back as the values of their annotations, as the processor recorded them, which is what a module
-describing the bindings of an interceptor describes them from. A module comparing bindings one at a time - telling
+api:interceptor.spi.InterceptorBindings[], which is the comparison the chains use. Its static
+`boundInterceptors(BeanContext, InterceptorBindings)` is the whole selection a chain makes: the interceptor classes
+of the context bound to the bindings of a point, without the classes that declare interceptor methods but not
+`@Interceptor` and the ones a api:interceptor.spi.BoundInterceptorEnablement[] does not enable, ordered by priority,
+then by class name, with the ones an enablement lists after them. Micronaut CDI asks it when its `BeanManager` is
+asked for the interceptors of a set of bindings, and the resolver of the chains answers it, so the two answers are
+the same. Each definition it returns is the one `InterceptorMethods.of` reads the interceptor methods from and
+`InterceptorBindings.of` reads the bindings from. The `values()` of those bindings read them back as the values of
+their annotations, as the processor recorded them, which is what a module describing the bindings of an
+interceptor describes them from. A module comparing bindings one at a time - telling
 whether two are equivalent, or comparing qualifiers that leave out their `@Nonbinding` members as bindings do - asks
 api:interceptor.spi.BindingValues[], whose `normalize`, `matches` and `hashCode` compare one binding exactly as
 `InterceptorBindings` compares a set of them: the defaults a value carries filled in, the members either side lists

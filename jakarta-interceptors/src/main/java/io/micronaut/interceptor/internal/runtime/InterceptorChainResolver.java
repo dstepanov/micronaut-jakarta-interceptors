@@ -44,6 +44,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.LongAdder;
 
 /**
  * Resolves, and remembers, the chain of interceptor classes that applies to an intercepted element.
@@ -63,6 +64,11 @@ public final class InterceptorChainResolver {
 
     private final BeanContext beanContext;
     private final Map<ChainKey, List<InterceptorReference>> chains = new ConcurrentHashMap<>();
+    // the chains again, under the interception as the processor recorded it, so that finding the chain of an element
+    // a second time reads nothing into a ChainKey
+    private final Map<RecordedKey, List<InterceptorReference>> recorded = new ConcurrentHashMap<>();
+    private final Map<RecordedKey, List<InterceptorReference>> recordedAssociated = new ConcurrentHashMap<>();
+    private final LongAdder readInterceptions = new LongAdder();
     // an interceptor class describes itself the same way whichever element its chain was resolved for, so what is
     // read of it is read once rather than once for every element it intercepts
     private final Map<Class<?>, Optional<BeanDefinition<?>>> describing = new ConcurrentHashMap<>();
@@ -90,6 +96,10 @@ public final class InterceptorChainResolver {
      * the same element declared differently by two beans - a method two beans inherit from one superclass, or a
      * class two factory methods produce - has a chain for each declaration.</p>
      *
+     * <p>The chain is found again under the interception exactly as the processor recorded it, see
+     * {@link RecordedKey}, so that the bindings of an element are brought into the shape they are compared in once,
+     * when its chain is first resolved, rather than every time a bean is created or an invocation looks it up.</p>
+     *
      * @param interceptorKind The kind Micronaut intercepts the element as
      * @param metadata        The annotation metadata of the element
      * @return The interceptors, in the order they are invoked in
@@ -108,22 +118,40 @@ public final class InterceptorChainResolver {
      * @return The interceptors, in the order they are invoked in
      */
     List<InterceptorReference> resolve(InterceptorKind interceptorKind, AnnotationMetadata metadata, boolean scheduled) {
-        AnnotationValue<JakartaInterception> interception = metadata.getAnnotation(JakartaInterception.class);
+        AnnotationValue<JakartaInterception> interception = recordedInterception(metadata);
         boolean timeout = scheduled && interception != null && interception.booleanValue("timeout").orElse(false);
         InterceptionKind kind = InterceptionKind.of(interceptorKind, timeout);
         if (kind == null) {
             return List.of();
         }
-        ChainKey key = ChainKey.of(kind, interception);
-        List<InterceptorReference> chain = chains.get(key);
+        RecordedKey recordedKey = RecordedKey.of(kind, interception);
+        List<InterceptorReference> chain = recorded.get(recordedKey);
         if (chain == null) {
-            // two threads may build the same chain, and the later put wins. The key is everything the chain is
-            // built from, so the two chains are equal and nothing is lost. Building inside a computeIfAbsent would
-            // instead hold a lock of the map across the bean context
-            chain = build(key);
-            chains.put(key, chain);
+            ChainKey key = ChainKey.of(kind, interception);
+            readInterceptions.increment();
+            chain = chains.get(key);
+            if (chain == null) {
+                // two threads may build the same chain, and the later put wins. The key is everything the chain is
+                // built from, so the two chains are equal and nothing is lost. Building inside a computeIfAbsent
+                // would instead hold a lock of the map across the bean context
+                chain = build(key);
+                chains.put(key, chain);
+            }
+            recorded.put(recordedKey, chain);
         }
         return chain;
+    }
+
+    /**
+     * The interception the processor recorded on an element, read from the metadata Micronaut compiled.
+     *
+     * <p>Micronaut hands the advice the metadata of an element whose annotations contain an evaluated expression
+     * wrapped around the evaluation context of the invocation, and an annotation read through that wrapper holds the
+     * invocation. The interception holds no expression, so it reads the same beneath the wrapper, and what is read
+     * there can be remembered without keeping an invocation alive.</p>
+     */
+    private static @Nullable AnnotationValue<JakartaInterception> recordedInterception(AnnotationMetadata metadata) {
+        return metadata.getTargetAnnotationMetadata().getAnnotation(JakartaInterception.class);
     }
 
     /**
@@ -140,15 +168,21 @@ public final class InterceptorChainResolver {
      * @return The interceptor methods of the associated classes, which may repeat an interceptor class
      */
     List<InterceptorReference> resolveAssociated(AnnotationMetadata metadata) {
-        AnnotationValue<JakartaInterception> interception = metadata.getAnnotation(JakartaInterception.class);
+        AnnotationValue<JakartaInterception> interception = recordedInterception(metadata);
         if (interception == null) {
             return List.of();
+        }
+        RecordedKey recordedKey = RecordedKey.of(null, interception);
+        List<InterceptorReference> resolved = recordedAssociated.get(recordedKey);
+        if (resolved != null) {
+            return resolved;
         }
         AssociatedKey key = new AssociatedKey(
             List.of(interception.classValues("associated")),
             InterceptorBindings.ofValues(interception.getAnnotations("bindings")),
             InterceptorBindings.ofValues(interception.getAnnotations("associatedBindings")));
-        List<InterceptorReference> resolved = associated.get(key);
+        readInterceptions.increment();
+        resolved = associated.get(key);
         if (resolved == null) {
             // as with the chains, two threads building the same list build equal lists
             List<InterceptorReference> all = new ArrayList<>();
@@ -161,6 +195,7 @@ public final class InterceptorChainResolver {
             resolved = List.copyOf(all);
             associated.put(key, resolved);
         }
+        recordedAssociated.put(recordedKey, resolved);
         return resolved;
     }
 
@@ -175,6 +210,19 @@ public final class InterceptorChainResolver {
     @Internal
     public int cachedChains() {
         return chains.size();
+    }
+
+    /**
+     * How many times an interception the processor recorded has been read into what a chain is built from.
+     *
+     * <p>Exposed so that a test can hold the resolver to reading the interception of an element once, rather than
+     * again for every bean created and every invocation that looks its chain up.</p>
+     *
+     * @return The number of interceptions read
+     */
+    @Internal
+    public long readInterceptions() {
+        return readInterceptions.sum();
     }
 
     private List<InterceptorReference> build(ChainKey key) {

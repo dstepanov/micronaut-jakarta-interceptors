@@ -147,10 +147,13 @@ String region = micronaut.getInterceptorBindingValues().stream()
     .orElse("default");
 ----
 
-Each value is the nearest declaration of its binding, the method's where it declares one and its class's otherwise,
-taken whole, which is how the bindings selected the interceptors; a repeatable binding is the occurrences of that
-declaration. A member a declaration leaves to its default is left out of the value rather than filled in from the
-class, and the members that do not bind are there as they were declared.
+The bindings are the ones that selected the interceptors, as the processor recorded them on the element: a binding the
+element only inherits from the method it overrides is not among them, nor is a binding of the factory that produced
+the bean, and occurrences of a repeatable binding that differ only in a member that does not bind are one binding,
+reported once. Each value is the nearest declaration of its binding, the method's where it declares one and its
+class's otherwise, taken whole, which is how the bindings selected the interceptors. A member a declaration leaves to
+its default is left out of the value rather than filled in from the class, and the members that do not bind are there
+as they were declared.
 
 `getAnnotationMetadata()` is ordinary Micronaut metadata, and reads a binding as Micronaut reads any annotation: for a
 method it answers from the method and its class together, merging a member the method leaves to its default with the

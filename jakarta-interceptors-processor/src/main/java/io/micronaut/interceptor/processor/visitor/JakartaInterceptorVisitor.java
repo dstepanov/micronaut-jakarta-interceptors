@@ -351,14 +351,15 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
     }
 
     /**
-     * Whether the accessors of {@code InvocationContext} that return an object of the Java reflection API can be
-     * called in the application being compiled: {@code getMethod()}, {@code getConstructor()} and the ones that
-     * return the instances of the binding annotations.
+     * Whether the accessors of {@code InvocationContext} that need the reflection module can be called in the
+     * application being compiled: {@code getMethod()} and the ones that return the instances of the binding
+     * annotations.
      *
      * <p>They are answered by {@code io.micronaut:micronaut-reflection} and fail without it, so an application
      * compiled without that module is not given the metadata that only they need, and keeps nothing for reflection
      * that nothing can reflect on. The {@code @ReflectiveAccess} of an interceptor method generated code cannot
-     * call is another matter: that call is the interception itself, and is declared either way.</p>
+     * call is another matter: that call is the interception itself, and is declared either way. So is the one of
+     * an intercepted constructor, which {@code getConstructor()} looks up through Micronaut Core alone.</p>
      */
     private static boolean reflectiveAccessors(VisitorContext context) {
         return context.getClassElement(REFLECTION_MODULE_TYPE).isPresent();
@@ -449,14 +450,12 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
                     builder.member("associatedBindings", written(classBindings));
                 }
             });
-            if (reflective) {
-                // the specification hands an @AroundConstruct interceptor method a java.lang.reflect.Constructor,
-                // which Micronaut looks up on the class by the argument types of the bean constructor. Reflection
-                // is permitted for it here so that the lookup answers inside a native image as it does on a virtual
-                // machine. The methods need nothing of the kind: their executable methods look them up by
-                // constants, which the image registers on its own
-                constructor.annotate(ReflectiveAccess.class);
-            }
+            // the specification hands an @AroundConstruct interceptor method a java.lang.reflect.Constructor, which
+            // Micronaut Core looks up on the class by the argument types of the bean constructor, with or without
+            // the reflection module. Reflection is permitted for it here so that the lookup answers inside a native
+            // image as it does on a virtual machine. The methods need nothing of the kind: their executable methods
+            // look them up by constants, which the image registers on its own
+            constructor.annotate(ReflectiveAccess.class);
         }
         for (MethodElement method : methods) {
             interceptMethod(model, method, classInterceptors, classBindings, classDeclares, context);

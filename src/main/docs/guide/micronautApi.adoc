@@ -1,9 +1,10 @@
 `jakarta.interceptor.InvocationContext` describes the intercepted element the way the specification does, which in
 three places means the reflection of the platform: `getMethod()` returns a `java.lang.reflect.Method`,
 `getConstructor()` a `java.lang.reflect.Constructor`, and `getInterceptorBindings()` instances of the binding
-annotations. The types leave no way around it, so those accessors are answered by Micronaut's reflection module,
-`io.micronaut:micronaut-reflection`, and fail in an application that does not have it, see
-<<reflection,When Reflection Is Used>>.
+annotations. The types leave no way around it. Apart from `getConstructor()`, which Micronaut Core looks up, and
+the instances of a binding whose builder `@RegisterAnnotations` generated, those accessors are answered by
+Micronaut's reflection module, `io.micronaut:micronaut-reflection`, and fail in an application that does not have
+it, see <<reflection,When Reflection Is Used>>.
 
 Everything those three describe, Micronaut worked out while the application was compiled. Every context this module
 hands an interceptor method also implements api:interceptor.MicronautInvocationContext[], which offers it:

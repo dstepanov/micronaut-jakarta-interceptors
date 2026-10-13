@@ -16,6 +16,7 @@
 package io.micronaut.interceptor.internal.runtime;
 
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorSupport;
+import io.micronaut.core.annotation.AnnotationBuilder;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
@@ -36,6 +37,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -351,7 +353,7 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
         }
         AnnotationValue<T> value = metadata.getAnnotation(annotationType);
         // the binding is the annotation itself, so it has to be built
-        return value == null ? null : PlatformReflection.annotation(annotationType, value);
+        return value == null ? null : instanceOf(annotationType, value);
     }
 
     /**
@@ -376,7 +378,7 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
         List<T> repeated = new ArrayList<>(values.size());
         for (AnnotationValue<T> value : values) {
             // the bindings are the annotations themselves, so they have to be built
-            repeated.add(PlatformReflection.annotation(annotationType, value));
+            repeated.add(instanceOf(annotationType, value));
         }
         return repeated;
     }
@@ -412,14 +414,42 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
         Set<Annotation> resolved = new LinkedHashSet<>(names.size());
         try {
             for (String name : names) {
-                // the type of an annotation is a class found by its name, and its instances are built
-                PlatformReflection.annotationType(annotationMetadata, name)
-                    .ifPresent(type -> resolved.addAll(synthesizeBindings(type)));
+                bindingType(annotationMetadata, name).ifPresent(type -> resolved.addAll(synthesizeBindings(type)));
             }
         } catch (NoClassDefFoundError e) {
             throw reflectionUnavailable("getInterceptorBindings()", e);
         }
         return Collections.unmodifiableSet(resolved);
+    }
+
+    /**
+     * The type of a binding annotation the element carries, found by its name.
+     *
+     * <p>A binding whose builder Micronaut generated with {@code @RegisterAnnotations} is found through the builder,
+     * which knows its type. Any other is a class found by its name, which is left to the reflection module, as is
+     * building its instances.</p>
+     */
+    private static Optional<? extends Class<? extends Annotation>> bindingType(AnnotationMetadata metadata, String name) {
+        Optional<AnnotationBuilder<?>> builder = AnnotationBuilder.find(name);
+        if (builder.isPresent()) {
+            return Optional.of(builder.get().annotationType());
+        }
+        return PlatformReflection.annotationType(metadata, name);
+    }
+
+    /**
+     * Builds an instance of a binding annotation from the value Micronaut recorded for it.
+     *
+     * <p>A builder Micronaut generated for the annotation with {@code @RegisterAnnotations} builds it without the
+     * reflection module, and without a proxy class. An annotation without one is synthesized by the reflection
+     * module.</p>
+     */
+    private static <T extends Annotation> T instanceOf(Class<T> annotationType, AnnotationValue<T> value) {
+        Optional<AnnotationBuilder<T>> builder = AnnotationBuilder.find(annotationType);
+        if (builder.isPresent()) {
+            return builder.get().build(value);
+        }
+        return PlatformReflection.annotation(annotationType, value);
     }
 
     /**

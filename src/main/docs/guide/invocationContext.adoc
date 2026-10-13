@@ -36,9 +36,11 @@ the types are checked.
 |===
 
 `getMethod()`, `getConstructor()`, `getInterceptorBindings()` and the typed `getInterceptorBinding(Class)` and
-`getInterceptorBindings(Class)` beside it return objects of the Java reflection API. They are answered by
-`io.micronaut:micronaut-reflection`, and throw an `UnsupportedOperationException` naming that dependency in an
-application without it. See <<reflection,When Reflection Is Used>>.
+`getInterceptorBindings(Class)` beside it return objects of the Java reflection API. `getConstructor()` is answered
+by Micronaut Core, and so are the binding accessors for a binding annotation whose builder `@RegisterAnnotations`
+generated. The others are answered by `io.micronaut:micronaut-reflection`, and throw an
+`UnsupportedOperationException` naming that dependency in an application without it. See
+<<reflection,When Reflection Is Used>>.
 
 The bindings these accessors answer with are the ones the interception was resolved from. A binding a method
 declares replaces the one of the same type its class declares, the whole of it, so a method that declares the

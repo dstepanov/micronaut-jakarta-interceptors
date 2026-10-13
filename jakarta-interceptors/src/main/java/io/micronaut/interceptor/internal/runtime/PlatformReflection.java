@@ -18,21 +18,21 @@ package io.micronaut.interceptor.internal.runtime;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
-import io.micronaut.core.beans.BeanConstructor;
 import io.micronaut.inject.MethodReference;
 import io.micronaut.reflection.ReflectionAnnotations;
 import io.micronaut.reflection.ReflectionExecutables;
-import org.jspecify.annotations.Nullable;
 
 import java.lang.annotation.Annotation;
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Everything of this module that hands back an object of the reflection of the platform: the {@link Method} and
- * the {@link Constructor} of an intercepted element, and the instances of its binding annotations.
+ * What of this module hands back an object of the reflection of the platform and needs the reflection module to:
+ * the {@link Method} of an intercepted element, and the instances of its binding annotations that no builder was
+ * generated for. The constructor of the platform is looked up by Micronaut Core itself, and the instance of a
+ * binding whose builder was generated with {@code @RegisterAnnotations} is built by that builder, so neither comes
+ * here.
  *
  * <p>It is answered by {@code io.micronaut:micronaut-reflection}, which this module compiles against and does not
  * depend on. The class links to that module, so it initializes only where the module is on the classpath, and it is
@@ -65,14 +65,6 @@ final class PlatformReflection {
     static Method method(MethodReference<?, ?> method) {
         return Objects.requireNonNull(ReflectionExecutables.targetMethod(method),
             "The intercepted method stands for no method of the platform");
-    }
-
-    /**
-     * @param constructor The intercepted constructor
-     * @return The constructor of the platform, or {@code null} when the bean type declares no such constructor
-     */
-    static @Nullable Constructor<?> constructor(BeanConstructor<?> constructor) {
-        return constructor.getTargetConstructor();
     }
 
     /**

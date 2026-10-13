@@ -18,7 +18,10 @@
  * interceptor classes are enabled ({@link io.micronaut.interceptor.spi.BoundInterceptorEnablement}), the
  * interceptor methods of an interceptor class ({@link io.micronaut.interceptor.spi.InterceptorMethods}),
  * whether an interceptor class is bound to an interception point
- * ({@link io.micronaut.interceptor.spi.InterceptorBindings}), and whether two bindings are the same binding
+ * ({@link io.micronaut.interceptor.spi.InterceptorBindings}), which interceptor classes of a context are bound to
+ * one, enabled and in the order a chain invokes them in
+ * ({@link io.micronaut.interceptor.spi.InterceptorBindings#boundInterceptors(io.micronaut.context.BeanContext,
+ * io.micronaut.interceptor.spi.InterceptorBindings)}), and whether two bindings are the same binding
  * ({@link io.micronaut.interceptor.spi.BindingValues}).
  *
  * @author Denis Stepanov

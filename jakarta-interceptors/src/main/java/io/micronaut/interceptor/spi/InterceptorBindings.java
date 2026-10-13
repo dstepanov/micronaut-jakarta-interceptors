@@ -15,17 +15,20 @@
  */
 package io.micronaut.interceptor.spi;
 
+import io.micronaut.context.BeanContext;
 import io.micronaut.context.Qualifier;
 import io.micronaut.core.annotation.AnnotationClassValue;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationUtil;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
+import io.micronaut.inject.BeanDefinition;
 import io.micronaut.inject.BeanType;
 import io.micronaut.interceptor.internal.metadata.BindingValue;
 import io.micronaut.interceptor.internal.metadata.JakartaInterception;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorMethods;
 import io.micronaut.interceptor.internal.runtime.BoundInterceptorQualifier;
+import io.micronaut.interceptor.internal.runtime.InterceptorChainResolver;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -162,12 +165,47 @@ public final class InterceptorBindings {
     /**
      * A qualifier that selects, among the beans of interceptor classes, the ones bound to an interception point.
      *
+     * <p>It compares the bindings and nothing else: which interceptor classes are enabled, and the order they are
+     * invoked in, are left to whatever uses it. {@link #boundInterceptors(BeanContext, InterceptorBindings)} is the
+     * selection the chains make, those included.</p>
+     *
      * @param point The bindings of the interception point
      * @param <T>   The type the beans are looked up by
      * @return The qualifier, which compares by the bindings of the point
      */
     public static <T> Qualifier<T> boundTo(InterceptorBindings point) {
         return new BoundInterceptorQualifier<>(point);
+    }
+
+    /**
+     * The interceptor classes of a context that are bound to an interception point, as the chains of this module
+     * select them: the enabled interceptor classes every binding of which is a binding of the point, in the order a
+     * chain invokes them in.
+     *
+     * <p>This is the selection itself rather than a part of it. It finds the interceptor classes the processor
+     * indexed, keeps the ones {@link #isBoundBy(InterceptorBindings) bound} to the point, leaves out a class that
+     * declares interceptor methods without declaring itself an interceptor class with
+     * {@code jakarta.interceptor.Interceptor} and one a {@link BoundInterceptorEnablement} of the context does not
+     * enable, and orders the rest by {@link InterceptorMethods#priorityOf(BeanDefinition) priority}, then by the
+     * name of the class, with the ones an enablement lists after them in the order of the list. A module answering
+     * the same question - as Contexts and Dependency Injection does when its bean manager is asked for the
+     * interceptors of a set of bindings - asks it here, and the answer is the one the chains are built from, the
+     * same resolver of the context answering both.</p>
+     *
+     * <p>Each definition is the one Micronaut generated from the interceptor class, which carries the executable
+     * methods {@link InterceptorMethods#of(BeanDefinition, io.micronaut.interceptor.metadata.InterceptionKind)}
+     * reads, and whose bindings {@link #of(BeanType)} reads. The selection is made again for every call, since the
+     * definitions a context knows of may still grow while its beans are first created.</p>
+     *
+     * @param beanContext The bean context the interceptor classes are beans of
+     * @param point       The bindings of the interception point
+     * @return The definitions that describe the interceptor classes, none where the point is bound by nothing
+     */
+    public static List<BeanDefinition<?>> boundInterceptors(BeanContext beanContext, InterceptorBindings point) {
+        if (point.isEmpty()) {
+            return List.of();
+        }
+        return beanContext.getBean(InterceptorChainResolver.class).boundInterceptors(point);
     }
 
     /**

@@ -274,8 +274,16 @@ public final class InterceptorChainResolver {
      * knows of at that moment are not yet all of them; a list taken then and kept would leave every interceptor
      * that had not been reached yet out of every chain resolved afterwards. What is remembered is the chain of
      * each intercepted element, so this runs once for each of them rather than once for each invocation.</p>
+     *
+     * <p>It is the selection {@link InterceptorBindings#boundInterceptors(BeanContext, InterceptorBindings)} makes
+     * for another module, which asks it of this resolver so that the two cannot differ.</p>
+     *
+     * @param bindingsOfElement The bindings of the interception point
+     * @return The definitions that describe the interceptor classes bound to the point, in the order the chain
+     * invokes them in
      */
-    private List<BeanDefinition<?>> boundInterceptors(InterceptorBindings bindingsOfElement) {
+    @Internal
+    public List<BeanDefinition<?>> boundInterceptors(InterceptorBindings bindingsOfElement) {
         if (bindingsOfElement.isEmpty()) {
             return List.of();
         }
@@ -292,7 +300,7 @@ public final class InterceptorChainResolver {
         }
         matching.sort(Comparator.<BeanDefinition<?>>comparingInt(InterceptorMethods::priorityOf)
             .thenComparing(definition -> definition.getBeanType().getName()));
-        return listedLast(matching);
+        return List.copyOf(listedLast(matching));
     }
 
     /**

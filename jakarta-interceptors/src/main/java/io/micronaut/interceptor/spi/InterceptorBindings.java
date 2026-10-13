@@ -72,9 +72,15 @@ public final class InterceptorBindings {
     private static final InterceptorBindings NONE = new InterceptorBindings(List.of());
 
     private final List<BindingValue> bindings;
+    private final int hash;
 
     private InterceptorBindings(List<BindingValue> bindings) {
         this.bindings = bindings;
+        Set<String> names = new HashSet<>();
+        for (BindingValue binding : bindings) {
+            names.add(binding.name());
+        }
+        this.hash = names.hashCode();
     }
 
     /**
@@ -266,11 +272,7 @@ public final class InterceptorBindings {
      */
     @Override
     public int hashCode() {
-        Set<String> names = new HashSet<>();
-        for (BindingValue binding : bindings) {
-            names.add(binding.name());
-        }
-        return names.hashCode();
+        return hash;
     }
 
     @Override

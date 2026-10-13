@@ -43,9 +43,12 @@ public class ScheduledService {
 A method declaring `@Scheduled` is a timeout method only while the scheduler invokes it: a call the application makes
 to it directly is a business method invocation, and its `@AroundInvoke` methods interpose on it. The two are told
 apart by the api:scheduling.ScheduledExecution[] the scheduler puts in the propagated context of the call, which is
-the one place the scheduler says it made the call - the invocation itself carries nothing that does. Only the
-scheduled method is answered from it: a method it calls, or work it propagates to another thread, sees the same
-propagated context and is still invoked as a business method.
+the one place the scheduler says it made the call - the invocation itself carries nothing that does. That context
+names the method the scheduler invoked, by its name, its parameter types and its declaring class, and only a method
+matching it is a timeout method: a method it calls, or work it propagates to another thread, sees the same
+propagated context and is still invoked as a business method unless it is that same method. The same method called
+again while the schedule runs - on the same object, on another object of its class or of a class related to it by
+inheritance - is matched too, and is interposed on as a timeout.
 
 == The timer
 

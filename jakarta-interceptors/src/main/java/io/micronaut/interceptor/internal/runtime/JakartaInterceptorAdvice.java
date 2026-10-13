@@ -162,7 +162,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         }
         AnnotationMetadata metadata = context.getAnnotationMetadata();
         MethodChain resolved = new MethodChain(resolver.resolve(kind, metadata, false),
-            metadata.isTrue(JakartaInterception.class, "timeout"));
+            metadata.isTrue(JakartaInterception.class, JakartaInterception.TIMEOUT));
         IdentityHashMap<ExecutableMethod<?, ?>, MethodChain> added = new IdentityHashMap<>(businessChains);
         added.put(method, resolved);
         businessChains = added;

@@ -17,7 +17,10 @@ package io.micronaut.interceptor;
 
 import io.micronaut.aop.InterceptorKind;
 import io.micronaut.core.annotation.AnnotationMetadata;
+import io.micronaut.core.annotation.AnnotationValue;
 import jakarta.interceptor.InvocationContext;
+
+import java.util.List;
 
 /**
  * The interception as Micronaut compiled it, offered alongside what the specification describes.
@@ -73,25 +76,53 @@ public interface MicronautInvocationContext extends InvocationContext {
     /**
      * The annotation metadata of the intercepted element, as Micronaut compiled it.
      *
-     * <p>This is what the interception itself resolved the chain by, and it is the reflection-free answer to
-     * {@link #getInterceptorBindings()}: the bindings in effect are the annotations it carries that are
-     * meta-annotated {@code @InterceptorBinding}, and the members of one are read from it directly.</p>
+     * <p>It is ordinary Micronaut metadata, read with the semantics Micronaut gives it everywhere, and every
+     * annotation of the element is read from it without reflecting - the bindings among them, and the annotations
+     * that bind nothing.</p>
      *
      * <pre>{@code
-     * // instead of finding the @Cached instance among getInterceptorBindings() and calling region() on it,
-     * // which builds the annotation as a proxy
      * String region = context.getAnnotationMetadata().stringValue(Cached.class, "region").orElse("default");
      * }</pre>
      *
-     * <p>For a method it is the metadata of the method over that of its class, so a binding a method declares is
-     * seen ahead of the one it would otherwise inherit. For the construction of a bean it is the metadata of the
-     * constructor, which the processor completes with the bindings of the class. That is why it is offered here
-     * rather than left to {@link #getMicronautInvocation()}: a Micronaut construction carries no metadata of its
-     * own, its constructor does.</p>
+     * <p>For a method it is the metadata of the method over that of its class, and Micronaut answers a question
+     * about an annotation from the two together. That is not always what selected the interceptors: a binding a
+     * method declares replaces the one of the same type its class declares as a whole, while the metadata merges a
+     * member the method leaves to its default with the one the class gave it, and answers a repeatable binding with
+     * the occurrences of both. On a class declaring {@code @Cached(region = "users")}, a method declaring
+     * {@code @Cached} is bound by the default region, and the metadata says {@code "users"}.
+     * {@link #getInterceptorBindingValues()} reads the bindings as they selected the interceptors.</p>
+     *
+     * <p>For the construction of a bean it is the metadata of the constructor, which the processor completes with
+     * the bindings of the class. That is why it is offered here rather than left to {@link #getMicronautInvocation()}:
+     * a Micronaut construction carries no metadata of its own, its constructor does.</p>
      *
      * @return The metadata, never {@code null}
      */
     AnnotationMetadata getAnnotationMetadata();
+
+    /**
+     * The interceptor bindings in effect on the intercepted element, as the values of their binding annotations, read
+     * without reflecting and without building an annotation.
+     *
+     * <p>This is the reflection-free answer to {@link #getInterceptorBindings()}, and holds the same bindings: each
+     * binding annotation the element carries, read from the nearest declaration of it - the method's where it
+     * declares one, its class's otherwise - with a repeatable binding as the occurrences of that declaration. A member
+     * a declaration leaves to its default is not filled in from the declaration of the class; it is left out, and
+     * {@link AnnotationValue#getDefaultValues()} holds its default. The members that do not bind are reported as
+     * declared, since an interceptor may read them, and an evaluated expression is reported as the expression, as
+     * the comparison that bound the interceptor read it.</p>
+     *
+     * <pre>{@code
+     * for (AnnotationValue<?> binding : context.getInterceptorBindingValues()) {
+     *     if (binding.getAnnotationName().equals(Cached.class.getName())) {
+     *         String region = binding.stringValue("region").orElse("default");
+     *     }
+     * }
+     * }</pre>
+     *
+     * @return The bindings, in the order the metadata lists their annotations, empty where the element has none
+     */
+    List<AnnotationValue<?>> getInterceptorBindingValues();
 
     /**
      * The Micronaut invocation this interception is part of.

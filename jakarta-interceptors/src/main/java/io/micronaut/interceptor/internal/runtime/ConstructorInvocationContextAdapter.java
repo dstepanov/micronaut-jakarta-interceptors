@@ -80,16 +80,14 @@ final class ConstructorInvocationContextAdapter extends AbstractInvocationContex
      * that constructor itself, so the declaring type and the parameters are the ones the specification asks
      * for.</p>
      *
+     * <p>The lookup is Micronaut Core's own, {@code BeanConstructor.getTargetConstructor()}, so unlike the method of
+     * the platform and the instances of the bindings the constructor needs no reflection module.</p>
+     *
      * @return The constructor of the target class, or {@code null} when it cannot be found
      */
     @Override
     public @Nullable Constructor<?> getConstructor() {
-        // getConstructor returns a java.lang.reflect.Constructor, which only the platform makes
-        try {
-            return PlatformReflection.constructor(context.getConstructor());
-        } catch (NoClassDefFoundError e) {
-            throw reflectionUnavailable("getConstructor()", e);
-        }
+        return context.getConstructor().getTargetConstructor();
     }
 
     @Override

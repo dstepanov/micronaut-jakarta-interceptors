@@ -75,11 +75,16 @@ What is compared is worked out while the application compiles. The processor rec
 interceptor class and of each element it may intercept as the values of the binding annotations, with the members
 they default to filled in and the members excluded from the binding left out, and the runtime compares those
 values member by member as it resolves the chain of an element. Nothing is built from the annotations and nothing
-reflects to compare them.
+reflects to compare them. The recorded values are read as they were recorded, without looking their defaults up
+again: Micronaut keeps the defaults of an annotation in a registry the whole application shares, which the
+reflection module adds to the first time it builds an instance of the annotation, and the bindings of an element
+read the same before and after that.
 
 A module that has to answer the same question - which interceptors apply to these bindings? - asks
 api:interceptor.spi.InterceptorBindings[], which is the comparison the chains use. Micronaut CDI does so when its
-`BeanManager` is asked for the interceptors of a set of bindings, so the two answers are the same.
+`BeanManager` is asked for the interceptors of a set of bindings, so the two answers are the same. Its `values()`
+reads the bindings back as the values of their annotations, as the processor recorded them, which is what a module
+describing the bindings of an interceptor describes them from.
 
 == Bindings that come from elsewhere
 

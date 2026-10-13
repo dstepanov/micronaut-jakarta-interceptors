@@ -18,7 +18,6 @@ package io.micronaut.interceptor.internal.runtime;
 import io.micronaut.context.Qualifier;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.inject.BeanType;
-import io.micronaut.inject.QualifiedBeanType;
 import io.micronaut.interceptor.spi.InterceptorBindings;
 import org.jspecify.annotations.Nullable;
 
@@ -70,12 +69,6 @@ public final class BoundInterceptorQualifier<T> implements Qualifier<T> {
             }
         }
         return bound;
-    }
-
-    @Override
-    public <BT extends QualifiedBeanType<T>> Collection<BT> filterQualified(Class<T> beanType,
-                                                                           Collection<BT> candidates) {
-        return filter(beanType, candidates);
     }
 
     @Override

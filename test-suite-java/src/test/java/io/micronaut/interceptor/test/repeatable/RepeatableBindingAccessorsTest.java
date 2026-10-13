@@ -1,6 +1,8 @@
 package io.micronaut.interceptor.test.repeatable;
 
 import io.micronaut.context.ApplicationContext;
+import io.micronaut.core.annotation.AnnotationValue;
+import io.micronaut.interceptor.MicronautInvocationContext;
 import jakarta.inject.Singleton;
 import jakarta.interceptor.AroundInvoke;
 import jakarta.interceptor.Interceptor;
@@ -37,7 +39,7 @@ class RepeatableBindingAccessorsTest {
             SEEN.clear();
             assertEquals("done", context.getBean(TaggedService.class).work());
 
-            assertEquals(List.of("typed [method]", "untyped [method]"), SEEN);
+            assertEquals(List.of("typed [method]", "untyped [method]", "values [method]"), SEEN);
         }
     }
 
@@ -63,6 +65,13 @@ class RepeatableBindingAccessorsTest {
         public Object invoke(InvocationContext context) throws Exception {
             SEEN.add("typed " + values(context.getInterceptorBindings(VerifyTag.class)));
             SEEN.add("untyped " + values(context.getInterceptorBindings()));
+            Set<String> values = new TreeSet<>();
+            for (AnnotationValue<?> binding : ((MicronautInvocationContext) context).getInterceptorBindingValues()) {
+                if (binding.getAnnotationName().equals(VerifyTag.class.getName())) {
+                    values.add(binding.stringValue().orElse(""));
+                }
+            }
+            SEEN.add("values " + values);
             return context.proceed();
         }
 

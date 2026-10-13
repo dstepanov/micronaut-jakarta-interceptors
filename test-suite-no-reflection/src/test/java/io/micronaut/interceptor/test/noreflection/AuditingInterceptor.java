@@ -2,6 +2,7 @@ package io.micronaut.interceptor.test.noreflection;
 
 import io.micronaut.aop.ConstructorInvocationContext;
 import io.micronaut.aop.MethodInvocationContext;
+import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.interceptor.MicronautConstructorInvocationContext;
 import io.micronaut.interceptor.MicronautInvocationContext;
 import io.micronaut.interceptor.MicronautMethodInvocationContext;
@@ -73,6 +74,9 @@ public class AuditingInterceptor {
         Probe.attempt("method", () -> invocation.getExecutableMethod().getMethodName());
         Probe.attempt("method declaring type", () -> invocation.getExecutableMethod().getDeclaringType());
         Probe.attempt("method binding", () -> micronaut.getAnnotationMetadata().hasAnnotation(Audited.class));
+        Probe.attempt("method binding values", () -> micronaut.getInterceptorBindingValues().stream()
+            .map(AnnotationValue::getAnnotationName)
+            .toList());
         Probe.attempt("parameter", () -> context.getParameters()[0]);
         context.setParameters(new Object[]{"replaced"});
         return context.proceed();

@@ -46,6 +46,12 @@ import java.lang.annotation.Target;
 public @interface JakartaInterceptorMethods {
 
     /**
+     * The name of {@link #bindings()}, by which the processor writes the member and the runtime reads it. The
+     * members naming the interceptor methods of a kind are named by {@code InterceptionKind}.
+     */
+    String BINDINGS = "bindings";
+
+    /**
      * The {@code jakarta.interceptor.AroundInvoke} methods the class and its superclasses declare.
      *
      * @return The method names, most general superclass first

@@ -2,12 +2,17 @@ package io.micronaut.interceptor.test.noreflection;
 
 import io.micronaut.aop.InterceptorKind;
 import io.micronaut.context.ApplicationContext;
+import io.micronaut.core.annotation.AnnotationValue;
+import io.micronaut.core.annotation.ReflectionConfig;
+import io.micronaut.core.annotation.TypeHint;
+import io.micronaut.core.graal.GraalReflectionConfigurer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledInNativeImage;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.lang.reflect.Constructor;
 import java.util.List;
 import java.util.Set;
 
@@ -43,21 +48,69 @@ class WithoutReflectionModuleTest {
 
     /**
      * The processor declares for reflection only what can be reflected on. The private interceptor method is
-     * called reflectively, so it is declared. The constructor of the intercepted class and the proxies of its
-     * binding annotations are what {@code getConstructor()} and the binding accessors return, which cannot be
-     * called here, so the intercepted class declares nothing.
+     * called reflectively, so it is declared, and so is the constructor of an intercepted class, which
+     * {@code getConstructor()} looks up through Micronaut Core alone. The proxies of the binding annotations are
+     * what the binding accessors build only with the module, so none is declared.
      *
      * <p>Not run inside a native image, which carries the configurers themselves rather than the entries they
      * are found by.</p>
      */
     @Test
     @DisabledInNativeImage
-    void declaresNoReachabilityMetadataForTheAccessorsThatNeedTheModule() {
+    void declaresReachabilityMetadataOnlyForWhatCanBeReflectedOn() throws Exception {
         String configurers = "META-INF/micronaut/io.micronaut.core.graal.GraalReflectionConfigurer/";
         ClassLoader loader = WithoutReflectionModuleTest.class.getClassLoader();
         String packageName = WithoutReflectionModuleTest.class.getPackageName();
         assertNotNull(loader.getResource(configurers + packageName + ".$AuditingInterceptor$ReflectConfig"));
-        assertNull(loader.getResource(configurers + packageName + ".$AuditedService$ReflectConfig"));
+        String serviceConfig = packageName + ".$AuditedService$ReflectConfig";
+        assertNotNull(loader.getResource(configurers + serviceConfig));
+
+        GraalReflectionConfigurer configurer = (GraalReflectionConfigurer) Class.forName(serviceConfig)
+            .getDeclaredConstructor().newInstance();
+        List<AnnotationValue<ReflectionConfig>> declared =
+            configurer.getAnnotationMetadata().getAnnotationValuesByType(ReflectionConfig.class);
+        assertFalse(declared.isEmpty());
+        for (AnnotationValue<ReflectionConfig> config : declared) {
+            assertEquals(AuditedService.class.getName(), config.stringValue("type").orElse(null), config.toString());
+            assertFalse(List.of(config.enumValues("accessType", TypeHint.AccessType.class))
+                .contains(TypeHint.AccessType.DYNAMIC_PROXY), config.toString());
+        }
+    }
+
+    /**
+     * The constructor of the platform is looked up by Micronaut Core, through the bean constructor, and needs no
+     * module.
+     */
+    @Test
+    void getConstructorAnswersWithoutTheModule() {
+        try (ApplicationContext context = ApplicationContext.run()) {
+            context.getBean(AuditedService.class);
+        }
+
+        assertFalse(Probe.FAILURES.containsKey("getConstructor()"), () -> String.valueOf(Probe.FAILURES.get("getConstructor()")));
+        Constructor<?> constructor = assertInstanceOf(Constructor.class, Probe.ANSWERS.get("getConstructor()"));
+        assertEquals(AuditedService.class, constructor.getDeclaringClass());
+    }
+
+    /**
+     * A binding whose builder Micronaut generated with {@code @RegisterAnnotations} is built by it, and the
+     * accessors that return the instances of the bindings answer without the module.
+     */
+    @Test
+    void aRegisteredBindingIsBuiltWithoutTheModule() {
+        try (ApplicationContext context = ApplicationContext.run()) {
+            assertEquals("labelled", context.getBean(LabelledService.class).work());
+        }
+
+        for (String accessor : List.of("registered getInterceptorBinding(Class)",
+            "registered getInterceptorBindings(Class)", "registered getInterceptorBindings()")) {
+            assertFalse(Probe.FAILURES.containsKey(accessor), () -> accessor + " " + Probe.FAILURES.get(accessor));
+        }
+        Labelled binding = assertInstanceOf(Labelled.class, Probe.ANSWERS.get("registered getInterceptorBinding(Class)"));
+        assertEquals("plain", binding.value());
+        assertEquals(Labelled.class, binding.annotationType());
+        assertEquals(Set.of(binding), Probe.ANSWERS.get("registered getInterceptorBindings(Class)"));
+        assertEquals(Set.of(binding), Probe.ANSWERS.get("registered getInterceptorBindings()"));
     }
 
     /**
@@ -80,7 +133,6 @@ class WithoutReflectionModuleTest {
     @ValueSource(strings = {
         "getMethod()",
         "postConstruct getMethod()",
-        "getConstructor()",
         "getInterceptorBindings()",
         "getInterceptorBinding(Class)",
         "getInterceptorBindings(Class)"
@@ -90,7 +142,7 @@ class WithoutReflectionModuleTest {
             AuditedService service = context.getBean(AuditedService.class);
             service.work("first");
             assertRequiresTheModule(accessor);
-            if (!accessor.startsWith("postConstruct") && !accessor.equals("getConstructor()")) {
+            if (!accessor.startsWith("postConstruct")) {
                 // the failure is the same however many times the accessor is called
                 Probe.FAILURES.clear();
                 service.work("second");
@@ -132,6 +184,7 @@ class WithoutReflectionModuleTest {
         assertEquals("work", Probe.ANSWERS.get("method"));
         assertEquals(AuditedService.class, Probe.ANSWERS.get("method declaring type"));
         assertEquals(true, Probe.ANSWERS.get("method binding"));
+        assertEquals(List.of(Audited.class.getName()), Probe.ANSWERS.get("method binding values"));
         assertEquals("task", Probe.ANSWERS.get("parameter"));
     }
 

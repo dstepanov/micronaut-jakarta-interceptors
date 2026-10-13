@@ -21,8 +21,10 @@ public class CachingInterceptor {
         if (context instanceof MicronautMethodInvocationContext micronaut) { // <1>
             ExecutableMethod<Object, Object> method =                         // <2>
                 micronaut.getMicronautInvocation().getExecutableMethod();
-            String region = micronaut.getAnnotationMetadata()                 // <3>
-                .stringValue(Cached.class, "region")
+            String region = micronaut.getInterceptorBindingValues().stream()  // <3>
+                .filter(binding -> binding.getAnnotationName().equals(Cached.class.getName()))
+                .findFirst()
+                .flatMap(binding -> binding.stringValue("region"))
                 .orElse("default");
             cache(region, method.getDeclaringType(), method.getMethodName());
         }
@@ -42,9 +44,10 @@ class CachingInterceptor {
     Object invoke(InvocationContext context) throws Exception {
         if (context instanceof MicronautMethodInvocationContext) {           // <1>
             def method = context.micronautInvocation.executableMethod        // <2>
-            def region = context.annotationMetadata                          // <3>
-                .stringValue(Cached, "region")
-                .orElse("default")
+            def region = context.interceptorBindingValues                    // <3>
+                .find { it.annotationName == Cached.name }
+                ?.stringValue("region")
+                ?.orElse(null) ?: "default"
             cache(region, method.declaringType, method.methodName)
         }
         return context.proceed()
@@ -63,9 +66,10 @@ open class CachingInterceptor {
     open fun invoke(context: InvocationContext): Any? {
         if (context is MicronautMethodInvocationContext) {                   // <1>
             val method = context.micronautInvocation.executableMethod        // <2>
-            val region = context.annotationMetadata                          // <3>
-                .stringValue(Cached::class.java, "region")
-                .orElse("default")
+            val region = context.interceptorBindingValues                    // <3>
+                .firstOrNull { it.annotationName == Cached::class.java.name }
+                ?.stringValue("region")
+                ?.orElse(null) ?: "default"
             cache(region, method.declaringType, method.methodName)
         }
         return context.proceed()
@@ -76,8 +80,8 @@ open class CachingInterceptor {
 <1> every context of this module implements one of these, so the test always succeeds
 <2> the declaring type, the name, the arguments and the annotation metadata of the intercepted method, as Micronaut
 generated them
-<3> the members of a binding read straight from the metadata; "Reading the bindings" below says where the
-metadata and the bindings in effect differ
+<3> the members of a binding that selected the interceptor, read as a value without building the annotation; "Reading
+the bindings" below says why this rather than the metadata of the element
 
 Kotlin and Groovy reach the accessors as properties, so `context.micronautInvocation.executableMethod` reads what
 `getMicronautInvocation().getExecutableMethod()` returns.
@@ -147,10 +151,13 @@ String region = micronaut.getInterceptorBindingValues().stream()
     .orElse("default");
 ----
 
-Each value is the nearest declaration of its binding, the method's where it declares one and its class's otherwise,
-taken whole, which is how the bindings selected the interceptors; a repeatable binding is the occurrences of that
-declaration. A member a declaration leaves to its default is left out of the value rather than filled in from the
-class, and the members that do not bind are there as they were declared.
+The bindings are the ones that selected the interceptors, as the processor recorded them on the element: a binding the
+element only inherits from the method it overrides is not among them, nor is a binding of the factory that produced
+the bean, and occurrences of a repeatable binding that differ only in a member that does not bind are one binding,
+reported once. Each value is the nearest declaration of its binding, the method's where it declares one and its
+class's otherwise, taken whole, which is how the bindings selected the interceptors. A member a declaration leaves to
+its default is left out of the value rather than filled in from the class, and the members that do not bind are there
+as they were declared.
 
 `getAnnotationMetadata()` is ordinary Micronaut metadata, and reads a binding as Micronaut reads any annotation: for a
 method it answers from the method and its class together, merging a member the method leaves to its default with the

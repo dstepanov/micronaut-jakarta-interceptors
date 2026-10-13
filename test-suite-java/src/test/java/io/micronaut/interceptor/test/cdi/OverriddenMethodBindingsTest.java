@@ -87,6 +87,16 @@ class OverriddenMethodBindingsTest {
     }
 
     @Test
+    void theBindingOfAnOverriddenMethodIsNotReportedWhereTheClassIsBound() {
+        try (ApplicationContext context = ApplicationContext.run()) {
+            context.getBean(BoundOverridingService.class).guarded();
+
+            assertEquals(List.of("values [Monitored]", "instances [Monitored]", "secure false 0"),
+                List.copyOf(MonitoringInterceptor.REPORTED));
+        }
+    }
+
+    @Test
     void theInterceptorClassesOfAnOverriddenMethodAreNotInherited() {
         try (ApplicationContext context = ApplicationContext.run()) {
             Calls.clear();

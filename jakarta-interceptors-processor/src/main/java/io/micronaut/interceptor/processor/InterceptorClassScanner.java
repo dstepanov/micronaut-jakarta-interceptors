@@ -27,6 +27,7 @@ import io.micronaut.inject.processing.ProcessingException;
 import io.micronaut.interceptor.metadata.InterceptionKind;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorSupport;
 
+import java.lang.annotation.Annotation;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -36,6 +37,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -228,10 +230,17 @@ public final class InterceptorClassScanner {
                 // a binding annotation names itself among its bindings; it is not one of its own
                 continue;
             }
-            if (!isClass && !declared.contains(name)) {
+            // a repeatable binding the member declares more than once is declared through its container, and is
+            // found by its occurrences
+            if (!isClass && !declared.contains(name)
+                && annotationMetadata.getDeclaredAnnotationValuesByName(name).isEmpty()) {
                 continue;
             }
-            annotationMetadata.findAnnotation(name).ifPresent(av -> bindings.put(name, av));
+            Optional<AnnotationValue<Annotation>> binding = annotationMetadata.findAnnotation(name);
+            if (binding.isEmpty()) {
+                binding = annotationMetadata.getAnnotationValuesByName(name).stream().findFirst();
+            }
+            binding.ifPresent(av -> bindings.put(name, av));
         }
         return List.copyOf(bindings.values());
     }

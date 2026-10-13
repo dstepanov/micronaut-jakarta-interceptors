@@ -20,6 +20,8 @@ dependencies {
     testImplementation(mn.micronaut.reflection)
 
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+    // jakarta.enterprise.util.Nonbinding, which excludes a member from a binding
+    testImplementation(libs.jakarta.cdi.api)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)

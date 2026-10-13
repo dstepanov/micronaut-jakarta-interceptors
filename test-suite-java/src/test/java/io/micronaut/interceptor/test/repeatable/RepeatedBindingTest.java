@@ -46,6 +46,17 @@ class RepeatedBindingTest {
     }
 
     /**
+     * A method declaring a repeatable binding more than once declares it through the container of the occurrences,
+     * which binds the method as the occurrences a class declares bind the class.
+     */
+    @Test
+    void bindsTheOccurrencesAMethodDeclares() {
+        assertEquals("done", context.getBean(MethodTagsService.class).work());
+
+        assertEquals(List.of("both", "one", "work"), Calls.RECORDED);
+    }
+
+    /**
      * An occurrence is compared by the members that take part in the binding, as a single declaration is: the
      * interceptor says nothing about the member excluded from the binding and the occurrences of the element each
      * say something different, and the one they agree on binds them.

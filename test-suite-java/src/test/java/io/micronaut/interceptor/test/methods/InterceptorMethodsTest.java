@@ -16,7 +16,9 @@
 package io.micronaut.interceptor.test.methods;
 
 import io.micronaut.context.ApplicationContext;
+import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Order;
+import io.micronaut.interceptor.MicronautMethodInvocationContext;
 import io.micronaut.interceptor.metadata.InterceptionKind;
 import io.micronaut.interceptor.spi.InterceptorMethods;
 import jakarta.annotation.Priority;
@@ -206,6 +208,71 @@ class InterceptorMethodsTest {
         assertTrue(methods.isEmpty());
         assertEquals("target", methods.invoke(context.getBean(StackedInterceptor.class), new Invocation("given")));
         assertEquals(List.of("proceeded"), CALLS);
+    }
+
+    @InterceptorBinding
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target({TYPE, METHOD})
+    @interface Forwarding {
+    }
+
+    @InterceptorBinding
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target({TYPE, METHOD})
+    @interface Inspecting {
+    }
+
+    /** Invokes {@link InspectingInterceptor} directly, around the invocation of its own chain. */
+    @Forwarding
+    @Interceptor
+    public static class ForwardingInterceptor {
+        @AroundInvoke
+        Object forward(InvocationContext invocation) throws Exception {
+            return methodsOf(InspectingInterceptor.class, InterceptionKind.AROUND_INVOKE)
+                .invoke(context.getBean(InspectingInterceptor.class), invocation);
+        }
+    }
+
+    /** Bound to nothing that is intercepted: invoked directly alone. */
+    @Inspecting
+    @Interceptor
+    public static class InspectingInterceptor {
+        @AroundInvoke
+        Object inspect(InvocationContext invocation) throws Exception {
+            if (invocation instanceof MicronautMethodInvocationContext micronaut) {
+                List<String> bindings = new ArrayList<>();
+                for (AnnotationValue<?> binding : micronaut.getInterceptorBindingValues()) {
+                    String name = binding.getAnnotationName();
+                    bindings.add(name.substring(name.lastIndexOf('$') + 1));
+                }
+                CALLS.add("micronaut " + micronaut.getMicronautInvocation().getMethodName() + " " + bindings + " "
+                    + micronaut.getAnnotationMetadata().hasAnnotation(Forwarding.class));
+            } else {
+                CALLS.add("not micronaut");
+            }
+            return invocation.proceed();
+        }
+    }
+
+    @jakarta.inject.Singleton
+    public static class ForwardedService {
+        @Forwarding
+        public String work() {
+            CALLS.add("work");
+            return "work";
+        }
+    }
+
+    /**
+     * A context of this runtime handed to an interceptor invoked directly, as Micronaut CDI does from
+     * {@code Interceptor.intercept}, stays a Micronaut context, so that the interceptor reads what the runtime offers
+     * there as it would in a chain.
+     */
+    @Test
+    void aMicronautContextInvokedDirectlyStaysOne() {
+        assertEquals("work", context.getBean(ForwardedService.class).work());
+
+        assertEquals(List.of("micronaut work [Forwarding] true", "work"), CALLS);
     }
 
     @Test

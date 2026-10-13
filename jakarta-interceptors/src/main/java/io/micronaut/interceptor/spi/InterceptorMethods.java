@@ -15,6 +15,10 @@
  */
 package io.micronaut.interceptor.spi;
 
+import io.micronaut.aop.ConstructorInvocationContext;
+import io.micronaut.aop.MethodInvocationContext;
+import io.micronaut.interceptor.MicronautConstructorInvocationContext;
+import io.micronaut.interceptor.MicronautMethodInvocationContext;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorSupport;
 import io.micronaut.core.annotation.AnnotationClassValue;
 import io.micronaut.core.annotation.AnnotationMetadata;
@@ -130,6 +134,10 @@ public final class InterceptorMethods {
      * on as it was thrown, checked or not, including from a method Micronaut reaches reflectively, such as a
      * private one.</p>
      *
+     * <p>Where the given context is one of this runtime's, a {@link MicronautMethodInvocationContext} or a
+     * {@link MicronautConstructorInvocationContext}, so is the one the methods are given, answering what the given
+     * one answers, so that an interceptor reads the interception as it would in a chain.</p>
+     *
      * @param interceptor The interceptor instance
      * @param context     The context of the invocation
      * @return Whatever the first interceptor method returned
@@ -139,7 +147,13 @@ public final class InterceptorMethods {
         if (methods.isEmpty()) {
             return context.proceed();
         }
-        return new DirectInvocation(methods, interceptor, context).proceed();
+        DirectInvocation direct = switch (context) {
+            case MicronautMethodInvocationContext method -> new DirectMethodInvocation(methods, interceptor, method);
+            case MicronautConstructorInvocationContext constructor ->
+                new DirectConstructorInvocation(methods, interceptor, constructor);
+            default -> new DirectInvocation(methods, interceptor, context);
+        };
+        return direct.proceed();
     }
 
     /**
@@ -159,10 +173,11 @@ public final class InterceptorMethods {
      * include the ones it inherits, and a class and its superclass may each declare a private interceptor method of
      * the same name and signature; looked up by name alone, both would be whichever of them came first.</p>
      *
-     * <p>The methods of the name are asked of the definition rather than every executable method of it being read.
-     * That leaves out the methods Micronaut invokes as the post-construct and pre-destroy callbacks of the bean
-     * itself, which an interceptor method is not: it takes the {@code InvocationContext} of the element it
-     * interposes on, and Micronaut does not call it back as the interceptor instance is created or destroyed.</p>
+     * <p>The methods of the name are asked of the definition, which finds them by their name, rather than every
+     * executable method of it being read and compared. Among them, the interceptor method is the one taking the
+     * {@code InvocationContext} of the element it interposes on as its one parameter: a method of the same name
+     * taking anything else - an overload, or a post-construct or pre-destroy callback of the interceptor bean itself,
+     * which takes nothing - is not it.</p>
      *
      * @param definition    The definition of the interceptor class
      * @param name          The name of the method
@@ -196,8 +211,11 @@ public final class InterceptorMethods {
      * <p>It is one object for every method. Where proceeding leads is the position it keeps, which is moved on for
      * the method proceeded into and put back once that method returns or throws, so that a method proceeding a
      * second time runs the rest again.</p>
+     *
+     * <p>The bindings of one type are asked of the invocation as well, rather than filtered out of all of them as the
+     * specification's default does, so that an invocation of this runtime answers them without building the rest.</p>
      */
-    private static final class DirectInvocation implements InvocationContext {
+    private static class DirectInvocation implements InvocationContext {
 
         private final List<ExecutableMethod<Object, Object>> methods;
         private final Object interceptor;
@@ -251,6 +269,16 @@ public final class InterceptorMethods {
         }
 
         @Override
+        public <T extends Annotation> @Nullable T getInterceptorBinding(Class<T> annotationType) {
+            return invocation.getInterceptorBinding(annotationType);
+        }
+
+        @Override
+        public <T extends Annotation> Set<T> getInterceptorBindings(Class<T> annotationType) {
+            return invocation.getInterceptorBindings(annotationType);
+        }
+
+        @Override
         public @Nullable Object proceed() throws Exception {
             int position = next;
             if (position == methods.size()) {
@@ -262,6 +290,67 @@ public final class InterceptorMethods {
             } finally {
                 next = position;
             }
+        }
+    }
+
+    /**
+     * A direct invocation of a method this runtime intercepts, which answers what its context answers.
+     */
+    private static final class DirectMethodInvocation extends DirectInvocation implements MicronautMethodInvocationContext {
+
+        private final MicronautMethodInvocationContext micronaut;
+
+        DirectMethodInvocation(List<ExecutableMethod<Object, Object>> methods,
+                               Object interceptor,
+                               MicronautMethodInvocationContext invocation) {
+            super(methods, interceptor, invocation);
+            this.micronaut = invocation;
+        }
+
+        @Override
+        public AnnotationMetadata getAnnotationMetadata() {
+            return micronaut.getAnnotationMetadata();
+        }
+
+        @Override
+        public List<AnnotationValue<?>> getInterceptorBindingValues() {
+            return micronaut.getInterceptorBindingValues();
+        }
+
+        @Override
+        public MethodInvocationContext<Object, Object> getMicronautInvocation() {
+            return micronaut.getMicronautInvocation();
+        }
+    }
+
+    /**
+     * A direct invocation of the construction this runtime intercepts, which answers what its context answers.
+     */
+    private static final class DirectConstructorInvocation extends DirectInvocation
+        implements MicronautConstructorInvocationContext {
+
+        private final MicronautConstructorInvocationContext micronaut;
+
+        DirectConstructorInvocation(List<ExecutableMethod<Object, Object>> methods,
+                                    Object interceptor,
+                                    MicronautConstructorInvocationContext invocation) {
+            super(methods, interceptor, invocation);
+            this.micronaut = invocation;
+        }
+
+        @Override
+        public AnnotationMetadata getAnnotationMetadata() {
+            return micronaut.getAnnotationMetadata();
+        }
+
+        @Override
+        public List<AnnotationValue<?>> getInterceptorBindingValues() {
+            return micronaut.getInterceptorBindingValues();
+        }
+
+        @Override
+        public ConstructorInvocationContext<Object> getMicronautInvocation() {
+            return micronaut.getMicronautInvocation();
         }
     }
 }

@@ -112,9 +112,17 @@ record RecordedKey(@Nullable InterceptionKind kind, @Nullable Map<CharSequence, 
                 }
                 yield hash;
             }
-            // what is left is a constant, a string, a class value or an array of a primitive type, each of which
-            // hashes by its contents
-            default -> Arrays.deepHashCode(new Object[]{value});
+            // an array of a primitive type hashes by its contents, as it is compared
+            case int[] array -> Arrays.hashCode(array);
+            case long[] array -> Arrays.hashCode(array);
+            case double[] array -> Arrays.hashCode(array);
+            case boolean[] array -> Arrays.hashCode(array);
+            case byte[] array -> Arrays.hashCode(array);
+            case short[] array -> Arrays.hashCode(array);
+            case char[] array -> Arrays.hashCode(array);
+            case float[] array -> Arrays.hashCode(array);
+            // what is left is a constant, a string or a class value, each of which hashes by its contents
+            default -> value.hashCode();
         };
     }
 

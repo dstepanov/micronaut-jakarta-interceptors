@@ -48,11 +48,13 @@ import java.util.function.Function;
  *     <li>the members excluded from the binding, which is what {@code jakarta.enterprise.util.Nonbinding} does, are
  *     left out and listed under {@value AnnotationUtil#NON_BINDING_ATTRIBUTE}, and two bindings are compared without
  *     the members either of them lists;</li>
- *     <li>a member that is an empty string is compared as if it were left out. Micronaut records no default of an
- *     empty string for an annotation compiled from Java or Kotlin, so {@code @Region("")} carries a member that
- *     {@code @Region} does not, although the two are the same binding; and a member without a default is declared
- *     by every declaration of the binding, so leaving out an empty string on both sides changes nothing about
- *     whether two of them are equal;</li>
+ *     <li>a member that is an empty string is compared as if it were left out, once the defaults are filled in.
+ *     Micronaut records no default of an empty string for an annotation compiled from Java or Kotlin, so
+ *     {@code @Region("")} carries a member that {@code @Region} does not, although the two are the same binding; and
+ *     a member without a default is declared by every declaration of the binding, so leaving out an empty string on
+ *     both sides changes nothing about whether two of them are equal. Where the annotation defaults the member to
+ *     another value, an empty string still differs from it: the declaration that leaves the member out has the
+ *     default filled in, and the one that declares the empty string has nothing there;</li>
  *     <li>an enum constant is its name and a class an {@link AnnotationClassValue}, which is how Micronaut records
  *     them in some places and not in others; an array is the list of its elements, compared by its contents; an
  *     annotation held by a member is reduced as a binding is; and an evaluated expression is the expression it
@@ -99,8 +101,8 @@ public final class BindingValue {
      * the annotation type are therefore supplied, which the processor reads off the type.</p>
      *
      * <p>An empty string the value carries no default for is left out of what is recorded, which reads the same
-     * whether it was declared or not. A member whose default was recorded keeps an empty string, which differs
-     * from that default.</p>
+     * whether it was declared or not. An empty string where a default was recorded is recorded: compared, it is the
+     * member left out, as every empty string is, and that differs from the default the other side has filled in.</p>
      *
      * @param annotation The binding annotation, as declared on an element
      * @param excluded   The members excluded from a binding annotation, by the name of the annotation
@@ -177,22 +179,18 @@ public final class BindingValue {
     }
 
     /**
-     * @return The members excluded from the binding
-     */
-    public Set<String> nonBinding() {
-        return nonBinding;
-    }
-
-    /**
      * The binding as a value of its annotation, as the processor records it: the members that bind, spelt as
      * Micronaut records them, and the members excluded from it listed under
      * {@value AnnotationUtil#NON_BINDING_ATTRIBUTE}.
+     *
+     * <p>Every call builds a value of its own, whose arrays are copies: what is done to them changes nothing of the
+     * binding.</p>
      *
      * @return The value
      */
     public AnnotationValue<?> toAnnotationValue() {
         Map<CharSequence, Object> written = new LinkedHashMap<>(members.size() + 1);
-        written.putAll(members);
+        members.forEach((member, value) -> written.put(member, copyOf(value)));
         // the excluded members are listed for whatever the binding is compared with, which may be the value of an
         // annotation instance that carries all of its members and says nothing of which bind
         if (!nonBinding.isEmpty()) {
@@ -246,6 +244,42 @@ public final class BindingValue {
         Map<String, Object> kept = new LinkedHashMap<>(members);
         kept.keySet().removeAll(excluded);
         return kept;
+    }
+
+    /**
+     * A copy of a member value as it is written out, so that the value handed out shares no array with the binding,
+     * an annotation it holds included.
+     */
+    private static Object copyOf(Object value) {
+        if (value instanceof AnnotationValue<?> annotation) {
+            return copyOf(annotation);
+        }
+        if (value instanceof AnnotationValue<?>[] annotations) {
+            AnnotationValue<?>[] copies = new AnnotationValue<?>[annotations.length];
+            for (int i = 0; i < annotations.length; i++) {
+                copies[i] = copyOf(annotations[i]);
+            }
+            return copies;
+        }
+        return switch (value) {
+            case Object[] array -> array.clone();
+            case int[] array -> array.clone();
+            case long[] array -> array.clone();
+            case double[] array -> array.clone();
+            case boolean[] array -> array.clone();
+            case byte[] array -> array.clone();
+            case short[] array -> array.clone();
+            case char[] array -> array.clone();
+            case float[] array -> array.clone();
+            default -> value;
+        };
+    }
+
+    private static AnnotationValue<?> copyOf(AnnotationValue<?> annotation) {
+        Map<CharSequence, Object> values = annotation.getValues();
+        Map<CharSequence, Object> copies = new LinkedHashMap<>(values.size());
+        values.forEach((member, value) -> copies.put(member, copyOf(value)));
+        return AnnotationValue.builder(annotation.getAnnotationName()).members(copies).build();
     }
 
     /**

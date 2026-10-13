@@ -15,7 +15,8 @@
  */
 package io.micronaut.interceptor.internal.runtime;
 
-import io.micronaut.interceptor.internal.metadata.JakartaInterceptorSupport;
+import io.micronaut.interceptor.internal.metadata.BindingValue;
+import io.micronaut.interceptor.internal.metadata.JakartaInterception;
 import io.micronaut.core.annotation.AnnotationBuilder;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
@@ -68,6 +69,7 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     private final List<InterceptorReference> chain;
     private final JakartaInterceptorAdvice advice;
     private int index;
+    private @Nullable List<AnnotationValue<?>> bindingValues;
     private @Nullable Set<Annotation> bindings;
 
     AbstractInvocationContext(io.micronaut.aop.InvocationContext<Object, ?> context,
@@ -230,12 +232,13 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     }
 
     /**
-     * The bindings are instances of the binding annotations, which the specification asks for as such. Building
-     * them is the one thing the interception does that needs the reflection of the platform, and it only happens
-     * when an interceptor asks for the bindings; the interception itself compares the bindings that Micronaut
-     * recorded at compilation time, and never builds an annotation.
+     * The bindings are instances of the binding annotations, which the specification asks for as such, built from
+     * {@link #getInterceptorBindingValues()}, the bindings that selected the chain. An annotation is built only when
+     * an interceptor asks for the bindings - by the builder Micronaut generated for it with
+     * {@code @RegisterAnnotations} where there is one, by the reflection module otherwise; the interception itself
+     * compares the bindings the processor recorded, and never builds an annotation.
      *
-     * @return The binding annotations in effect on the intercepted element
+     * @return The binding annotations that selected the chain of the intercepted element
      */
     @Override
     public Set<Annotation> getInterceptorBindings() {
@@ -270,11 +273,14 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
             }
             return null;
         }
-        if (!isBinding(annotationType)) {
-            return null;
+        String name = annotationType.getName();
+        for (AnnotationValue<?> value : getInterceptorBindingValues()) {
+            if (value.getAnnotationName().equals(name)) {
+                // getInterceptorBinding returns the annotation itself, so one has to be built
+                return instanceOf(annotationType, value, "getInterceptorBinding(Class)");
+            }
         }
-        // getInterceptorBinding returns the annotation itself, so one has to be built
-        return synthesizeBinding(bindingMetadata(), annotationType, "getInterceptorBinding(Class)");
+        return null;
     }
 
     /**
@@ -298,113 +304,103 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
             }
             return Collections.unmodifiableSet(matching);
         }
-        if (!isBinding(annotationType)) {
-            return Collections.emptySet();
+        String name = annotationType.getName();
+        Set<T> matching = new LinkedHashSet<>(1);
+        for (AnnotationValue<?> value : getInterceptorBindingValues()) {
+            if (value.getAnnotationName().equals(name)) {
+                // the bindings are the annotations themselves, so they have to be built
+                matching.add(instanceOf(annotationType, value, "getInterceptorBindings(Class)"));
+            }
         }
-        return Collections.unmodifiableSet(
-            new LinkedHashSet<>(synthesizeBindings(annotationType, "getInterceptorBindings(Class)")));
+        return Collections.unmodifiableSet(matching);
     }
 
     /**
-     * The bindings of one annotation type carried by the element.
+     * The bindings that selected the interceptors of the element, as values, built into nothing.
      *
-     * <p>A repeatable binding declared more than once is that many bindings, and every value of it is read.
-     * Anything else is one binding however many declarations it has: a binding a method declares replaces the one
-     * its class declares, and reading the values of the metadata hierarchy would answer with both, resurrecting
-     * the declaration the method overrode.</p>
-     *
-     * <p>Whether the binding repeats is read from the metadata by name rather than from the annotation type, which
-     * would ask the platform for the annotations of an annotation and inflate them into the reflection data the
-     * virtual machine keeps for it. Micronaut recorded the container of a repeatable annotation as the application
-     * was compiled, so the metadata answers it having read nothing.</p>
-     *
-     * @param accessor The accessor of {@code InvocationContext} that was called, which a failure names
-     */
-    private <T extends Annotation> List<T> synthesizeBindings(Class<T> annotationType, String accessor) {
-        AnnotationMetadata annotationMetadata = bindingMetadata();
-        if (annotationMetadata.findRepeatableAnnotation(annotationType.getName()).isPresent()) {
-            return nearestRepeated(annotationMetadata, annotationType, accessor);
-        }
-        T single = synthesizeBinding(annotationMetadata, annotationType, accessor);
-        return single == null ? List.of() : List.of(single);
-    }
-
-    /**
-     * The bindings in effect on the element as values, read from the layers of the metadata as the binding
-     * accessors read them, and built into nothing.
+     * <p>Which bindings they are, and how many occurrences of a repeatable one, is what the processor recorded on the
+     * element, which is what resolving the chain read: a binding only the method an element overrides declares, or
+     * that only the factory producing a bean declares, is not one of them, although the metadata of the element
+     * holds it, and occurrences that differ only in a member that does not bind are one binding. What was recorded
+     * holds only the members that bind, so each binding is reported as the declaration it was reduced from, which
+     * holds the members that do not bind as well: the nearest declaration of it that is the same binding, the
+     * element's before its class's.</p>
      *
      * @return The values of the bindings
      */
     @Override
     public List<AnnotationValue<?>> getInterceptorBindingValues() {
+        List<AnnotationValue<?>> values = bindingValues;
+        if (values == null) {
+            values = readBindingValues();
+            bindingValues = values;
+        }
+        return values;
+    }
+
+    private List<AnnotationValue<?>> readBindingValues() {
         AnnotationMetadata annotationMetadata = bindingMetadata();
-        List<String> names = annotationMetadata.getAnnotationNamesByStereotype(JakartaInterceptorSupport.INTERCEPTOR_BINDING);
-        if (names.isEmpty()) {
+        AnnotationValue<JakartaInterception> interception = annotationMetadata.getAnnotation(JakartaInterception.class);
+        List<AnnotationValue<Annotation>> recorded = interception == null
+            ? List.of()
+            : interception.getAnnotations(JakartaInterception.BINDINGS);
+        if (recorded.isEmpty()) {
             return List.of();
         }
-        List<AnnotationValue<?>> values = new ArrayList<>(names.size());
-        for (String name : names) {
-            if (annotationMetadata.findRepeatableAnnotation(name).isPresent()) {
-                List<AnnotationValue<Annotation>> repeated =
-                    nearestLayer(annotationMetadata, layer -> nonEmpty(layer.getAnnotationValuesByName(name)));
-                if (repeated != null) {
-                    values.addAll(repeated);
-                }
-            } else {
-                AnnotationValue<Annotation> single =
-                    nearestLayer(annotationMetadata, layer -> layer.<Annotation>findAnnotation(name).orElse(null));
-                if (single != null) {
-                    values.add(single);
-                }
-            }
+        List<AnnotationValue<?>> values = new ArrayList<>(recorded.size());
+        for (AnnotationValue<Annotation> binding : recorded) {
+            values.add(declarationOf(annotationMetadata, binding));
         }
         return Collections.unmodifiableList(values);
     }
 
     /**
-     * The one binding of an annotation type the nearest layer of the metadata carries, built as an instance.
+     * The declaration a recorded binding was reduced from: the nearest occurrence of its annotation that is the same
+     * binding, read one layer of the metadata at a time and, within a layer, what the element declares itself before
+     * what it carries otherwise.
      *
-     * <p>As with a repeatable binding, the layers are read one at a time, the element before its class: the
-     * metadata of a hierarchy asked for the value of an annotation merges the members of every layer, where a
-     * declaration of the element replaces the one of its class whole.</p>
+     * <p>The metadata of a method is a hierarchy of the metadata of its class and its own, and asked as a whole it
+     * merges the members of a binding both declare, where the declaration of the method replaces the one of its
+     * class whole; so the layers are read apart. The metadata of a method also holds the annotations of the method it
+     * overrides, which may carry the annotation of the binding with other members, so an occurrence is taken only
+     * where it is the binding recorded.</p>
+     *
+     * @param metadata The metadata of the element
+     * @param recorded The binding as the processor recorded it
+     * @return The declaration, or what was recorded where no declaration is the binding
      */
-    private static <T extends Annotation> @Nullable T synthesizeBinding(AnnotationMetadata metadata,
-                                                                        Class<T> annotationType,
-                                                                        String accessor) {
-        AnnotationValue<T> value = nearestLayer(metadata, layer -> layer.getAnnotation(annotationType));
-        // the binding is the annotation itself, so it has to be built
-        return value == null ? null : instanceOf(annotationType, value, accessor);
+    private static AnnotationValue<?> declarationOf(AnnotationMetadata metadata, AnnotationValue<?> recorded) {
+        String name = recorded.getAnnotationName();
+        BindingValue binding = BindingValue.ofRecorded(recorded);
+        AnnotationValue<?> declaration = nearestLayer(metadata, layer -> {
+            for (AnnotationValue<?> occurrence : occurrencesOf(layer, name)) {
+                if (BindingValue.of(occurrence).matches(binding)) {
+                    return occurrence;
+                }
+            }
+            return null;
+        });
+        return declaration == null ? recorded : declaration;
     }
 
     /**
-     * The occurrences of a repeatable binding the nearest layer of the metadata declares: the method's when it
-     * declares any, the class's otherwise.
-     *
-     * <p>The metadata of a method is a hierarchy of the metadata of its class and its own, and asked for the
-     * occurrences of a repeatable annotation it answers those of every layer. The chain was selected by the
-     * occurrences the method declares alone, which replace those of the class, so that is what is answered.</p>
+     * The occurrences of an annotation one layer of the metadata holds, the ones the element declares itself first.
      */
-    private static <T extends Annotation> List<T> nearestRepeated(AnnotationMetadata metadata,
-                                                                  Class<T> annotationType,
-                                                                  String accessor) {
-        List<AnnotationValue<T>> values =
-            nearestLayer(metadata, layer -> nonEmpty(layer.getAnnotationValuesByType(annotationType)));
-        if (values == null) {
-            return List.of();
+    private static List<AnnotationValue<?>> occurrencesOf(AnnotationMetadata layer, String name) {
+        List<AnnotationValue<?>> occurrences = new ArrayList<>(2);
+        if (layer.findRepeatableAnnotation(name).isPresent()) {
+            occurrences.addAll(layer.getDeclaredAnnotationValuesByName(name));
+            occurrences.addAll(layer.getAnnotationValuesByName(name));
+        } else {
+            layer.findDeclaredAnnotation(name).ifPresent(occurrences::add);
+            layer.findAnnotation(name).ifPresent(occurrences::add);
         }
-        List<T> repeated = new ArrayList<>(values.size());
-        for (AnnotationValue<T> value : values) {
-            // the bindings are the annotations themselves, so they have to be built
-            repeated.add(instanceOf(annotationType, value, accessor));
-        }
-        return repeated;
+        return occurrences;
     }
 
     /**
      * Reads the nearest layer of the metadata that answers: the element's own where it answers, its class's
-     * otherwise. The metadata of a method is a hierarchy of the metadata of its class and its own, and asked as a
-     * whole it merges the members of a binding both declare and joins the occurrences of a repeatable one, where the
-     * declaration of the method replaces the one of its class whole.
+     * otherwise.
      *
      * @param metadata The metadata, a hierarchy or a single layer
      * @param read     Reads one layer, answering {@code null} where the layer has nothing to say
@@ -425,10 +421,6 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
         return read.apply(metadata);
     }
 
-    private static <V> @Nullable List<V> nonEmpty(List<V> values) {
-        return values.isEmpty() ? null : values;
-    }
-
     /**
      * @return The layers of a hierarchy from the element itself to the root, its class
      */
@@ -441,27 +433,17 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
         return layers;
     }
 
-    /**
-     * Whether the element carries the given annotation as an interceptor binding, rather than as an annotation
-     * that simply happens to be there. Read from the metadata, so nothing is built to answer it.
-     */
-    private boolean isBinding(Class<? extends Annotation> annotationType) {
-        return bindingMetadata()
-            .getAnnotationNamesByStereotype(JakartaInterceptorSupport.INTERCEPTOR_BINDING)
-            .contains(annotationType.getName());
-    }
-
     private Set<Annotation> resolveBindings() {
-        AnnotationMetadata annotationMetadata = bindingMetadata();
-        List<String> names = annotationMetadata.getAnnotationNamesByStereotype(JakartaInterceptorSupport.INTERCEPTOR_BINDING);
-        if (names.isEmpty()) {
+        List<AnnotationValue<?>> values = getInterceptorBindingValues();
+        if (values.isEmpty()) {
             return Collections.emptySet();
         }
+        AnnotationMetadata annotationMetadata = bindingMetadata();
         String accessor = "getInterceptorBindings()";
-        Set<Annotation> resolved = new LinkedHashSet<>(names.size());
-        for (String name : names) {
-            bindingType(annotationMetadata, name, accessor)
-                .ifPresent(type -> resolved.addAll(synthesizeBindings(type, accessor)));
+        Set<Annotation> resolved = new LinkedHashSet<>(values.size());
+        for (AnnotationValue<?> value : values) {
+            bindingType(annotationMetadata, value.getAnnotationName(), accessor)
+                .ifPresent(type -> resolved.add(instanceOf(type, value, accessor)));
         }
         return Collections.unmodifiableSet(resolved);
     }
@@ -490,16 +472,20 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
      * <p>A builder Micronaut generated for the annotation with {@code @RegisterAnnotations} builds it without the
      * reflection module, and without a proxy class. An annotation without one is synthesized by the reflection
      * module.</p>
+     *
+     * @param value A value of the annotation of the given type, which is what it is read as
      */
+    @SuppressWarnings("unchecked")
     private static <T extends Annotation> T instanceOf(Class<T> annotationType,
-                                                       AnnotationValue<T> value,
+                                                       AnnotationValue<?> value,
                                                        String accessor) {
+        AnnotationValue<T> typed = (AnnotationValue<T>) value;
         Optional<AnnotationBuilder<T>> builder = AnnotationBuilder.find(annotationType);
         if (builder.isPresent()) {
-            return builder.get().build(value);
+            return builder.get().build(typed);
         }
         requireReflectionModule(accessor);
-        return PlatformReflection.annotation(annotationType, value);
+        return PlatformReflection.annotation(annotationType, typed);
     }
 
     /**

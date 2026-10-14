@@ -15,16 +15,13 @@
  */
 package io.micronaut.interceptor.internal.runtime;
 
-import io.micronaut.aop.InterceptedProxy;
 import io.micronaut.context.BeanRegistration;
-import io.micronaut.context.DependentBeanProvider;
 import io.micronaut.context.event.BeanCreatedEvent;
 import io.micronaut.context.event.BeanCreatedEventListener;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.inject.BeanDefinition;
 import jakarta.inject.Singleton;
 
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -40,19 +37,16 @@ import java.util.concurrent.ConcurrentHashMap;
  * object. Creating them through that advice is what makes them the same instances the interceptions of the object go
  * on to use, rather than a second set nobody reads.</p>
  *
- * <p>A proxy with a separate target, which intercepts its target with the advice of the target, selected that advice
- * as it was constructed, as a dependent of the target: a target whose own construction and lifecycle are not
- * intercepted had none yet as it was created. It is found among the dependents of the target the proxy holds.</p>
+ * <p>It is only needed for the subclass Micronaut generates to intercept the methods of a class: the advice of a
+ * proxy with a separate target, lazily resolved or not, and of an intercepted lifecycle is handed the bean it is
+ * created for, and creates the instances itself, see {@link JakartaInterceptorAdvice}. The advice of the subclass is
+ * handed none.</p>
  *
  * <p>Micronaut offers no listener narrowed to the beans an annotation is declared on, so this one is handed every
  * bean the context creates. It returns at once for an object whose definition declares nothing this module
  * intercepts, before looking at any of its dependents. Whether a definition declares anything is read once for it,
  * rather than from each of its executable methods every time a bean of it is created: a definition Micronaut
- * compiled is equal to every other instance of its class, so the answer is remembered once for each.</p>
- *
- * <p>The dependents of the target a proxy holds are read through {@link DependentBeanProvider}, which Micronaut
- * marks internal: a {@link BeanRegistration} does not offer its dependents publicly, and
- * {@link BeanCreatedEvent#getDependentBeans()} only lists those of the bean the event is for. See the guide,
+ * compiled is equal to every other instance of its class, so the answer is remembered once for each. See the guide,
  * "Waiting on Micronaut core".</p>
  *
  * @author Denis Stepanov
@@ -70,19 +64,11 @@ final class InterceptorCreationListener implements BeanCreatedEventListener<Obje
             // nothing of the object is intercepted by this module, so it has no interceptor instance to create
             return event.getBean();
         }
-        createInterceptorInstances(event.getDependentBeans(), event);
-        if (event.getBean() instanceof InterceptedProxy<?> proxy
-            && proxy.interceptedTargetRegistration() instanceof DependentBeanProvider target) {
-            createInterceptorInstances(target.dependentBeans(), event);
-        }
-        return event.getBean();
-    }
-
-    private static void createInterceptorInstances(List<BeanRegistration<?>> dependents, BeanCreatedEvent<Object> event) {
-        for (BeanRegistration<?> registration : dependents) {
+        for (BeanRegistration<?> registration : event.getDependentBeans()) {
             if (registration.getBean() instanceof JakartaInterceptorAdvice advice) {
                 advice.createInterceptorInstances(event.getBeanDefinition());
             }
         }
+        return event.getBean();
     }
 }

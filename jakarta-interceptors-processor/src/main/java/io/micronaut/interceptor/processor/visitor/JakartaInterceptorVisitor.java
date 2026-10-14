@@ -160,9 +160,12 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
             declareInterceptorMethods(model, declaredAsABean, isInterceptorClass, context);
         }
         if (isInterceptorClass) {
-            if (!InterceptorClassScanner.bindingsOf(element).isEmpty()) {
+            if (element.hasDeclaredAnnotation(JakartaInterceptorSupport.INTERCEPTOR)
+                && !InterceptorClassScanner.bindingsOf(element).isEmpty()) {
                 // only an interceptor class a binding annotation binds is looked for among the beans; one that is
-                // named directly is found by the class the element names, and needs no index
+                // named directly is found by the class the element names, and needs no index. A class interposing
+                // on another object without declaring @Interceptor is one only where it is named directly, and its
+                // bindings bind nothing, so it is not indexed either
                 index(model);
             }
             return;

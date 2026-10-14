@@ -64,6 +64,12 @@ public final class BindingValues {
      * defaults the value carries filled in, spelt as Micronaut records them, and the members excluded from the
      * binding listed under {@value AnnotationUtil#NON_BINDING_ATTRIBUTE}, as the processor records a binding.
      *
+     * <p>The members excluded are the ones the value lists itself, and no others: the annotation type is not read.
+     * A value Micronaut read from the metadata of an element lists every member its type excludes, so it is brought
+     * into shape completely. A value built from an annotation instance, or held by a member of another annotation,
+     * lists none, and keeps the members its type excludes; {@link #matches(AnnotationValue, AnnotationValue)} still
+     * leaves them out where the other value lists them.</p>
+     *
      * <p>The value returned is the caller's, a new one on every call. Brought into shape again, it is the same.</p>
      *
      * @param value The value of a binding annotation, read from metadata or built from an annotation instance
@@ -91,9 +97,9 @@ public final class BindingValues {
      * AnnotationValue) match} share.
      *
      * <p>It is the hash code of the name of the annotation alone. Two values are compared without the members either
-     * of them lists as excluded, so a member one of them binds by may take no part in the comparison; and Micronaut
-     * lists an excluded member only on a declaration that gives it a value. No member is therefore hashed, as none is
-     * certain to take part.</p>
+     * of them lists as excluded, so a member one of them binds by may take no part in the comparison; and a value
+     * built from an annotation instance, or held by a member of another annotation, lists no excluded member at all.
+     * No member is therefore hashed, as none is certain to take part.</p>
      *
      * @param value The value of a binding annotation
      * @return The hash code

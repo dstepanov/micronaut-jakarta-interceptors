@@ -93,8 +93,8 @@ public final class BindingConflicts {
                                                Collection<String> names,
                                                VisitorContext context) {
         // two occurrences of a binding disagree when what they bind by differs, which is what reducing each of them
-        // to its binding says - the members excluded from the annotation type left out of both, whether or not the
-        // occurrence that was read happens to record them
+        // to its binding says - the members excluded from the annotation type left out of both, which Micronaut
+        // records on each occurrence, and which an annotation a member holds is supplied with
         InterceptorBindingValues.ExcludedMembers excluded = InterceptorBindingValues.excludedMembersOf(context);
         Set<String> conflicts = resolve(metadata, names, context, excluded,
             new HashMap<>(), new HashSet<>(), new ArrayList<>()).conflicts();

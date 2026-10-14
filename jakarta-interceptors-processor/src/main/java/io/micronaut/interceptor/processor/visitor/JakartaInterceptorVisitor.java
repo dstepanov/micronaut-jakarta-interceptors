@@ -160,9 +160,12 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
             declareInterceptorMethods(model, declaredAsABean, isInterceptorClass, context);
         }
         if (isInterceptorClass) {
-            if (!InterceptorClassScanner.bindingsOf(element).isEmpty()) {
+            if (element.hasDeclaredAnnotation(JakartaInterceptorSupport.INTERCEPTOR)
+                && !InterceptorClassScanner.bindingsOf(element).isEmpty()) {
                 // only an interceptor class a binding annotation binds is looked for among the beans; one that is
-                // named directly is found by the class the element names, and needs no index
+                // named directly is found by the class the element names, and needs no index. A class interposing
+                // on another object without declaring @Interceptor is one only where it is named directly, and its
+                // bindings bind nothing, so it is not indexed either
                 index(model);
             }
             return;
@@ -752,9 +755,10 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
      * by type as a list rather than as one: what a member declares of a type replaces every occurrence of that type
      * its class declares, and the occurrences of a type the member says nothing about are all inherited.</p>
      *
-     * <p>The members excluded from a binding are read off the annotation type rather than off the element, which
-     * records only the ones it declares a value for: an interceptor and the element it intercepts have to agree on
-     * which members are compared, whether or not either of them declares a value for them.</p>
+     * <p>The members excluded from a binding are the ones Micronaut records on each occurrence, every member the
+     * annotation type excludes whether or not the occurrence declares a value for it, so an interceptor and the
+     * element it intercepts agree on which members are compared. An annotation held by a member of a binding is
+     * recorded without them, and has them read off its type.</p>
      *
      * @param element The element
      * @param owner   The class the element belongs to, or {@code null} when the element is the class

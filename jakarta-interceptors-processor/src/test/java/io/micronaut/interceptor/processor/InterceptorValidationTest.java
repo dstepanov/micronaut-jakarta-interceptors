@@ -214,8 +214,8 @@ class InterceptorValidationTest {
     /**
      * Two paths carrying the binding with different values of a member that is excluded from the binding, which is
      * no conflict: the two occurrences bind by the same thing, since the member they differ in takes no part in the
-     * binding. Micronaut records an excluded member only where a value was supplied for it, so one of the two
-     * occurrences said nothing about the exclusion and the values were compared as declared.
+     * binding. One of the two occurrences supplies no value for the excluded member, and the two are compared by
+     * the members Micronaut records as excluded on each of them all the same.
      */
     @Test
     void aBindingReachingAClassTwiceDifferingOnlyInAnExcludedMemberIsAccepted() {

@@ -24,8 +24,8 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>They are not quite the kinds Micronaut knows: the specification also interposes on the timeout methods a timer
  * service invokes, which Micronaut intercepts as it does any other method. Each kind therefore names both the
- * members of {@link JakartaInterceptorMethods} that record its interceptor methods and, where there is one, the
- * Micronaut kind it is intercepted as.</p>
+ * members of {@link io.micronaut.interceptor.internal.metadata.JakartaInterceptorMethods} that record its
+ * interceptor methods and, where there is one, the Micronaut kind it is intercepted as.</p>
  *
  * @author Denis Stepanov
  * @since 1.0
@@ -68,7 +68,8 @@ public enum InterceptionKind {
     }
 
     /**
-     * The member of {@link JakartaInterceptorMethods} that records the interceptor method of this kind.
+     * The member of {@link io.micronaut.interceptor.internal.metadata.JakartaInterceptorMethods} that records the
+     * interceptor method of this kind.
      *
      * <p>Internal: the members are how the processor and the runtime of this module lay out the metadata, which
      * may change between releases. Read the recorded interceptor methods through
@@ -82,8 +83,8 @@ public enum InterceptionKind {
     }
 
     /**
-     * The member of {@link JakartaInterceptorMethods} that records the classes declaring the interceptor methods
-     * {@link #member()} names, in the same order.
+     * The member of {@link io.micronaut.interceptor.internal.metadata.JakartaInterceptorMethods} that records the
+     * classes declaring the interceptor methods {@link #member()} names, in the same order.
      *
      * @return The member name
      */

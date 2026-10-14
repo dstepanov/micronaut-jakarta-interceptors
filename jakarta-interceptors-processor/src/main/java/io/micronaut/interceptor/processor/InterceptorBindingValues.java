@@ -96,18 +96,17 @@ public final class InterceptorBindingValues {
     /**
      * Reduces one binding annotation to what it binds by.
      *
-     * <p>Micronaut records a member excluded from a binding only on an occurrence of the annotation that supplied a
-     * value for that member, so an occurrence that left every excluded member to its default records none of them
-     * and would otherwise be compared by values that take no part in the binding. The members excluded from the
-     * annotation type are therefore supplied as well, so that two occurrences are compared by the same members
-     * wherever either of them is read from.</p>
+     * <p>Micronaut records every member excluded from a binding on each occurrence of the annotation, whether or not
+     * the occurrence supplied a value for it, and those are what the occurrence is reduced by. An annotation held by
+     * a member of the binding is recorded without them, so the members excluded from its type are supplied, and two
+     * occurrences are compared by the same members wherever either of them is read from.</p>
      *
      * <p>Reading the defaults off the annotation type instead of the occurrence does not work for every language:
      * what the visitor context offers for it answers all of them for Java, none for Kotlin, and for Groovy only the
      * ones that are a single constant.</p>
      *
      * @param annotation The binding annotation
-     * @param excluded   The members excluded from a binding annotation, by its name
+     * @param excluded   The members excluded from an annotation a member holds, by its name
      * @return The binding
      */
     public static BindingValue of(AnnotationValue<?> annotation, ExcludedMembers excluded) {
@@ -147,9 +146,9 @@ public final class InterceptorBindingValues {
     /**
      * The members excluded from a binding annotation, answered by the name of the annotation.
      *
-     * <p>What an occurrence of an annotation records is not the whole of it: Micronaut records an excluded member
-     * only where a value was supplied for it. The complete set is a property of the annotation type, which the
-     * compilation can read and the runtime cannot, so it is supplied to wherever a binding is reduced.</p>
+     * <p>Micronaut records them on every occurrence of an annotation an element declares, but not on an annotation
+     * held by a member of another. For that one the set is a property of the annotation type, which the compilation
+     * can read and the runtime cannot, so it is supplied to wherever a binding is reduced.</p>
      */
     public interface ExcludedMembers {
 

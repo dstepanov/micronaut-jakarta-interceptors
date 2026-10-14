@@ -15,7 +15,6 @@
  */
 package io.micronaut.interceptor.internal.runtime;
 
-import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.inject.MethodReference;
@@ -25,7 +24,6 @@ import io.micronaut.reflection.ReflectionExecutables;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.util.Objects;
-import java.util.Optional;
 
 /**
  * What of this module hands back an object of the reflection of the platform and needs the reflection module to:
@@ -66,15 +64,6 @@ final class PlatformReflection {
     static Method method(MethodReference<?, ?> method) {
         return Objects.requireNonNull(ReflectionExecutables.targetMethod(method),
             "The intercepted method stands for no method of the platform");
-    }
-
-    /**
-     * @param metadata The metadata that carries the annotation
-     * @param name     The name of the annotation type
-     * @return The annotation type, where the class is present
-     */
-    static Optional<Class<? extends Annotation>> annotationType(AnnotationMetadata metadata, String name) {
-        return metadata.getAnnotationType(name);
     }
 
     /**

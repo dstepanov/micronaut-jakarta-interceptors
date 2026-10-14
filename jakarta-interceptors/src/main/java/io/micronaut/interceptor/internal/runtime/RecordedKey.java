@@ -15,12 +15,12 @@
  */
 package io.micronaut.interceptor.internal.runtime;
 
+import io.micronaut.core.annotation.AnnotationUtil;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.interceptor.metadata.InterceptionKind;
 import org.jspecify.annotations.Nullable;
 
-import java.util.Arrays;
 import java.util.Map;
 import java.util.Objects;
 
@@ -46,7 +46,9 @@ import java.util.Objects;
  *
  * @param kind    The kind of interception, {@code null} for the interceptor classes associated with a class
  * @param members The members of the interception as recorded, or {@code null} where the element records none
- * @param hash    The hash of the two, computed once
+ * @param hash    The hash of the two, computed once. The members are hashed as Micronaut hashes the values of an
+ *                annotation, which hashes an annotation a member holds by its name and its members, and an array by
+ *                its elements: whatever the comparison below finds the same hashes the same
  * @author Denis Stepanov
  * @since 1.0
  */
@@ -62,7 +64,8 @@ record RecordedKey(@Nullable InterceptionKind kind, @Nullable Map<CharSequence, 
      */
     static RecordedKey of(@Nullable InterceptionKind kind, @Nullable AnnotationValue<?> interception) {
         Map<CharSequence, Object> members = interception == null ? null : interception.getValues();
-        return new RecordedKey(kind, members, 31 * Objects.hashCode(kind) + (members == null ? 0 : hashOf(members)));
+        int membersHash = members == null ? 0 : AnnotationUtil.calculateHashCode(members);
+        return new RecordedKey(kind, members, 31 * Objects.hashCode(kind) + membersHash);
     }
 
     @Override
@@ -87,43 +90,6 @@ record RecordedKey(@Nullable InterceptionKind kind, @Nullable Map<CharSequence, 
     @Override
     public String toString() {
         return kind + " " + members;
-    }
-
-    /**
-     * The members are hashed in no particular order, as they are compared.
-     */
-    private static int hashOf(Map<CharSequence, Object> members) {
-        int hash = 0;
-        for (Map.Entry<CharSequence, Object> member : members.entrySet()) {
-            hash += member.getKey().toString().hashCode() ^ hashOf(member.getValue());
-        }
-        return hash;
-    }
-
-    private static int hashOf(@Nullable Object value) {
-        return switch (value) {
-            case null -> 0;
-            case AnnotationValue<?> annotation -> 31 * annotation.getAnnotationName().hashCode()
-                + hashOf(annotation.getValues());
-            case Object[] array -> {
-                int hash = 1;
-                for (Object element : array) {
-                    hash = 31 * hash + hashOf(element);
-                }
-                yield hash;
-            }
-            // an array of a primitive type hashes by its contents, as it is compared
-            case int[] array -> Arrays.hashCode(array);
-            case long[] array -> Arrays.hashCode(array);
-            case double[] array -> Arrays.hashCode(array);
-            case boolean[] array -> Arrays.hashCode(array);
-            case byte[] array -> Arrays.hashCode(array);
-            case short[] array -> Arrays.hashCode(array);
-            case char[] array -> Arrays.hashCode(array);
-            case float[] array -> Arrays.hashCode(array);
-            // what is left is a constant, a string or a class value, each of which hashes by its contents
-            default -> value.hashCode();
-        };
     }
 
     // compiled metadata keys its members by strings; a member keyed otherwise is merely not found, which reads the

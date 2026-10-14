@@ -96,20 +96,21 @@ public final class BindingValue {
     /**
      * Reduces a binding annotation as the processor records it.
      *
-     * <p>Micronaut records a member excluded from a binding only on an occurrence that supplied a value for it, so
-     * an occurrence that left every excluded member to its default records none of them. The members excluded from
-     * the annotation type are therefore supplied, which the processor reads off the type.</p>
+     * <p>Micronaut records every member excluded from a binding on each occurrence of the annotation, whether or not
+     * the occurrence supplied a value for it, and those are the ones read. An annotation held by a member of another
+     * is recorded without them, so the members excluded from the type of such an annotation are supplied, which the
+     * processor reads off the type.</p>
      *
      * <p>An empty string the value carries no default for is left out of what is recorded, which reads the same
      * whether it was declared or not. An empty string where a default was recorded is recorded: compared, it is the
      * member left out, as every empty string is, and that differs from the default the other side has filled in.</p>
      *
      * @param annotation The binding annotation, as declared on an element
-     * @param excluded   The members excluded from a binding annotation, by the name of the annotation
+     * @param excluded   The members excluded from an annotation a member holds, by the name of the annotation
      * @return The binding
      */
     public static BindingValue reduce(AnnotationValue<?> annotation, Function<String, ? extends Collection<String>> excluded) {
-        return of(annotation, excluded, true, true);
+        return of(annotation, excluded, false, true, true);
     }
 
     /**
@@ -119,7 +120,7 @@ public final class BindingValue {
      * @return The binding
      */
     public static BindingValue ofRecorded(AnnotationValue<?> recorded) {
-        return of(recorded, NONE_EXCLUDED, false, false);
+        return of(recorded, NONE_EXCLUDED, false, false, false);
     }
 
     /**
@@ -130,11 +131,12 @@ public final class BindingValue {
      * @return The binding
      */
     public static BindingValue of(AnnotationValue<?> value) {
-        return of(value, NONE_EXCLUDED, true, false);
+        return of(value, NONE_EXCLUDED, false, true, false);
     }
 
     private static BindingValue of(AnnotationValue<?> annotation,
                                    Function<String, ? extends Collection<String>> excluded,
+                                   boolean nested,
                                    boolean withDefaults,
                                    boolean leaveOutUndefaultedEmptyStrings) {
         String name = annotation.getAnnotationName();
@@ -154,7 +156,12 @@ public final class BindingValue {
             members.entrySet().removeIf(entry -> !defaulted.contains(entry.getKey()) && isEmptyString(entry.getValue()));
         }
         Set<String> nonBinding = new TreeSet<>(Arrays.asList(annotation.stringValues(AnnotationUtil.NON_BINDING_ATTRIBUTE)));
-        nonBinding.addAll(excluded.apply(name));
+        // Micronaut lists the member it records them under among them, which is no member of the annotation; kept,
+        // it would set a binding read from the metadata apart from the same binding as recorded
+        nonBinding.remove(AnnotationUtil.NON_BINDING_ATTRIBUTE);
+        if (nested) {
+            nonBinding.addAll(excluded.apply(name));
+        }
         members.remove(AnnotationUtil.NON_BINDING_ATTRIBUTE);
         members.remove(AnnotationUtil.STEREOTYPES_MEMBER);
         members.keySet().removeAll(nonBinding);
@@ -299,12 +306,12 @@ public final class BindingValue {
                                    boolean withDefaults,
                                    boolean leaveOutUndefaultedEmptyStrings) {
         if (value instanceof AnnotationValue<?> annotation) {
-            return of(annotation, excluded, withDefaults, leaveOutUndefaultedEmptyStrings).toAnnotationValue();
+            return of(annotation, excluded, true, withDefaults, leaveOutUndefaultedEmptyStrings).toAnnotationValue();
         }
         if (value instanceof AnnotationValue<?>[] annotations) {
             AnnotationValue<?>[] written = new AnnotationValue<?>[annotations.length];
             for (int i = 0; i < annotations.length; i++) {
-                written[i] = of(annotations[i], excluded, withDefaults, leaveOutUndefaultedEmptyStrings)
+                written[i] = of(annotations[i], excluded, true, withDefaults, leaveOutUndefaultedEmptyStrings)
                     .toAnnotationValue();
             }
             return written;

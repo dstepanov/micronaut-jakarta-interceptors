@@ -15,16 +15,14 @@
  */
 package io.micronaut.interceptor.internal.runtime;
 
-import io.micronaut.interceptor.internal.metadata.BindingValue;
-import io.micronaut.interceptor.internal.metadata.JakartaInterception;
 import io.micronaut.core.annotation.AnnotationBuilder;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.core.convert.value.MutableConvertibleValues;
 import io.micronaut.core.type.Argument;
-import io.micronaut.inject.annotation.AnnotationMetadataHierarchy;
 import io.micronaut.interceptor.MicronautInvocationContext;
+import io.micronaut.interceptor.spi.InterceptorBindings;
 import io.micronaut.reflection.ReflectionExecutables;
 import jakarta.interceptor.InvocationContext;
 import org.jspecify.annotations.Nullable;
@@ -32,7 +30,6 @@ import org.jspecify.annotations.Nullable;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -41,7 +38,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.Function;
 
 /**
  * The part of {@link InvocationContext} that is the same whichever element is being intercepted.
@@ -244,10 +240,30 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     public Set<Annotation> getInterceptorBindings() {
         Set<Annotation> resolved = bindings;
         if (resolved == null) {
-            resolved = resolveBindings();
+            resolved = elementBindings();
             bindings = resolved;
         }
         return resolved;
+    }
+
+    /**
+     * The binding annotations of the intercepted element, built from its metadata. An invocation of an element that
+     * is invoked again and again answers what the element remembers instead.
+     *
+     * @return The binding annotations
+     */
+    Set<Annotation> elementBindings() {
+        return resolveBindings();
+    }
+
+    /**
+     * The binding values of the intercepted element, read from its metadata. An invocation of an element that is
+     * invoked again and again answers what the element remembers instead.
+     *
+     * @return The binding values
+     */
+    List<AnnotationValue<?>> elementBindingValues() {
+        return readBindingValues();
     }
 
     /**
@@ -332,108 +348,17 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     public List<AnnotationValue<?>> getInterceptorBindingValues() {
         List<AnnotationValue<?>> values = bindingValues;
         if (values == null) {
-            values = readBindingValues();
+            values = elementBindingValues();
             bindingValues = values;
         }
         return values;
     }
 
-    private List<AnnotationValue<?>> readBindingValues() {
-        AnnotationMetadata annotationMetadata = bindingMetadata();
-        AnnotationValue<JakartaInterception> interception = annotationMetadata.getAnnotation(JakartaInterception.class);
-        List<AnnotationValue<Annotation>> recorded = interception == null
-            ? List.of()
-            : interception.getAnnotations(JakartaInterception.BINDINGS);
-        if (recorded.isEmpty()) {
-            return List.of();
-        }
-        List<AnnotationValue<?>> values = new ArrayList<>(recorded.size());
-        for (AnnotationValue<Annotation> binding : recorded) {
-            values.add(declarationOf(annotationMetadata, binding));
-        }
-        return Collections.unmodifiableList(values);
+    final List<AnnotationValue<?>> readBindingValues() {
+        return InterceptorBindings.declarations(bindingMetadata());
     }
 
-    /**
-     * The declaration a recorded binding was reduced from: the nearest occurrence of its annotation that is the same
-     * binding, read one layer of the metadata at a time and, within a layer, what the element declares itself before
-     * what it carries otherwise.
-     *
-     * <p>The metadata of a method is a hierarchy of the metadata of its class and its own, and asked as a whole it
-     * merges the members of a binding both declare, where the declaration of the method replaces the one of its
-     * class whole; so the layers are read apart. The metadata of a method also holds the annotations of the method it
-     * overrides, which may carry the annotation of the binding with other members, so an occurrence is taken only
-     * where it is the binding recorded.</p>
-     *
-     * @param metadata The metadata of the element
-     * @param recorded The binding as the processor recorded it
-     * @return The declaration, or what was recorded where no declaration is the binding
-     */
-    private static AnnotationValue<?> declarationOf(AnnotationMetadata metadata, AnnotationValue<?> recorded) {
-        String name = recorded.getAnnotationName();
-        BindingValue binding = BindingValue.ofRecorded(recorded);
-        AnnotationValue<?> declaration = nearestLayer(metadata, layer -> {
-            for (AnnotationValue<?> occurrence : occurrencesOf(layer, name)) {
-                if (BindingValue.of(occurrence).matches(binding)) {
-                    return occurrence;
-                }
-            }
-            return null;
-        });
-        return declaration == null ? recorded : declaration;
-    }
-
-    /**
-     * The occurrences of an annotation one layer of the metadata holds, the ones the element declares itself first.
-     */
-    private static List<AnnotationValue<?>> occurrencesOf(AnnotationMetadata layer, String name) {
-        List<AnnotationValue<?>> occurrences = new ArrayList<>(2);
-        if (layer.findRepeatableAnnotation(name).isPresent()) {
-            occurrences.addAll(layer.getDeclaredAnnotationValuesByName(name));
-            occurrences.addAll(layer.getAnnotationValuesByName(name));
-        } else {
-            layer.findDeclaredAnnotation(name).ifPresent(occurrences::add);
-            layer.findAnnotation(name).ifPresent(occurrences::add);
-        }
-        return occurrences;
-    }
-
-    /**
-     * Reads the nearest layer of the metadata that answers: the element's own where it answers, its class's
-     * otherwise.
-     *
-     * @param metadata The metadata, a hierarchy or a single layer
-     * @param read     Reads one layer, answering {@code null} where the layer has nothing to say
-     * @param <V>      What is read
-     * @return What the nearest layer that answers read, or {@code null} where none does
-     */
-    private static <V> @Nullable V nearestLayer(AnnotationMetadata metadata,
-                                                Function<AnnotationMetadata, @Nullable V> read) {
-        if (metadata instanceof AnnotationMetadataHierarchy hierarchy) {
-            for (AnnotationMetadata layer : nearestFirst(hierarchy)) {
-                V answer = nearestLayer(layer, read);
-                if (answer != null) {
-                    return answer;
-                }
-            }
-            return null;
-        }
-        return read.apply(metadata);
-    }
-
-    /**
-     * @return The layers of a hierarchy from the element itself to the root, its class
-     */
-    private static List<AnnotationMetadata> nearestFirst(AnnotationMetadataHierarchy hierarchy) {
-        List<AnnotationMetadata> layers = new ArrayList<>(2);
-        // the hierarchy iterates from the root, the class, to the element itself
-        for (AnnotationMetadata layer : hierarchy) {
-            layers.add(0, layer);
-        }
-        return layers;
-    }
-
-    private Set<Annotation> resolveBindings() {
+    final Set<Annotation> resolveBindings() {
         List<AnnotationValue<?>> values = getInterceptorBindingValues();
         if (values.isEmpty()) {
             return Collections.emptySet();
@@ -452,8 +377,8 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
      * The type of a binding annotation the element carries, found by its name.
      *
      * <p>A binding whose builder Micronaut generated with {@code @RegisterAnnotations} is found through the builder,
-     * which knows its type. Any other is a class found by its name, which is left to the reflection module, as is
-     * building its instances.</p>
+     * which knows its type. Any other is a class found by its name, whose instances are left to the reflection
+     * module to build.</p>
      */
     private static Optional<? extends Class<? extends Annotation>> bindingType(AnnotationMetadata metadata,
                                                                               String name,
@@ -462,8 +387,10 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
         if (builder.isPresent()) {
             return Optional.of(builder.get().annotationType());
         }
+        // finding the class asks nothing of the reflection module, but building its instance does, so its absence
+        // is reported here, before the type is looked for
         requireReflectionModule(accessor);
-        return PlatformReflection.annotationType(metadata, name);
+        return metadata.getAnnotationType(name);
     }
 
     /**

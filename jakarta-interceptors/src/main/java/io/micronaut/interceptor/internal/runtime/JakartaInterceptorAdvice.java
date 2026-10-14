@@ -22,8 +22,8 @@ import io.micronaut.aop.InterceptorKind;
 import io.micronaut.aop.InvocationContext;
 import io.micronaut.aop.MethodInterceptor;
 import io.micronaut.aop.MethodInvocationContext;
-import io.micronaut.context.BeanContext;
 import io.micronaut.context.BeanDependencyResolver;
+import io.micronaut.context.InterceptionTarget;
 import io.micronaut.context.Qualifier;
 import io.micronaut.context.annotation.Prototype;
 import io.micronaut.core.annotation.AnnotationMetadata;
@@ -38,10 +38,13 @@ import io.micronaut.interceptor.internal.metadata.JakartaInterception;
 import jakarta.interceptor.Interceptor;
 import org.jspecify.annotations.Nullable;
 
+import java.lang.annotation.Annotation;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 /**
@@ -70,7 +73,6 @@ import java.util.stream.Stream;
 public final class JakartaInterceptorAdvice implements MethodInterceptor<Object, Object>, ConstructorInterceptor<Object> {
 
     private final InterceptorChainResolver resolver;
-    private final BeanContext beanContext;
     /**
      * What the interceptor instances are resolved through. What Micronaut creates through it rather than finds in a
      * scope belongs to this advice, and Micronaut destroys it with the advice, latest first - also when the object
@@ -80,11 +82,6 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
     private final BeanDependencyResolver dependencies;
     private final Map<Class<?>, Object> instances = new HashMap<>(4);
     /**
-     * Whether the interceptor instances of the object have been created as the object was, see
-     * {@link #createInterceptorInstancesOnce}.
-     */
-    private volatile boolean instancesCreated;
-    /**
      * The business method chain of each method of the object, by the identity of the method, so that a call reads
      * neither the interception of the method nor the resolver's map. Copied on write: a method is added once, and
      * two calls adding at once only cost the one that loses resolving again on its next call. A call the scheduler
@@ -93,15 +90,28 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
     private volatile IdentityHashMap<ExecutableMethod<?, ?>, MethodChain> businessChains = new IdentityHashMap<>(0);
 
     /**
+     * Creates the advice of one object.
+     *
+     * <p>Section 2.3 has an interceptor instance created for each interceptor class when the object it intercepts
+     * is created, whether or not anything is ever invoked on that object. Where Micronaut hands the advice the bean it
+     * is created for - the target of a proxy that resolves its interceptors for each target, which a proxy resolving
+     * its target lazily first resolves on its first call, and the bean whose lifecycle is intercepted - every
+     * interceptor instance that will interpose on the object is created here, from that definition, which carries the
+     * qualifier of the bean: two beans of one class, two of one {@code @EachBean} among them, are told apart.
+     * Micronaut hands none to the advice of a subclass it generates to intercept the methods of a class, whose
+     * instances {@link InterceptorCreationListener} creates as the object is created.</p>
+     *
      * @param resolver     The resolver of the interceptor chains
-     * @param beanContext  The context the interceptor classes are beans of
      * @param dependencies What the interceptor instances are resolved through, which owns those it creates
+     * @param target       The bean the advice is created for, where Micronaut hands it one
      */
-    public JakartaInterceptorAdvice(InterceptorChainResolver resolver, BeanContext beanContext,
-                                    BeanDependencyResolver dependencies) {
+    public JakartaInterceptorAdvice(InterceptorChainResolver resolver, BeanDependencyResolver dependencies,
+                                    @Nullable InterceptionTarget target) {
         this.resolver = resolver;
-        this.beanContext = beanContext;
         this.dependencies = dependencies;
+        if (target != null) {
+            createInterceptorInstances(target.definition());
+        }
     }
 
     @Override
@@ -129,7 +139,6 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         if (kind == InterceptorKind.POST_CONSTRUCT || kind == InterceptorKind.PRE_DESTROY) {
             return interceptLifecycle(context, kind);
         }
-        createInterceptorInstancesOnce(context);
         MethodChain business = businessChainOf(context, kind);
         // a method declaring @Scheduled is a timeout method only while the scheduler invokes it: a direct call by
         // the application is a business method invocation
@@ -141,7 +150,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
             return context.proceed();
         }
         try {
-            return new BusinessMethodInvocationContext(context, chain, this, schedule).proceed();
+            return new BusinessMethodInvocationContext(context, chain, this, schedule, business).proceed();
         } catch (Exception e) {
             throw sneakyThrow(e);
         }
@@ -167,50 +176,6 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         added.put(method, resolved);
         businessChains = added;
         return resolved;
-    }
-
-    /**
-     * Creates the interceptor instances of the object on the first intercepted call, when nothing created them as the
-     * object was created.
-     *
-     * <p>A proxy that resolves its target lazily - {@code @Around(proxyTarget = true, lazy = true)}, or a bean of a
-     * scope that resolves through a proxy - has no target yet when it is created, so
-     * {@link InterceptorCreationListener} finds no advice to ask, and the advice is only resolved for the target as the first call reaches it. Each method
-     * interceptor would then be created only once its own method is called. The first call is the earliest the advice
-     * of such a target is seen, so the instances of every method are created then, from the definition the listener
-     * would have been handed: the one the target's class resolves to.</p>
-     *
-     * <p>That definition is looked up among the definitions of the target's class, because nothing hands it to the
-     * advice: Micronaut has no hook for the moment a lazy proxy resolves its target, and the invocation describes
-     * the method rather than the bean. The lookup runs once per advice, on its first intercepted call, and is
-     * abandoned where the class is ambiguous. See the guide, "Waiting on Micronaut core".</p>
-     */
-    private void createInterceptorInstancesOnce(MethodInvocationContext<Object, Object> context) {
-        if (instancesCreated) {
-            return;
-        }
-        synchronized (this) {
-            if (instancesCreated) {
-                return;
-            }
-            instancesCreated = true;
-        }
-        Class<?> targetClass = context.getTarget().getClass();
-        BeanDefinition<?> definition = null;
-        for (BeanDefinition<?> candidate : beanContext.getBeanDefinitions(targetClass)) {
-            // a subclass of the target's class is a bean of its type as well, and is another bean
-            if (!InterceptorChainResolver.isOfClass(candidate, targetClass)) {
-                continue;
-            }
-            if (definition != null) {
-                // the class is ambiguous: each method interceptor is still created as its method is first called
-                return;
-            }
-            definition = candidate;
-        }
-        if (definition != null) {
-            createInterceptorInstances(definition);
-        }
     }
 
     /**
@@ -298,25 +263,16 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      * happens then. Resolving a chain the first time it is proceeded would instead create the instances of a
      * method's interceptors only once that method is called, and never for a method nobody calls.</p>
      *
-     * <p>Called by {@link InterceptorCreationListener} as the object is created, on the advice bound to it, which
-     * is the advice whose instances every interception of that object goes on to use.</p>
+     * <p>Called as the advice is created, from the definition Micronaut hands it of the bean it is created for, and
+     * otherwise by {@link InterceptorCreationListener} as the object is created, on the advice bound to it, which is
+     * the advice whose instances every interception of that object goes on to use. An instance created already is
+     * not created again.</p>
      *
      * @param definition The definition of the object
      */
     void createInterceptorInstances(BeanDefinition<?> definition) {
-        instancesCreated = true;
-        AnnotationMetadata classMetadata = definition.getAnnotationMetadata();
-        // only what this module intercepts is asked for: an element it does not intercept has no chain, and
-        // resolving one would put an empty chain in the resolver's map for nothing
-        if (classMetadata.hasAnnotation(JakartaInterception.class)) {
-            createInstancesOf(InterceptorKind.POST_CONSTRUCT, classMetadata);
-            createInstancesOf(InterceptorKind.PRE_DESTROY, classMetadata);
-        }
-        for (ExecutableMethod<?, ?> method : definition.getExecutableMethods()) {
-            AnnotationMetadata methodMetadata = method.getAnnotationMetadata();
-            if (methodMetadata.hasAnnotation(JakartaInterception.class)) {
-                createInstancesOf(InterceptorKind.AROUND, methodMetadata);
-            }
+        for (Class<?> interceptorClass : resolver.resolveInterceptorClasses(definition)) {
+            interceptorInstance(interceptorClass);
         }
     }
 
@@ -344,18 +300,17 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         return false;
     }
 
-    private void createInstancesOf(InterceptorKind kind, AnnotationMetadata metadata) {
-        createInterceptorInstances(resolver.resolve(kind, metadata));
-    }
-
     /**
      * Returns the instance of an interceptor class, creating it the first time it is asked for.
      *
      * @param reference The interceptor
      * @return The instance
      */
-    synchronized Object interceptorInstance(InterceptorReference reference) {
-        Class<?> interceptorClass = reference.interceptorClass();
+    Object interceptorInstance(InterceptorReference reference) {
+        return interceptorInstance(reference.interceptorClass());
+    }
+
+    private synchronized Object interceptorInstance(Class<?> interceptorClass) {
         Object instance = instances.get(interceptorClass);
         if (instance == null) {
             instance = create(interceptorClass);
@@ -434,13 +389,55 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
     }
 
     /**
-     * The chain of the business method invocations of a method.
-     *
-     * @param chain   The interceptors, in the order they are invoked in
-     * @param timeout Whether the method is a timeout method when the scheduler invokes it, which then has a chain of
-     *                its own
+     * The chain of the business method invocations of a method, and the bindings its invocations report, which
+     * depend on nothing but the compiled metadata of the method and are read once, the first time an interceptor
+     * asks for them, rather than for every invocation. Two invocations asking at once may both read them, and read
+     * the same.
      */
-    private record MethodChain(List<InterceptorReference> chain, boolean timeout) {
+    static final class MethodChain {
+
+        private final List<InterceptorReference> chain;
+        private final boolean timeout;
+        private volatile @Nullable List<AnnotationValue<?>> bindingValues;
+        private volatile @Nullable Set<Annotation> bindings;
+
+        /**
+         * Remembers the chain of a method.
+         *
+         * @param chain   The interceptors, in the order they are invoked in
+         * @param timeout Whether the method is a timeout method when the scheduler invokes it, which then has a
+         *                chain of its own
+         */
+        MethodChain(List<InterceptorReference> chain, boolean timeout) {
+            this.chain = chain;
+            this.timeout = timeout;
+        }
+
+        List<InterceptorReference> chain() {
+            return chain;
+        }
+
+        boolean timeout() {
+            return timeout;
+        }
+
+        List<AnnotationValue<?>> bindingValues(Supplier<List<AnnotationValue<?>>> read) {
+            List<AnnotationValue<?>> values = bindingValues;
+            if (values == null) {
+                values = read.get();
+                bindingValues = values;
+            }
+            return values;
+        }
+
+        Set<Annotation> bindings(Supplier<Set<Annotation>> build) {
+            Set<Annotation> built = bindings;
+            if (built == null) {
+                built = build.get();
+                bindings = built;
+            }
+            return built;
+        }
     }
 
     /**

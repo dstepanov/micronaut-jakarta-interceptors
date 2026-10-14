@@ -15,7 +15,7 @@
  */
 /**
  * The kinds of interception the processor records the interceptor methods of a class by, as the
- * {@link io.micronaut.interceptor.spi.InterceptorMethods} of a module building on the interception asks for them.
+ * {@code io.micronaut.interceptor.spi.InterceptorMethods} of a module building on the interception asks for them.
  *
  * @author Denis Stepanov
  * @since 1.0

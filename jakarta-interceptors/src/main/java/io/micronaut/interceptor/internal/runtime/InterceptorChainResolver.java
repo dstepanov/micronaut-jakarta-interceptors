@@ -78,6 +78,9 @@ public final class InterceptorChainResolver {
     private final Map<BeanType<?>, InterceptorBindings> interceptorBindings = new ConcurrentHashMap<>();
     private final Map<ReferenceKey, List<InterceptorReference>> references = new ConcurrentHashMap<>();
     private final Map<AssociatedKey, List<InterceptorReference>> associated = new ConcurrentHashMap<>();
+    // the interceptor classes whose instances are created with an object, by the definition of the object, which is
+    // equal for every bean of it a definition Micronaut compiled creates
+    private final Map<BeanDefinition<?>, List<Class<?>>> interceptorClasses = new ConcurrentHashMap<>();
     // what decides whether an interceptor class a binding binds is enabled: none on its own. Injected rather than
     // looked up on the first chain, so that the resolver holds no state it fills in after it is created
     private final List<BoundInterceptorEnablement> enablements;
@@ -156,6 +159,48 @@ public final class InterceptorChainResolver {
      */
     private static @Nullable AnnotationValue<JakartaInterception> recordedInterception(AnnotationMetadata metadata) {
         return metadata.getTargetAnnotationMetadata().getAnnotation(JakartaInterception.class);
+    }
+
+    /**
+     * Resolves the interceptor classes that interpose on an object the definition creates, whose instances are
+     * created with the object: those of its lifecycle, read from the class, and those of each of its methods.
+     *
+     * <p>Only what this module intercepts is asked for: an element it does not intercept has no chain, and resolving
+     * one would put an empty chain in the map for nothing. An interceptor method the class declares itself runs on
+     * the object, and has no instance of its own. The classes are remembered by the definition, rather than read from
+     * every chain of the object again for every bean of it created; two threads resolving them for one definition
+     * resolve the same.</p>
+     *
+     * @param definition The definition of the object
+     * @return The interceptor classes, each once, in the order they are first met
+     */
+    List<Class<?>> resolveInterceptorClasses(BeanDefinition<?> definition) {
+        List<Class<?>> resolved = interceptorClasses.get(definition);
+        if (resolved == null) {
+            Set<Class<?>> classes = new LinkedHashSet<>();
+            AnnotationMetadata classMetadata = definition.getAnnotationMetadata();
+            if (classMetadata.hasAnnotation(JakartaInterception.class)) {
+                addInterceptorClasses(resolve(InterceptorKind.POST_CONSTRUCT, classMetadata), classes);
+                addInterceptorClasses(resolve(InterceptorKind.PRE_DESTROY, classMetadata), classes);
+            }
+            for (ExecutableMethod<?, ?> method : definition.getExecutableMethods()) {
+                AnnotationMetadata methodMetadata = method.getAnnotationMetadata();
+                if (methodMetadata.hasAnnotation(JakartaInterception.class)) {
+                    addInterceptorClasses(resolve(InterceptorKind.AROUND, methodMetadata), classes);
+                }
+            }
+            resolved = List.copyOf(classes);
+            interceptorClasses.put(definition, resolved);
+        }
+        return resolved;
+    }
+
+    private static void addInterceptorClasses(List<InterceptorReference> chain, Set<Class<?>> classes) {
+        for (InterceptorReference reference : chain) {
+            if (!reference.self()) {
+                classes.add(reference.interceptorClass());
+            }
+        }
     }
 
     /**

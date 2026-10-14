@@ -271,18 +271,8 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      * @param definition The definition of the object
      */
     void createInterceptorInstances(BeanDefinition<?> definition) {
-        AnnotationMetadata classMetadata = definition.getAnnotationMetadata();
-        // only what this module intercepts is asked for: an element it does not intercept has no chain, and
-        // resolving one would put an empty chain in the resolver's map for nothing
-        if (classMetadata.hasAnnotation(JakartaInterception.class)) {
-            createInstancesOf(InterceptorKind.POST_CONSTRUCT, classMetadata);
-            createInstancesOf(InterceptorKind.PRE_DESTROY, classMetadata);
-        }
-        for (ExecutableMethod<?, ?> method : definition.getExecutableMethods()) {
-            AnnotationMetadata methodMetadata = method.getAnnotationMetadata();
-            if (methodMetadata.hasAnnotation(JakartaInterception.class)) {
-                createInstancesOf(InterceptorKind.AROUND, methodMetadata);
-            }
+        for (Class<?> interceptorClass : resolver.resolveInterceptorClasses(definition)) {
+            interceptorInstance(interceptorClass);
         }
     }
 
@@ -310,18 +300,17 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         return false;
     }
 
-    private void createInstancesOf(InterceptorKind kind, AnnotationMetadata metadata) {
-        createInterceptorInstances(resolver.resolve(kind, metadata));
-    }
-
     /**
      * Returns the instance of an interceptor class, creating it the first time it is asked for.
      *
      * @param reference The interceptor
      * @return The instance
      */
-    synchronized Object interceptorInstance(InterceptorReference reference) {
-        Class<?> interceptorClass = reference.interceptorClass();
+    Object interceptorInstance(InterceptorReference reference) {
+        return interceptorInstance(reference.interceptorClass());
+    }
+
+    private synchronized Object interceptorInstance(Class<?> interceptorClass) {
         Object instance = instances.get(interceptorClass);
         if (instance == null) {
             instance = create(interceptorClass);

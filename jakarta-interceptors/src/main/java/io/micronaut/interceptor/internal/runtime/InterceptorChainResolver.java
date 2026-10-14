@@ -40,9 +40,11 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.LongAdder;
 
@@ -287,7 +289,9 @@ public final class InterceptorChainResolver {
         if (bindingsOfElement.isEmpty()) {
             return List.of();
         }
-        List<BeanDefinition<?>> matching = new ArrayList<>();
+        // a class a factory produces as well is indexed by the definition of the factory too, which carries what the
+        // processor recorded on the class; both are described by the one definition, and the class is bound once
+        Set<BeanDefinition<?>> matching = new LinkedHashSet<>();
         for (BeanDefinition<JakartaInterceptorIndex> bound : beanContext.getBeanDefinitions(
             JakartaInterceptorIndex.class, new BoundInterceptorQualifier<>(bindingsOfElement, this::bindingsOf))) {
             BeanDefinition<?> definition = describing(bound.getBeanType());
@@ -298,9 +302,10 @@ public final class InterceptorChainResolver {
                 matching.add(definition);
             }
         }
-        matching.sort(Comparator.<BeanDefinition<?>>comparingInt(InterceptorMethods::priorityOf)
+        List<BeanDefinition<?>> byPriority = new ArrayList<>(matching);
+        byPriority.sort(Comparator.<BeanDefinition<?>>comparingInt(InterceptorMethods::priorityOf)
             .thenComparing(definition -> definition.getBeanType().getName()));
-        return List.copyOf(listedLast(matching));
+        return List.copyOf(listedLast(byPriority));
     }
 
     /**

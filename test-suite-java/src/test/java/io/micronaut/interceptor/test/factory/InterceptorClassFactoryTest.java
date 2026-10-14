@@ -2,7 +2,9 @@ package io.micronaut.interceptor.test.factory;
 
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.context.annotation.Secondary;
+import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.inject.BeanDefinition;
+import io.micronaut.interceptor.spi.InterceptorBindings;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,6 +15,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * An interceptor class declaring {@code @Interceptor} may also be produced by a factory, and the factory then takes
@@ -46,6 +49,22 @@ class InterceptorClassFactoryTest {
     void theInstanceTheFactoryProducedIntercepts() {
         assertEquals("work", context.getBean(AuditedService.class).work());
 
+        assertEquals(List.of("audited by factory"), Calls.RECORDED);
+    }
+
+    /**
+     * The definition of the factory carries what the processor indexed the class under as well, and another module
+     * asking for the interceptor classes bound to the point is answered with the class once, as the chain invokes
+     * it once.
+     */
+    @Test
+    void anInterceptorClassAFactoryProducesIsBoundOnce() {
+        List<BeanDefinition<?>> bound = InterceptorBindings.boundInterceptors(context,
+            InterceptorBindings.ofValues(List.of(AnnotationValue.builder(Audited.class).build())));
+
+        assertEquals(1, bound.size());
+        assertTrue(AuditingInterceptor.class.isAssignableFrom(bound.get(0).getBeanType()));
+        assertEquals("work", context.getBean(AuditedService.class).work());
         assertEquals(List.of("audited by factory"), Calls.RECORDED);
     }
 

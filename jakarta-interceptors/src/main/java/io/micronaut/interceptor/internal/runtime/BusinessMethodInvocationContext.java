@@ -22,8 +22,10 @@ import io.micronaut.core.annotation.Internal;
 import io.micronaut.interceptor.MicronautMethodInvocationContext;
 import org.jspecify.annotations.Nullable;
 
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Set;
 
 /**
  * The {@code InvocationContext} of an {@code @AroundInvoke} interceptor method.
@@ -39,14 +41,28 @@ final class BusinessMethodInvocationContext extends AbstractInvocationContext
     // read out of the schedule as the invocation is created rather than on the first getTimer(): only an invocation
     // the scheduler makes has one, and reading it then leaves the context nothing to fill in later
     private final @Nullable ScheduledTimer timer;
+    // the method the invocation is of, which remembers the bindings its invocations report
+    private final JakartaInterceptorAdvice.MethodChain method;
 
     BusinessMethodInvocationContext(MethodInvocationContext<Object, ?> context,
                                     List<InterceptorReference> chain,
                                     JakartaInterceptorAdvice advice,
-                                    @Nullable AnnotationValue<?> schedule) {
+                                    @Nullable AnnotationValue<?> schedule,
+                                    JakartaInterceptorAdvice.MethodChain method) {
         super(context, chain, advice);
         this.context = context;
         this.timer = schedule == null ? null : ScheduledTimer.of(schedule);
+        this.method = method;
+    }
+
+    @Override
+    List<AnnotationValue<?>> elementBindingValues() {
+        return method.bindingValues(this::readBindingValues);
+    }
+
+    @Override
+    Set<Annotation> elementBindings() {
+        return method.bindings(this::resolveBindings);
     }
 
     @Override

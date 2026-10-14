@@ -38,10 +38,13 @@ import io.micronaut.interceptor.internal.metadata.JakartaInterception;
 import jakarta.interceptor.Interceptor;
 import org.jspecify.annotations.Nullable;
 
+import java.lang.annotation.Annotation;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 /**
@@ -147,7 +150,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
             return context.proceed();
         }
         try {
-            return new BusinessMethodInvocationContext(context, chain, this, schedule).proceed();
+            return new BusinessMethodInvocationContext(context, chain, this, schedule, business).proceed();
         } catch (Exception e) {
             throw sneakyThrow(e);
         }
@@ -397,13 +400,55 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
     }
 
     /**
-     * The chain of the business method invocations of a method.
-     *
-     * @param chain   The interceptors, in the order they are invoked in
-     * @param timeout Whether the method is a timeout method when the scheduler invokes it, which then has a chain of
-     *                its own
+     * The chain of the business method invocations of a method, and the bindings its invocations report, which
+     * depend on nothing but the compiled metadata of the method and are read once, the first time an interceptor
+     * asks for them, rather than for every invocation. Two invocations asking at once may both read them, and read
+     * the same.
      */
-    private record MethodChain(List<InterceptorReference> chain, boolean timeout) {
+    static final class MethodChain {
+
+        private final List<InterceptorReference> chain;
+        private final boolean timeout;
+        private volatile @Nullable List<AnnotationValue<?>> bindingValues;
+        private volatile @Nullable Set<Annotation> bindings;
+
+        /**
+         * Remembers the chain of a method.
+         *
+         * @param chain   The interceptors, in the order they are invoked in
+         * @param timeout Whether the method is a timeout method when the scheduler invokes it, which then has a
+         *                chain of its own
+         */
+        MethodChain(List<InterceptorReference> chain, boolean timeout) {
+            this.chain = chain;
+            this.timeout = timeout;
+        }
+
+        List<InterceptorReference> chain() {
+            return chain;
+        }
+
+        boolean timeout() {
+            return timeout;
+        }
+
+        List<AnnotationValue<?>> bindingValues(Supplier<List<AnnotationValue<?>>> read) {
+            List<AnnotationValue<?>> values = bindingValues;
+            if (values == null) {
+                values = read.get();
+                bindingValues = values;
+            }
+            return values;
+        }
+
+        Set<Annotation> bindings(Supplier<Set<Annotation>> build) {
+            Set<Annotation> built = bindings;
+            if (built == null) {
+                built = build.get();
+                bindings = built;
+            }
+            return built;
+        }
     }
 
     /**

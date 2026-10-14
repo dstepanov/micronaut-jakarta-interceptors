@@ -243,10 +243,30 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     public Set<Annotation> getInterceptorBindings() {
         Set<Annotation> resolved = bindings;
         if (resolved == null) {
-            resolved = resolveBindings();
+            resolved = elementBindings();
             bindings = resolved;
         }
         return resolved;
+    }
+
+    /**
+     * The binding annotations of the intercepted element, built from its metadata. An invocation of an element that
+     * is invoked again and again answers what the element remembers instead.
+     *
+     * @return The binding annotations
+     */
+    Set<Annotation> elementBindings() {
+        return resolveBindings();
+    }
+
+    /**
+     * The binding values of the intercepted element, read from its metadata. An invocation of an element that is
+     * invoked again and again answers what the element remembers instead.
+     *
+     * @return The binding values
+     */
+    List<AnnotationValue<?>> elementBindingValues() {
+        return readBindingValues();
     }
 
     /**
@@ -331,13 +351,13 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     public List<AnnotationValue<?>> getInterceptorBindingValues() {
         List<AnnotationValue<?>> values = bindingValues;
         if (values == null) {
-            values = readBindingValues();
+            values = elementBindingValues();
             bindingValues = values;
         }
         return values;
     }
 
-    private List<AnnotationValue<?>> readBindingValues() {
+    final List<AnnotationValue<?>> readBindingValues() {
         AnnotationMetadata annotationMetadata = bindingMetadata();
         AnnotationValue<JakartaInterception> interception = annotationMetadata.getAnnotation(JakartaInterception.class);
         List<AnnotationValue<Annotation>> recorded = interception == null
@@ -423,7 +443,7 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
         return layers;
     }
 
-    private Set<Annotation> resolveBindings() {
+    final Set<Annotation> resolveBindings() {
         List<AnnotationValue<?>> values = getInterceptorBindingValues();
         if (values.isEmpty()) {
             return Collections.emptySet();

@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
  * What a method declares is declared by that method: an override of it that does not declare it again does not have
@@ -101,9 +102,11 @@ class OverriddenMethodBindingsTest {
     public static class RemarkReportingInterceptor {
 
         static final List<String> REMARKS = new ArrayList<>();
+        static final List<Object> REPORTED = new ArrayList<>();
 
         @AroundInvoke
         public Object around(InvocationContext context) throws Exception {
+            REPORTED.add(((MicronautInvocationContext) context).getInterceptorBindingValues());
             for (AnnotationValue<?> value : ((MicronautInvocationContext) context).getInterceptorBindingValues()) {
                 if (value.getAnnotationName().equals(Remarked.class.getName())) {
                     REMARKS.add(value.stringValue().orElse(""));
@@ -148,6 +151,23 @@ class OverriddenMethodBindingsTest {
             context.getBean(RemarkedPlainOverridingService.class).remarked();
 
             assertEquals(List.of("of the class", "of the class"), List.copyOf(RemarkReportingInterceptor.REMARKS));
+        }
+    }
+
+    /**
+     * The bindings of a method depend on nothing but its compiled metadata, and are read once for the method of a bean
+     * rather than again for each of its invocations.
+     */
+    @Test
+    void theBindingsOfAMethodAreReadOnceForItsInvocations() {
+        try (ApplicationContext context = ApplicationContext.run()) {
+            RemarkReportingInterceptor.REPORTED.clear();
+            RemarkedPlainOverridingService service = context.getBean(RemarkedPlainOverridingService.class);
+            service.remarked();
+            service.remarked();
+
+            assertEquals(2, RemarkReportingInterceptor.REPORTED.size());
+            assertSame(RemarkReportingInterceptor.REPORTED.get(0), RemarkReportingInterceptor.REPORTED.get(1));
         }
     }
 

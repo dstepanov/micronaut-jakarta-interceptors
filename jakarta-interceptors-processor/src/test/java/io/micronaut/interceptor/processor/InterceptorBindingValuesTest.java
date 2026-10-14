@@ -110,7 +110,8 @@ class InterceptorBindingValuesTest {
 
     /**
      * A member excluded from the binding is left out of the value written out, and listed under
-     * {@code $nonBinding}, whether the occurrence recorded it or only the annotation type excludes it.
+     * {@code $nonBinding}. The ones an occurrence records are read off it, which Micronaut lists along with the
+     * member it lists them under; the type's are not asked for, as Micronaut records every one of them.
      */
     @Test
     void theExcludedMembersAreLeftOutAndListed() {
@@ -118,11 +119,12 @@ class InterceptorBindingValuesTest {
             .member("value", "a")
             .member("comment", "x")
             .member("note", "y")
-            .member(AnnotationUtil.NON_BINDING_ATTRIBUTE, new String[]{"comment"})
+            .member(AnnotationUtil.NON_BINDING_ATTRIBUTE, new String[]{"comment", "note",
+                AnnotationUtil.NON_BINDING_ATTRIBUTE})
             .build();
 
         BindingValue binding =
-            InterceptorBindingValues.of(declared, name -> List.of("note"));
+            InterceptorBindingValues.of(declared, name -> List.of("value"));
 
         assertEquals(Map.of("value", "a"), binding.members());
         AnnotationValue<?> written = binding.toAnnotationValue();
@@ -131,6 +133,24 @@ class InterceptorBindingValuesTest {
         assertArrayEquals(new String[]{"comment", "note"}, written.stringValues(AnnotationUtil.NON_BINDING_ATTRIBUTE));
         assertTrue(InterceptorBindings.ofValues(List.of(written)).isBoundBy(InterceptorBindings.ofValues(List.of(
             AnnotationValue.builder(BINDING).member("value", "a").member("comment", "z").member("note", "w").build()))));
+    }
+
+    /**
+     * An annotation a member of a binding holds is recorded without the members its type excludes, so those are
+     * supplied off the type.
+     */
+    @Test
+    void anAnnotationAMemberHoldsHasTheMembersItsTypeExcludesLeftOut() {
+        AnnotationValue<?> held = AnnotationValue.builder("test.Held").member("value", "a").member("note", "y").build();
+        AnnotationValue<?> declared = AnnotationValue.builder(BINDING).member("value", held).build();
+
+        BindingValue binding = InterceptorBindingValues.of(declared,
+            name -> name.equals("test.Held") ? List.of("note") : List.of());
+
+        AnnotationValue<?> written = (AnnotationValue<?>) binding.members().get("value");
+        assertEquals("a", written.stringValue().orElse(null));
+        assertFalse(written.contains("note"));
+        assertArrayEquals(new String[]{"note"}, written.stringValues(AnnotationUtil.NON_BINDING_ATTRIBUTE));
     }
 
     /**

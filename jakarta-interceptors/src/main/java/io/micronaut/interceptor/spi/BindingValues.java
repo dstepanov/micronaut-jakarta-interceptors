@@ -91,9 +91,9 @@ public final class BindingValues {
      * AnnotationValue) match} share.
      *
      * <p>It is the hash code of the name of the annotation alone. Two values are compared without the members either
-     * of them lists as excluded, so a member one of them binds by may take no part in the comparison; and Micronaut
-     * lists an excluded member only on a declaration that gives it a value. No member is therefore hashed, as none is
-     * certain to take part.</p>
+     * of them lists as excluded, so a member one of them binds by may take no part in the comparison; and a value
+     * built from an annotation instance, or held by a member of another annotation, lists no excluded member at all.
+     * No member is therefore hashed, as none is certain to take part.</p>
      *
      * @param value The value of a binding annotation
      * @return The hash code

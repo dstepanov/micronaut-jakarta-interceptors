@@ -122,8 +122,9 @@ public final class InterceptorBindings {
      *
      * <p>A value lists the members excluded from its binding under
      * {@value AnnotationUtil#NON_BINDING_ATTRIBUTE}. Those are left out wherever it is compared, and so are the
-     * ones the other side of the comparison lists; the processor lists every member the annotation type excludes,
-     * so a value that lists none still compares by the members that bind.</p>
+     * ones the other side of the comparison lists. Micronaut lists every member the annotation type excludes on each
+     * occurrence it records, and so does the processor on each binding it records, so a value that lists none, one
+     * built from an annotation instance, still compares by the members that bind.</p>
      *
      * <p>A repeatable binding is as many values as it has occurrences; two values that are the same binding are
      * one.</p>

@@ -41,7 +41,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.Function;
 
 /**
  * The part of {@link InvocationContext} that is the same whichever element is being intercepted.
@@ -361,9 +360,10 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
      *
      * <p>The metadata of a method is a hierarchy of the metadata of its class and its own, and asked as a whole it
      * merges the members of a binding both declare, where the declaration of the method replaces the one of its
-     * class whole; so the layers are read apart. The metadata of a method also holds the annotations of the method it
-     * overrides, which may carry the annotation of the binding with other members, so an occurrence is taken only
-     * where it is the binding recorded.</p>
+     * class whole; so the layers are read apart. The layer of a method also holds the annotations of the method it
+     * overrides, which are not declarations of the method, so there an occurrence is taken only where the method
+     * declares it, or an annotation the method declares carries it - as the processor reads the bindings of the
+     * method. Within the layer of the class, an occurrence is taken only where it is the binding recorded.</p>
      *
      * @param metadata The metadata of the element
      * @param recorded The binding as the processor recorded it
@@ -372,63 +372,53 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     private static AnnotationValue<?> declarationOf(AnnotationMetadata metadata, AnnotationValue<?> recorded) {
         String name = recorded.getAnnotationName();
         BindingValue binding = BindingValue.ofRecorded(recorded);
-        AnnotationValue<?> declaration = nearestLayer(metadata, layer -> {
-            for (AnnotationValue<?> occurrence : occurrencesOf(layer, name)) {
+        List<AnnotationMetadata> layers = nearestFirst(metadata);
+        for (int i = 0; i < layers.size(); i++) {
+            // the last layer is the class, and every one before it is the element's own
+            boolean own = i < layers.size() - 1;
+            for (AnnotationValue<?> occurrence : occurrencesOf(layers.get(i), name, own)) {
                 if (BindingValue.of(occurrence).matches(binding)) {
                     return occurrence;
                 }
             }
-            return null;
-        });
-        return declaration == null ? recorded : declaration;
+        }
+        return recorded;
     }
 
     /**
      * The occurrences of an annotation one layer of the metadata holds, the ones the element declares itself first.
+     * In a layer of the element's own, the occurrences of the method it overrides are left out: only what the layer
+     * declares, and what an annotation it declares carries, is read.
      */
-    private static List<AnnotationValue<?>> occurrencesOf(AnnotationMetadata layer, String name) {
+    private static List<AnnotationValue<?>> occurrencesOf(AnnotationMetadata layer, String name, boolean own) {
         List<AnnotationValue<?>> occurrences = new ArrayList<>(2);
+        boolean carried = !own || layer.getDeclaredStereotypeAnnotationNames().contains(name);
         if (layer.findRepeatableAnnotation(name).isPresent()) {
             occurrences.addAll(layer.getDeclaredAnnotationValuesByName(name));
-            occurrences.addAll(layer.getAnnotationValuesByName(name));
+            if (carried) {
+                occurrences.addAll(layer.getAnnotationValuesByName(name));
+            }
         } else {
             layer.findDeclaredAnnotation(name).ifPresent(occurrences::add);
-            layer.findAnnotation(name).ifPresent(occurrences::add);
+            if (carried) {
+                layer.findAnnotation(name).ifPresent(occurrences::add);
+            }
         }
         return occurrences;
     }
 
     /**
-     * Reads the nearest layer of the metadata that answers: the element's own where it answers, its class's
-     * otherwise.
-     *
      * @param metadata The metadata, a hierarchy or a single layer
-     * @param read     Reads one layer, answering {@code null} where the layer has nothing to say
-     * @param <V>      What is read
-     * @return What the nearest layer that answers read, or {@code null} where none does
+     * @return The layers of the metadata from the element itself to the root, its class
      */
-    private static <V> @Nullable V nearestLayer(AnnotationMetadata metadata,
-                                                Function<AnnotationMetadata, @Nullable V> read) {
-        if (metadata instanceof AnnotationMetadataHierarchy hierarchy) {
-            for (AnnotationMetadata layer : nearestFirst(hierarchy)) {
-                V answer = nearestLayer(layer, read);
-                if (answer != null) {
-                    return answer;
-                }
-            }
-            return null;
+    private static List<AnnotationMetadata> nearestFirst(AnnotationMetadata metadata) {
+        if (!(metadata instanceof AnnotationMetadataHierarchy hierarchy)) {
+            return List.of(metadata);
         }
-        return read.apply(metadata);
-    }
-
-    /**
-     * @return The layers of a hierarchy from the element itself to the root, its class
-     */
-    private static List<AnnotationMetadata> nearestFirst(AnnotationMetadataHierarchy hierarchy) {
         List<AnnotationMetadata> layers = new ArrayList<>(2);
         // the hierarchy iterates from the root, the class, to the element itself
         for (AnnotationMetadata layer : hierarchy) {
-            layers.add(0, layer);
+            layers.addAll(0, nearestFirst(layer));
         }
         return layers;
     }

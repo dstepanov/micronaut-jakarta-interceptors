@@ -1,13 +1,24 @@
 package io.micronaut.interceptor.test.cdi;
 
 import io.micronaut.context.ApplicationContext;
+import io.micronaut.core.annotation.AnnotationValue;
+import io.micronaut.interceptor.MicronautInvocationContext;
+import jakarta.enterprise.util.Nonbinding;
 import jakarta.inject.Singleton;
 import jakarta.interceptor.AroundInvoke;
 import jakarta.interceptor.ExcludeClassInterceptors;
+import jakarta.interceptor.Interceptor;
+import jakarta.interceptor.InterceptorBinding;
 import jakarta.interceptor.Interceptors;
 import jakarta.interceptor.InvocationContext;
 import org.junit.jupiter.api.Test;
 
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Inherited;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -73,6 +84,70 @@ class OverriddenMethodBindingsTest {
         @Override
         public void excluding() {
             Calls.RECORDED.add("overridden");
+        }
+    }
+
+    @InterceptorBinding
+    @Inherited
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target({ElementType.TYPE, ElementType.METHOD})
+    public @interface Remarked {
+        @Nonbinding
+        String value() default "";
+    }
+
+    @Remarked
+    @Interceptor
+    public static class RemarkReportingInterceptor {
+
+        static final List<String> REMARKS = new ArrayList<>();
+
+        @AroundInvoke
+        public Object around(InvocationContext context) throws Exception {
+            for (AnnotationValue<?> value : ((MicronautInvocationContext) context).getInterceptorBindingValues()) {
+                if (value.getAnnotationName().equals(Remarked.class.getName())) {
+                    REMARKS.add(value.stringValue().orElse(""));
+                }
+            }
+            return context.proceed();
+        }
+    }
+
+    public interface RemarkedContract {
+        @Remarked("of the overridden method")
+        void remarked();
+    }
+
+    @Singleton
+    @Remarked("of the class")
+    public static class RemarkedOverridingService implements RemarkedContract {
+        @Override
+        @Monitored
+        public void remarked() {
+        }
+    }
+
+    @Singleton
+    @Remarked("of the class")
+    public static class RemarkedPlainOverridingService implements RemarkedContract {
+        @Override
+        public void remarked() {
+        }
+    }
+
+    /**
+     * The binding of an override bound at its class is reported as the class declared it, not as the overridden
+     * method did, although the two are the same binding: the overridden method's declaration is not the override's,
+     * whether the override declares a binding of its own or none.
+     */
+    @Test
+    void theBindingOfAClassIsReportedAsTheClassDeclaredItRatherThanAsAnOverriddenMethodDid() {
+        try (ApplicationContext context = ApplicationContext.run()) {
+            RemarkReportingInterceptor.REMARKS.clear();
+            context.getBean(RemarkedOverridingService.class).remarked();
+            context.getBean(RemarkedPlainOverridingService.class).remarked();
+
+            assertEquals(List.of("of the class", "of the class"), List.copyOf(RemarkReportingInterceptor.REMARKS));
         }
     }
 

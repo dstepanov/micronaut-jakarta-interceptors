@@ -372,8 +372,16 @@ public final class InterceptorChainResolver {
      * by the bean context.</p>
      */
     private @Nullable BeanDefinition<?> describing(Class<?> interceptorClass) {
-        return describing.computeIfAbsent(interceptorClass, type -> Optional.ofNullable(describe(type)))
-            .orElse(null);
+        Optional<BeanDefinition<?>> described = describing.get(interceptorClass);
+        if (described == null) {
+            // looking the definitions of the class up evaluates their conditions, and a condition may create a bean
+            // that is intercepted, which resolves a chain and asks this again. Doing it inside a computeIfAbsent
+            // would hold a lock of the map across the bean context and fail that second ask as a recursive update;
+            // two threads describing one class find the same definition, so the later put loses nothing
+            described = Optional.ofNullable(describe(interceptorClass));
+            describing.put(interceptorClass, described);
+        }
+        return described.orElse(null);
     }
 
     /**

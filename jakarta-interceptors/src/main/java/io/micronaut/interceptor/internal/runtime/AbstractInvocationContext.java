@@ -452,8 +452,8 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
      * The type of a binding annotation the element carries, found by its name.
      *
      * <p>A binding whose builder Micronaut generated with {@code @RegisterAnnotations} is found through the builder,
-     * which knows its type. Any other is a class found by its name, which is left to the reflection module, as is
-     * building its instances.</p>
+     * which knows its type. Any other is a class found by its name, whose instances are left to the reflection
+     * module to build.</p>
      */
     private static Optional<? extends Class<? extends Annotation>> bindingType(AnnotationMetadata metadata,
                                                                               String name,
@@ -462,8 +462,10 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
         if (builder.isPresent()) {
             return Optional.of(builder.get().annotationType());
         }
+        // finding the class asks nothing of the reflection module, but building its instance does, so its absence
+        // is reported here, before the type is looked for
         requireReflectionModule(accessor);
-        return PlatformReflection.annotationType(metadata, name);
+        return metadata.getAnnotationType(name);
     }
 
     /**

@@ -3,6 +3,7 @@ package io.micronaut.interceptor.test.cdi;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.interceptor.MicronautInvocationContext;
+import io.micronaut.interceptor.spi.InterceptorBindings;
 import jakarta.enterprise.util.Nonbinding;
 import jakarta.inject.Singleton;
 import jakarta.interceptor.AroundInvoke;
@@ -151,6 +152,24 @@ class OverriddenMethodBindingsTest {
             context.getBean(RemarkedPlainOverridingService.class).remarked();
 
             assertEquals(List.of("of the class", "of the class"), List.copyOf(RemarkReportingInterceptor.REMARKS));
+        }
+    }
+
+    /**
+     * Another module asks for the declarations of the bindings of an element as its invocations report them.
+     */
+    @Test
+    void anotherModuleIsAnsweredWithTheDeclarationsTheInvocationsReport() {
+        try (ApplicationContext context = ApplicationContext.run()) {
+            List<String> remarks = new ArrayList<>();
+            for (AnnotationValue<?> declaration : InterceptorBindings.declarations(context
+                .getBeanDefinition(RemarkedOverridingService.class).getRequiredMethod("remarked").getAnnotationMetadata())) {
+                if (declaration.getAnnotationName().equals(Remarked.class.getName())) {
+                    remarks.add(declaration.stringValue().orElse(""));
+                }
+            }
+
+            assertEquals(List.of("of the class"), remarks);
         }
     }
 

@@ -15,16 +15,14 @@
  */
 package io.micronaut.interceptor.internal.runtime;
 
-import io.micronaut.interceptor.internal.metadata.BindingValue;
-import io.micronaut.interceptor.internal.metadata.JakartaInterception;
 import io.micronaut.core.annotation.AnnotationBuilder;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.core.convert.value.MutableConvertibleValues;
 import io.micronaut.core.type.Argument;
-import io.micronaut.inject.annotation.AnnotationMetadataHierarchy;
 import io.micronaut.interceptor.MicronautInvocationContext;
+import io.micronaut.interceptor.spi.InterceptorBindings;
 import io.micronaut.reflection.ReflectionExecutables;
 import jakarta.interceptor.InvocationContext;
 import org.jspecify.annotations.Nullable;
@@ -32,7 +30,6 @@ import org.jspecify.annotations.Nullable;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -358,89 +355,7 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     }
 
     final List<AnnotationValue<?>> readBindingValues() {
-        AnnotationMetadata annotationMetadata = bindingMetadata();
-        AnnotationValue<JakartaInterception> interception = annotationMetadata.getAnnotation(JakartaInterception.class);
-        List<AnnotationValue<Annotation>> recorded = interception == null
-            ? List.of()
-            : interception.getAnnotations(JakartaInterception.BINDINGS);
-        if (recorded.isEmpty()) {
-            return List.of();
-        }
-        List<AnnotationValue<?>> values = new ArrayList<>(recorded.size());
-        for (AnnotationValue<Annotation> binding : recorded) {
-            values.add(declarationOf(annotationMetadata, binding));
-        }
-        return Collections.unmodifiableList(values);
-    }
-
-    /**
-     * The declaration a recorded binding was reduced from: the nearest occurrence of its annotation that is the same
-     * binding, read one layer of the metadata at a time and, within a layer, what the element declares itself before
-     * what it carries otherwise.
-     *
-     * <p>The metadata of a method is a hierarchy of the metadata of its class and its own, and asked as a whole it
-     * merges the members of a binding both declare, where the declaration of the method replaces the one of its
-     * class whole; so the layers are read apart. The layer of a method also holds the annotations of the method it
-     * overrides, which are not declarations of the method, so there an occurrence is taken only where the method
-     * declares it, or an annotation the method declares carries it - as the processor reads the bindings of the
-     * method. Within the layer of the class, an occurrence is taken only where it is the binding recorded.</p>
-     *
-     * @param metadata The metadata of the element
-     * @param recorded The binding as the processor recorded it
-     * @return The declaration, or what was recorded where no declaration is the binding
-     */
-    private static AnnotationValue<?> declarationOf(AnnotationMetadata metadata, AnnotationValue<?> recorded) {
-        String name = recorded.getAnnotationName();
-        BindingValue binding = BindingValue.ofRecorded(recorded);
-        List<AnnotationMetadata> layers = nearestFirst(metadata);
-        for (int i = 0; i < layers.size(); i++) {
-            // the last layer is the class, and every one before it is the element's own
-            boolean own = i < layers.size() - 1;
-            for (AnnotationValue<?> occurrence : occurrencesOf(layers.get(i), name, own)) {
-                if (BindingValue.of(occurrence).matches(binding)) {
-                    return occurrence;
-                }
-            }
-        }
-        return recorded;
-    }
-
-    /**
-     * The occurrences of an annotation one layer of the metadata holds, the ones the element declares itself first.
-     * In a layer of the element's own, the occurrences of the method it overrides are left out: only what the layer
-     * declares, and what an annotation it declares carries, is read.
-     */
-    private static List<AnnotationValue<?>> occurrencesOf(AnnotationMetadata layer, String name, boolean own) {
-        List<AnnotationValue<?>> occurrences = new ArrayList<>(2);
-        boolean carried = !own || layer.getDeclaredStereotypeAnnotationNames().contains(name);
-        if (layer.findRepeatableAnnotation(name).isPresent()) {
-            occurrences.addAll(layer.getDeclaredAnnotationValuesByName(name));
-            if (carried) {
-                occurrences.addAll(layer.getAnnotationValuesByName(name));
-            }
-        } else {
-            layer.findDeclaredAnnotation(name).ifPresent(occurrences::add);
-            if (carried) {
-                layer.findAnnotation(name).ifPresent(occurrences::add);
-            }
-        }
-        return occurrences;
-    }
-
-    /**
-     * @param metadata The metadata, a hierarchy or a single layer
-     * @return The layers of the metadata from the element itself to the root, its class
-     */
-    private static List<AnnotationMetadata> nearestFirst(AnnotationMetadata metadata) {
-        if (!(metadata instanceof AnnotationMetadataHierarchy hierarchy)) {
-            return List.of(metadata);
-        }
-        List<AnnotationMetadata> layers = new ArrayList<>(2);
-        // the hierarchy iterates from the root, the class, to the element itself
-        for (AnnotationMetadata layer : hierarchy) {
-            layers.addAll(0, nearestFirst(layer));
-        }
-        return layers;
+        return InterceptorBindings.declarations(bindingMetadata());
     }
 
     final Set<Annotation> resolveBindings() {

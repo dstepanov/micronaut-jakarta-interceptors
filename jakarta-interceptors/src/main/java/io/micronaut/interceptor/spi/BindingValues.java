@@ -64,6 +64,12 @@ public final class BindingValues {
      * defaults the value carries filled in, spelt as Micronaut records them, and the members excluded from the
      * binding listed under {@value AnnotationUtil#NON_BINDING_ATTRIBUTE}, as the processor records a binding.
      *
+     * <p>The members excluded are the ones the value lists itself, and no others: the annotation type is not read.
+     * A value Micronaut read from the metadata of an element lists every member its type excludes, so it is brought
+     * into shape completely. A value built from an annotation instance, or held by a member of another annotation,
+     * lists none, and keeps the members its type excludes; {@link #matches(AnnotationValue, AnnotationValue)} still
+     * leaves them out where the other value lists them.</p>
+     *
      * <p>The value returned is the caller's, a new one on every call. Brought into shape again, it is the same.</p>
      *
      * @param value The value of a binding annotation, read from metadata or built from an annotation instance

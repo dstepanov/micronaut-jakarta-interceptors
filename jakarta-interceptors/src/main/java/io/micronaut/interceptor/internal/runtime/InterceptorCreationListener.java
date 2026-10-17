@@ -37,10 +37,12 @@ import java.util.concurrent.ConcurrentHashMap;
  * object. Creating them through that advice is what makes them the same instances the interceptions of the object go
  * on to use, rather than a second set nobody reads.</p>
  *
- * <p>It is only needed for the subclass Micronaut generates to intercept the methods of a class: the advice of a
- * proxy with a separate target, lazily resolved or not, and of an intercepted lifecycle is handed the bean it is
- * created for, and creates the instances itself, see {@link JakartaInterceptorAdvice}. The advice of the subclass is
- * handed none.</p>
+ * <p>It is only needed for a bean created through {@code BeanContext.createBean}. Micronaut hands the advice of a
+ * bean it creates for a lookup or an injection the bean it is created for - the subclass it generates to intercept
+ * the methods of a class, the target of a proxy, and the bean whose lifecycle is intercepted alike - and the advice
+ * creates the instances itself, see {@link JakartaInterceptorAdvice}; such an advice is asked for nothing here. The
+ * advice of a bean created through {@code createBean} is handed none, because Micronaut creates that bean without
+ * the creation its lookups begin, which is what the bean is known to the interceptors by.</p>
  *
  * <p>Micronaut offers no listener narrowed to the beans an annotation is declared on, so this one is handed every
  * bean the context creates. It returns at once for an object whose definition declares nothing this module

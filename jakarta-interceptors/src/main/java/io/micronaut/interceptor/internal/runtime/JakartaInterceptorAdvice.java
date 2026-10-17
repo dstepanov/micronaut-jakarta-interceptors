@@ -81,6 +81,8 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      */
     private final BeanDependencyResolver dependencies;
     private final Map<Class<?>, Object> instances = new HashMap<>(4);
+    /** Whether Micronaut handed this advice the bean it is created for, whose instances it created at once. */
+    private final boolean toldTheBean;
     /**
      * The business method chain of each method of the object, by the identity of the method, so that a call reads
      * neither the interception of the method nor the resolver's map. Copied on write: a method is added once, and
@@ -93,13 +95,19 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      * Creates the advice of one object.
      *
      * <p>Section 2.3 has an interceptor instance created for each interceptor class when the object it intercepts
-     * is created, whether or not anything is ever invoked on that object. Where Micronaut hands the advice the bean it
-     * is created for - the target of a proxy that resolves its interceptors for each target, which a proxy resolving
-     * its target lazily first resolves on its first call, and the bean whose lifecycle is intercepted - every
-     * interceptor instance that will interpose on the object is created here, from that definition, which carries the
-     * qualifier of the bean: two beans of one class, two of one {@code @EachBean} among them, are told apart.
-     * Micronaut hands none to the advice of a subclass it generates to intercept the methods of a class, whose
-     * instances {@link InterceptorCreationListener} creates as the object is created.</p>
+     * is created, whether or not anything is ever invoked on that object. Micronaut hands the advice the bean it is
+     * created for - the subclass it generates to intercept the methods of a class, the target of a proxy that
+     * resolves its interceptors for each target, which a proxy resolving its target lazily first resolves on its
+     * first call, and the bean whose lifecycle is intercepted - and every interceptor instance that will interpose on
+     * the object is created here, from that definition, which carries the qualifier of the bean: two beans of one
+     * class, two of one {@code @EachBean} among them, are told apart. The one advice Micronaut creates for a bean
+     * that declares several of these interceptions is handed the bean once, and creates the instances once.</p>
+     *
+     * <p>Micronaut hands none to the advice of a bean created through {@code BeanContext.createBean}, which it
+     * creates without the creation its lookups begin, nor to the advice of a proxy whose target the context holds no
+     * registration for. The instances of the former are created by {@link InterceptorCreationListener} as the bean is
+     * created; the latter creates the instance of an interceptor class as the first chain that runs it is
+     * resolved.</p>
      *
      * @param resolver     The resolver of the interceptor chains
      * @param dependencies What the interceptor instances are resolved through, which owns those it creates
@@ -109,8 +117,9 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
                                     @Nullable InterceptionTarget target) {
         this.resolver = resolver;
         this.dependencies = dependencies;
+        this.toldTheBean = target != null;
         if (target != null) {
-            createInterceptorInstances(target.definition());
+            createInterceptorInstancesOf(target.definition());
         }
     }
 
@@ -256,6 +265,22 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
     }
 
     /**
+     * Creates now every interceptor instance that will interpose on the given object, unless Micronaut handed the
+     * advice the bean as it was created, which created them then.
+     *
+     * <p>Called by {@link InterceptorCreationListener} as the object is created, on the advice bound to it, which
+     * is the advice whose instances every interception of that object goes on to use. An instance created already
+     * is not created again.</p>
+     *
+     * @param definition The definition of the object
+     */
+    void createInterceptorInstances(BeanDefinition<?> definition) {
+        if (!toldTheBean) {
+            createInterceptorInstancesOf(definition);
+        }
+    }
+
+    /**
      * Creates now every interceptor instance that will interpose on the given object.
      *
      * <p>The specification creates an interceptor instance when the object it intercepts is created, whether or
@@ -263,14 +288,9 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      * happens then. Resolving a chain the first time it is proceeded would instead create the instances of a
      * method's interceptors only once that method is called, and never for a method nobody calls.</p>
      *
-     * <p>Called as the advice is created, from the definition Micronaut hands it of the bean it is created for, and
-     * otherwise by {@link InterceptorCreationListener} as the object is created, on the advice bound to it, which is
-     * the advice whose instances every interception of that object goes on to use. An instance created already is
-     * not created again.</p>
-     *
      * @param definition The definition of the object
      */
-    void createInterceptorInstances(BeanDefinition<?> definition) {
+    private void createInterceptorInstancesOf(BeanDefinition<?> definition) {
         for (Class<?> interceptorClass : resolver.resolveInterceptorClasses(definition)) {
             interceptorInstance(interceptorClass);
         }

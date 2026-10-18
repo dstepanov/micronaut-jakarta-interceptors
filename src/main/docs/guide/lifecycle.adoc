@@ -80,6 +80,10 @@ resolves its target lazily, may swap it, or fronts a target that already existed
 `lazyInterceptorsPerTarget = true` on the `@Around` of every such bean it intercepts: Micronaut then keeps the
 interceptors of a target with the target, and the proxy intercepts each call with those of its target.
 
+Whichever shape the bean has, Micronaut tells the interceptors it creates for the bean which bean that is, through
+its `InterceptionTarget`, and every interceptor instance of the object is created then, from the definition of that
+bean, which carries its qualifier: two beans of one class, two of one `@EachBean` among them, are told apart.
+
 An interceptor declared `@Singleton` is shared by every object it intercepts and belongs to none of them, so it
 is destroyed with the context, as any other singleton is - after the objects it intercepted, so that the
 pre-destroy interception of each of them runs on an instance that is still open. The interceptor instances of a prototype that is never

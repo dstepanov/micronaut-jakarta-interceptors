@@ -163,13 +163,17 @@ public final class InterceptorChainResolver {
 
     /**
      * Resolves the interceptor classes that interpose on an object the definition creates, whose instances are
-     * created with the object: those of its lifecycle, read from the class, and those of each of its methods.
+     * created with the object: those of its construction, read from the constructor, those of its lifecycle, read
+     * from the class, and those of each of its methods.
      *
-     * <p>Only what this module intercepts is asked for: an element it does not intercept has no chain, and resolving
-     * one would put an empty chain in the map for nothing. An interceptor method the class declares itself runs on
-     * the object, and has no instance of its own. The classes are remembered by the definition, rather than read from
-     * every chain of the object again for every bean of it created; two threads resolving them for one definition
-     * resolve the same.</p>
+     * <p>Those of the construction come first, as the ones the construction of the object runs through: Micronaut
+     * creates the advice of a subclass it generates as it resolves the arguments of the constructor, before the
+     * around-construct chain starts, and the instances are created in this order then. Only what this module
+     * intercepts is asked for: an element it does not intercept has no chain, and resolving one would put an empty
+     * chain in the map for nothing. An interceptor method the class declares itself runs on the object, and has no
+     * instance of its own. The classes are remembered by the definition, rather than read from every chain of the
+     * object again for every bean of it created; two threads resolving them for one definition resolve the
+     * same.</p>
      *
      * @param definition The definition of the object
      * @return The interceptor classes, each once, in the order they are first met
@@ -178,6 +182,11 @@ public final class InterceptorChainResolver {
         List<Class<?>> resolved = interceptorClasses.get(definition);
         if (resolved == null) {
             Set<Class<?>> classes = new LinkedHashSet<>();
+            AnnotationMetadata constructorMetadata = definition.getConstructor().getAnnotationMetadata();
+            if (constructorMetadata.hasAnnotation(JakartaInterception.class)) {
+                addInterceptorClasses(resolve(InterceptorKind.AROUND_CONSTRUCT, constructorMetadata), classes);
+                addInterceptorClasses(resolveAssociated(constructorMetadata), classes);
+            }
             AnnotationMetadata classMetadata = definition.getAnnotationMetadata();
             if (classMetadata.hasAnnotation(JakartaInterception.class)) {
                 addInterceptorClasses(resolve(InterceptorKind.POST_CONSTRUCT, classMetadata), classes);

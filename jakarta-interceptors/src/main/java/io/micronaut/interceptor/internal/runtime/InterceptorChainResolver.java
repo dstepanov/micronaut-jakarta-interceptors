@@ -34,6 +34,7 @@ import io.micronaut.interceptor.internal.metadata.JakartaInterception;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorIndex;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorMethods;
 import jakarta.inject.Singleton;
+import jakarta.interceptor.InvocationContext;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -438,12 +439,38 @@ public final class InterceptorChainResolver {
                 || definition.getAnnotation(JakartaInterceptorMethods.class) == null) {
                 continue;
             }
-            if (!definition.getExecutableMethods().isEmpty()) {
+            // a bean a factory produces carries what its class records as well, but a proxy of it exposes the
+            // methods it advises rather than the interceptor methods, so the definition kept is the one that has
+            // an executable method for each of them
+            if (hasRecordedMethods(definition)) {
                 return definition;
             }
             fallback = definition;
         }
         return fallback;
+    }
+
+    /**
+     * Whether a definition has an executable method for every interceptor method recorded on it, which the
+     * definition Micronaut generated from the class does and another definition of the class need not.
+     */
+    private static boolean hasRecordedMethods(BeanDefinition<?> definition) {
+        AnnotationValue<JakartaInterceptorMethods> recorded = definition.getAnnotation(JakartaInterceptorMethods.class);
+        if (recorded == null || definition.getExecutableMethods().isEmpty()) {
+            return false;
+        }
+        for (InterceptionKind kind : InterceptionKind.values()) {
+            for (String name : recorded.stringValues(kind.member())) {
+                boolean found = definition.findPossibleMethods(name).anyMatch(method -> {
+                    Class<?>[] argumentTypes = method.getArgumentTypes();
+                    return argumentTypes.length == 1 && argumentTypes[0] == InvocationContext.class;
+                });
+                if (!found) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     /**

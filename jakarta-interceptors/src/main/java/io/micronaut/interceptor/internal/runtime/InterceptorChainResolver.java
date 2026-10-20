@@ -67,9 +67,9 @@ public final class InterceptorChainResolver {
     private final BeanContext beanContext;
     private final Map<ChainKey, List<InterceptorReference>> chains = new ConcurrentHashMap<>();
     // the chains again, under the interception as the processor recorded it, so that finding the chain of an element
-    // a second time reads nothing into a ChainKey
+    // a second time reads nothing into a ChainKey. The associated interceptors of a construction are kept here too,
+    // under a key of no kind, which no key of a chain is equal to
     private final Map<RecordedKey, List<InterceptorReference>> recorded = new ConcurrentHashMap<>();
-    private final Map<RecordedKey, List<InterceptorReference>> recordedAssociated = new ConcurrentHashMap<>();
     private final LongAdder readInterceptions = new LongAdder();
     // an interceptor class describes itself the same way whichever element its chain was resolved for, so what is
     // read of it is read once rather than once for every element it intercepts
@@ -231,7 +231,7 @@ public final class InterceptorChainResolver {
             return List.of();
         }
         RecordedKey recordedKey = RecordedKey.of(null, interception);
-        List<InterceptorReference> resolved = recordedAssociated.get(recordedKey);
+        List<InterceptorReference> resolved = recorded.get(recordedKey);
         if (resolved != null) {
             return resolved;
         }
@@ -253,7 +253,7 @@ public final class InterceptorChainResolver {
             resolved = List.copyOf(all);
             associated.put(key, resolved);
         }
-        recordedAssociated.put(recordedKey, resolved);
+        recorded.put(recordedKey, resolved);
         return resolved;
     }
 

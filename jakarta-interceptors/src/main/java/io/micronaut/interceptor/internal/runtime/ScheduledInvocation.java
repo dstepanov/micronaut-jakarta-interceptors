@@ -18,6 +18,8 @@ package io.micronaut.interceptor.internal.runtime;
 import io.micronaut.aop.MethodInvocationContext;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
+import io.micronaut.core.propagation.PropagatedContext;
+import io.micronaut.core.propagation.PropagatedContextElement;
 import io.micronaut.inject.ExecutableMethod;
 import io.micronaut.scheduling.ScheduledExecution;
 import org.jspecify.annotations.Nullable;
@@ -40,27 +42,57 @@ final class ScheduledInvocation {
     }
 
     /**
-     * The schedule that triggered the invocation of a method.
+     * Enters the invocation of a method by the scheduler, when the scheduler is the one invoking it.
      *
      * <p>The scheduler puts its invocation in the propagated context of the call, so a method the scheduled method
      * calls, or work it propagates to another thread, sees it as well; only the method the scheduler invoked is
-     * answered.</p>
+     * answered. Once entered, the execution is marked as entered in the propagated context for as long as the
+     * returned scope is open, so that the method calling itself, which matches the execution as well, is invoked as a
+     * business method. A later execution by the scheduler is another one, and is entered again.</p>
      *
      * @param context The invocation
-     * @return The {@code @Scheduled} annotation that triggered it, or {@code null} when the scheduler did not
+     * @return The entered invocation, to be closed once the invocation returns, or {@code null} when the scheduler
+     * did not invoke the method
      */
-    static @Nullable AnnotationValue<?> scheduleOf(MethodInvocationContext<?, ?> context) {
+    static @Nullable Entry enter(MethodInvocationContext<?, ?> context) {
         ScheduledExecution execution = ScheduledExecution.current().orElse(null);
-        if (execution == null) {
+        if (execution == null || !invokes(execution, context)) {
             return null;
         }
+        PropagatedContext propagated = PropagatedContext.getOrEmpty();
+        Entered entered = propagated.find(Entered.class).orElse(null);
+        if (entered != null && entered.execution() == execution) {
+            return null;
+        }
+        return new Entry(execution.schedule(), propagated.plus(new Entered(execution)).propagate());
+    }
+
+    private static boolean invokes(ScheduledExecution execution, MethodInvocationContext<?, ?> context) {
         ExecutableMethod<?, ?> scheduled = execution.method();
-        if (scheduled.getMethodName().equals(context.getMethodName())
+        return scheduled.getMethodName().equals(context.getMethodName())
             && Arrays.equals(scheduled.getArgumentTypes(), context.getArgumentTypes())
             && (scheduled.getDeclaringType().isAssignableFrom(context.getDeclaringType())
-                || context.getDeclaringType().isAssignableFrom(scheduled.getDeclaringType()))) {
-            return execution.schedule();
+                || context.getDeclaringType().isAssignableFrom(scheduled.getDeclaringType()));
+    }
+
+    /**
+     * An invocation by the scheduler that has been entered.
+     *
+     * @param schedule The {@code @Scheduled} annotation that triggered it
+     * @param scope    The scope that marks the execution as entered
+     */
+    record Entry(AnnotationValue<?> schedule, PropagatedContext.Scope scope) implements AutoCloseable {
+        @Override
+        public void close() {
+            scope.close();
         }
-        return null;
+    }
+
+    /**
+     * Marks an execution of the scheduler as already entered, compared by identity.
+     *
+     * @param execution The execution
+     */
+    private record Entered(ScheduledExecution execution) implements PropagatedContextElement {
     }
 }

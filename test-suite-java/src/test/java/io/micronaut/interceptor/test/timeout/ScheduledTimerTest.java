@@ -38,6 +38,8 @@ class ScheduledTimerTest {
     static volatile CountDownLatch bothRan = new CountDownLatch(2);
     // counted down by the direct call made before the schedule runs, and by the schedule
     static volatile CountDownLatch laterRan = new CountDownLatch(2);
+    // counted down by each execution of the recursive schedule once its nested call returned
+    static volatile CountDownLatch recursionRan = new CountDownLatch(2);
 
     @Test
     void eachScheduleShowsItsOwnTimer() throws Exception {
@@ -111,6 +113,28 @@ class ScheduledTimerTest {
         }
     }
 
+    /**
+     * The scheduled method calling itself: the call the scheduler made is a timeout, the nested one a business method
+     * invocation with no timer, and the next execution of the schedule is a timeout again.
+     */
+    @Test
+    void aCallTheScheduledMethodMakesToItselfIsABusinessMethodInvocation() throws Exception {
+        CALLS.clear();
+        recursionRan = new CountDownLatch(2);
+        try (ApplicationContext context = ApplicationContext.run()) {
+            context.getBean(RecursiveScheduledService.class);
+            assertTrue(recursionRan.await(5, TimeUnit.SECONDS), "the schedule ran twice");
+
+            List<String> calls = CALLS.stream()
+                .filter(call -> call.contains("RecursiveScheduledService"))
+                .map(call -> call.startsWith("timeout") && !call.endsWith(" null") ? "timeout" : call)
+                .limit(4)
+                .toList();
+            assertEquals(List.of("timeout", "invoke RecursiveScheduledService",
+                "timeout", "invoke RecursiveScheduledService"), calls);
+        }
+    }
+
     @InterceptorBinding
     @Retention(RetentionPolicy.RUNTIME)
     @Target({ElementType.TYPE, ElementType.METHOD})
@@ -164,6 +188,26 @@ class ScheduledTimerTest {
         @Scheduled(fixedDelay = "1h", initialDelay = "1s")
         public void onSchedule() {
             laterRan.countDown();
+        }
+    }
+
+    @Singleton
+    @TwiceTimed
+    public static class RecursiveScheduledService {
+
+        private volatile boolean nested;
+
+        @Scheduled(fixedDelay = "20ms", initialDelay = "10ms")
+        public void onSchedule() {
+            if (!nested) {
+                nested = true;
+                try {
+                    onSchedule();
+                } finally {
+                    nested = false;
+                }
+                recursionRan.countDown();
+            }
         }
     }
 }

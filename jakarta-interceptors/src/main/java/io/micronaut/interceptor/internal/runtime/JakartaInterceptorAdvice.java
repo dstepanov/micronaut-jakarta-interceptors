@@ -150,11 +150,21 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         }
         MethodChain business = businessChainOf(context, kind);
         // a method declaring @Scheduled is a timeout method only while the scheduler invokes it: a direct call by
-        // the application is a business method invocation
-        AnnotationValue<?> schedule = business.timeout() ? ScheduledInvocation.scheduleOf(context) : null;
-        List<InterceptorReference> chain = schedule == null
-            ? business.chain()
-            : resolver.resolve(kind, context.getAnnotationMetadata(), true);
+        // the application is a business method invocation, and so is a call the method makes to itself
+        ScheduledInvocation.Entry entry = business.timeout() ? ScheduledInvocation.enter(context) : null;
+        if (entry == null) {
+            return proceed(context, business.chain(), null, business);
+        }
+        try (entry) {
+            return proceed(context, resolver.resolve(kind, context.getAnnotationMetadata(), true), entry.schedule(),
+                business);
+        }
+    }
+
+    private @Nullable Object proceed(MethodInvocationContext<Object, Object> context,
+                                     List<InterceptorReference> chain,
+                                     @Nullable AnnotationValue<?> schedule,
+                                     MethodChain business) {
         if (chain.isEmpty()) {
             return context.proceed();
         }

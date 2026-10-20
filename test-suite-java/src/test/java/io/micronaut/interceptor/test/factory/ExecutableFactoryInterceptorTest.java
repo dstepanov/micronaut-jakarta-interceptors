@@ -47,6 +47,21 @@ class ExecutableFactoryInterceptorTest {
         assertEquals("private worked", context.getBean(PrivateService.class).work());
     }
 
+    /**
+     * An interceptor class is not intercepted, by its own bindings or any other, so the factory produces it as it
+     * is rather than a proxy of it.
+     */
+    @Test
+    void theProducedInterceptorIsNotIntercepted() {
+        PublicInterceptor publicInterceptor = context.getBean(PublicInterceptor.class);
+        PrivateInterceptor privateInterceptor = context.getBean(PrivateInterceptor.class);
+
+        assertEquals("utility", publicInterceptor.utility());
+        assertEquals("utility", privateInterceptor.utility());
+        assertEquals(PublicInterceptor.class, publicInterceptor.getClass());
+        assertEquals(PrivateInterceptor.class, privateInterceptor.getClass());
+    }
+
     @InterceptorBinding
     @Retention(RetentionPolicy.RUNTIME)
     @Target({ElementType.TYPE, ElementType.METHOD})

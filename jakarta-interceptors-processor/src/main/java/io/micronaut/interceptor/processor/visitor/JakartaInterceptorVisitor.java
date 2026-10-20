@@ -149,8 +149,7 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         // read before anything is declared on the class: an interceptor class is made a bean below, and whether it
         // was one to begin with is what tells a bean interposing on itself from a class written to intercept others
         boolean declaredAsABean = declaresABean(element);
-        boolean isInterceptorClass = element.hasDeclaredAnnotation(JakartaInterceptorSupport.INTERCEPTOR)
-            || interposesOnAnotherObject(model);
+        boolean isInterceptorClass = isInterceptorClass(element, model);
         if (isInterceptorClass && !model.intercepts()) {
             throw new ProcessingException(element, "The interceptor class [" + element.getName() + "] declares no "
                 + "interceptor method. An interceptor class declares at least one of @AroundInvoke, @AroundConstruct, "
@@ -282,6 +281,11 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
      * named by {@code @Interceptors} or a class interposing on its own business methods, and which is read as the
      * latter only when the class is intercepted for some other reason as well.</p>
      */
+    private static boolean isInterceptorClass(ClassElement element, InterceptorClassModel model) {
+        return element.hasDeclaredAnnotation(JakartaInterceptorSupport.INTERCEPTOR)
+            || interposesOnAnotherObject(model);
+    }
+
     private static boolean interposesOnAnotherObject(InterceptorClassModel model) {
         return model.methods().keySet().stream()
             .anyMatch(kind -> kind != InterceptionKind.AROUND_INVOKE && kind != InterceptionKind.AROUND_TIMEOUT);
@@ -522,6 +526,13 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
      */
     private static void interceptProduced(Producer producer, VisitorContext context) {
         MethodElement member = producer.element();
+        ClassElement producedType = producer.producedType();
+        if (isInterceptorClass(producedType, InterceptorClassScanner.scan(producedType))) {
+            // an interceptor class is not intercepted, as it is not where it is a bean of its own: its bindings
+            // are the ones it binds to others, and a proxy of it would be a second bean the interceptor class is
+            // looked up by, invoking its own interceptor methods on every call made to it
+            return;
+        }
         if (!declaresInterception(member)) {
             // the produced type carries whatever it declares on itself, as any other bean does
             if (typeDeclaresInterception(producer.producedType())) {
@@ -529,7 +540,6 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
             }
             return;
         }
-        ClassElement producedType = producer.producedType();
         List<String> interceptors = new ArrayList<>(namedInterceptors(producedType, context));
         interceptors.addAll(namedInterceptors(member, context));
         List<BindingValue> bindings = bindingsOf(member, producedType, context);

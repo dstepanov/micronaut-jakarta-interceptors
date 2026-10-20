@@ -153,4 +153,18 @@ class ProducedSelfInterceptionTest {
 
         assertEquals(List.of("class binding", "self", "work"), CALLS);
     }
+
+    @Test
+    void theClassInterceptsItselfWhereTheMemberDeclaresABinding() {
+        context.getBean(BoundSelfIntercepting.class, Qualifiers.byName("boundByTheMember")).work();
+
+        assertEquals(List.of("class binding", "member binding", "self", "work"), CALLS);
+    }
+
+    @Test
+    void aClassBoundByTheMemberAloneInterceptsItself() {
+        context.getBean(SelfIntercepting.class).work();
+
+        assertEquals(List.of("member binding", "self", "work"), CALLS);
+    }
 }

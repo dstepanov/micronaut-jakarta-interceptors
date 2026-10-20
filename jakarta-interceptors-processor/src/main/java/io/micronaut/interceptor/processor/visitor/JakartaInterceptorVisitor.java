@@ -515,7 +515,8 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
     private static void interceptProduced(Producer producer, VisitorContext context) {
         MethodElement member = producer.element();
         ClassElement producedType = producer.producedType();
-        if (isInterceptorClass(producedType, InterceptorClassScanner.scan(producedType))) {
+        InterceptorClassModel producedModel = InterceptorClassScanner.scan(producedType);
+        if (isInterceptorClass(producedType, producedModel)) {
             // an interceptor class is not intercepted, as it is not where it is a bean of its own: its bindings
             // are the ones it binds to others, and a proxy of it would be a second bean the interceptor class is
             // looked up by, invoking its own interceptor methods on every call made to it
@@ -546,8 +547,10 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
             // produced it, and the member the producer declares is the one that wins. Every member is therefore
             // written out, the empty ones included, so that nothing the factory declares for itself - its own
             // bindings, or the interceptor method it declares on itself, which would be invoked on the produced
-            // object rather than on the factory - reaches the bean it produces
-            builder.member(JakartaInterception.SELF, new AnnotationClassValue<>(void.class));
+            // object rather than on the factory - reaches the bean it produces. The interceptor methods the
+            // produced class declares on itself are another matter: they are the ones of the object intercepted,
+            // which interpose on its business methods as they do where the class is a bean of its own
+            builder.member(JakartaInterception.SELF, selfOf(producedModel));
             builder.member(JakartaInterception.BINDINGS, written(bindings));
         });
         interceptEachTarget(member, true);
@@ -870,10 +873,24 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
     }
 
     private static void selfMember(AnnotationValueBuilder<JakartaInterception> builder, InterceptorClassModel model) {
-        if (model.methods().containsKey(InterceptionKind.AROUND_INVOKE)
-            || model.methods().containsKey(InterceptionKind.AROUND_TIMEOUT)) {
+        if (interceptsItself(model)) {
             builder.member(JakartaInterception.SELF, new AnnotationClassValue<>(model.interceptorClass().getName()));
         }
+    }
+
+    /**
+     * The class whose interceptor methods interpose on the business methods of its own instances, written as the
+     * member of a declaration that has to replace whatever another declaration says of it.
+     */
+    private static AnnotationClassValue<?> selfOf(InterceptorClassModel model) {
+        return interceptsItself(model)
+            ? new AnnotationClassValue<>(model.interceptorClass().getName())
+            : new AnnotationClassValue<>(void.class);
+    }
+
+    private static boolean interceptsItself(InterceptorClassModel model) {
+        return model.methods().containsKey(InterceptionKind.AROUND_INVOKE)
+            || model.methods().containsKey(InterceptionKind.AROUND_TIMEOUT);
     }
 
     /**

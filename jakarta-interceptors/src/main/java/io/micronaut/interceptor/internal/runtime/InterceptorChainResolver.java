@@ -37,6 +37,7 @@ import jakarta.inject.Singleton;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -71,6 +72,7 @@ public final class InterceptorChainResolver {
     // under a key of no kind, which no key of a chain is equal to
     private final Map<RecordedKey, List<InterceptorReference>> recorded = new ConcurrentHashMap<>();
     private final LongAdder readInterceptions = new LongAdder();
+    private final LongAdder boundInterceptorLookups = new LongAdder();
     // an interceptor class describes itself the same way whichever element its chain was resolved for, so what is
     // read of it is read once rather than once for every element it intercepts
     private final Map<Class<?>, Optional<BeanDefinition<?>>> describing = new ConcurrentHashMap<>();
@@ -242,12 +244,19 @@ public final class InterceptorChainResolver {
         readInterceptions.increment();
         resolved = associated.get(key);
         if (resolved == null) {
-            // as with the chains, two threads building the same list build equal lists
+            // as with the chains, two threads building the same list build equal lists. The interceptor classes
+            // are the same for every kind, so they are selected once, and only their methods are read by kind
+            Collection<BeanDefinition<?>> constructed = ordered(key.interceptors(), key.bindings());
+            Collection<BeanDefinition<?>> ofClass = key.classBindings().isEmpty()
+                ? List.of()
+                : ordered(List.of(), key.classBindings());
             List<InterceptorReference> all = new ArrayList<>();
             for (InterceptionKind kind : InterceptionKind.values()) {
-                all.addAll(build(new ChainKey(kind, key.interceptors(), key.bindings(), null, false)));
-                if (!key.classBindings().isEmpty()) {
-                    all.addAll(build(new ChainKey(kind, List.of(), key.classBindings(), null, false)));
+                for (BeanDefinition<?> definition : constructed) {
+                    all.addAll(references(definition, kind, false));
+                }
+                for (BeanDefinition<?> definition : ofClass) {
+                    all.addAll(references(definition, kind, false));
                 }
             }
             resolved = List.copyOf(all);
@@ -283,32 +292,55 @@ public final class InterceptorChainResolver {
         return readInterceptions.sum();
     }
 
+    /**
+     * How many times the interceptor classes a binding binds have been looked for among the beans.
+     *
+     * <p>Exposed so that a test can hold the resolver to looking for them once for each set of bindings a chain or
+     * an association is built from, rather than once for every kind of interception.</p>
+     *
+     * @return The number of lookups
+     */
+    @Internal
+    public long boundInterceptorLookups() {
+        return boundInterceptorLookups.sum();
+    }
+
     private List<InterceptorReference> build(ChainKey key) {
         // the chain is built from the key alone, which is what lets it be remembered under the key
         InterceptionKind kind = key.kind();
         if (key.excluded()) {
             return List.of();
         }
-        // a map keyed by the interceptor class keeps the order while making sure an interceptor class that is both
-        // named directly and bound by an annotation is only invoked once, at its first position
-        Map<Class<?>, BeanDefinition<?>> ordered = new LinkedHashMap<>();
-        for (Class<?> interceptorClass : key.interceptors()) {
-            ordered.putIfAbsent(interceptorClass, requireDescribing(interceptorClass));
-        }
-        for (BeanDefinition<?> definition : boundInterceptors(key.bindings())) {
-            BeanDefinition<?> describing = describing(definition.getBeanType());
-            ordered.putIfAbsent(definition.getBeanType(), describing == null ? definition : describing);
-        }
+        Collection<BeanDefinition<?>> ordered = ordered(key.interceptors(), key.bindings());
         // the interceptor methods a class declares on itself are invoked after every interceptor class
         Class<?> self = key.self();
         List<InterceptorReference> chain = new ArrayList<>(ordered.size() + 1);
-        for (BeanDefinition<?> definition : ordered.values()) {
+        for (BeanDefinition<?> definition : ordered) {
             chain.addAll(references(definition, kind, false));
         }
         if (self != null) {
             chain.addAll(references(requireDescribing(self), kind, true));
         }
         return List.copyOf(chain);
+    }
+
+    /**
+     * The definitions of the interceptor classes named directly and of those the bindings bind, in the order their
+     * interceptor methods are invoked in.
+     *
+     * <p>A map keyed by the interceptor class keeps the order while making sure an interceptor class that is both
+     * named directly and bound by an annotation is only invoked once, at its first position.</p>
+     */
+    private Collection<BeanDefinition<?>> ordered(List<Class<?>> interceptors, InterceptorBindings bindings) {
+        Map<Class<?>, BeanDefinition<?>> ordered = new LinkedHashMap<>();
+        for (Class<?> interceptorClass : interceptors) {
+            ordered.putIfAbsent(interceptorClass, requireDescribing(interceptorClass));
+        }
+        for (BeanDefinition<?> definition : boundInterceptors(bindings)) {
+            BeanDefinition<?> describing = describing(definition.getBeanType());
+            ordered.putIfAbsent(definition.getBeanType(), describing == null ? definition : describing);
+        }
+        return ordered.values();
     }
 
     /**
@@ -345,6 +377,7 @@ public final class InterceptorChainResolver {
         }
         // a class a factory produces as well is indexed by the definition of the factory too, which carries what the
         // processor recorded on the class; both are described by the one definition, and the class is bound once
+        boundInterceptorLookups.increment();
         Set<BeanDefinition<?>> matching = new LinkedHashSet<>();
         for (BeanDefinition<JakartaInterceptorIndex> bound : beanContext.getBeanDefinitions(
             JakartaInterceptorIndex.class, new BoundInterceptorQualifier<>(bindingsOfElement, this::bindingsOf))) {

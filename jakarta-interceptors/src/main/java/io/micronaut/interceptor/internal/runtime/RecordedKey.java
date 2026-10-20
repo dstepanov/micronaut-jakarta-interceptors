@@ -30,10 +30,11 @@ import java.util.Objects;
  *
  * <p>Reading an interception into what its chain is built from brings each of its bindings into the shape bindings are
  * compared in, which copies the members and compares them pairwise. That is too much to do every time a bean is
- * created or an invocation looks its chain up, so the chain is remembered under the members the processor wrote as
- * well, and those are read into a {@link InterceptorChainResolver.ChainKey} only the first time they are met. Two
- * elements recorded alike share the entry; two recorded differently but equal once read are two entries for one
- * chain, which costs one more read and nothing else.</p>
+ * created or an invocation looks its chain up, so the chain is remembered under the members the processor wrote,
+ * and those are read into a {@link InterceptorChainResolver.ChainKey} only the first time they are met. Two elements
+ * recorded alike share the entry; two recorded differently but equal once read are two entries holding equal chains,
+ * which costs one more build when the second is first met and nothing else.</p>
+
  *
  * <p>The members are compared as they were written, member for member and element for element, and never through
  * {@link AnnotationValue#equals(Object)}, which passes over a member the other value does not have, nor through the

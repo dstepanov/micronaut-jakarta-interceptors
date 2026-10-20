@@ -66,9 +66,8 @@ import java.util.concurrent.atomic.LongAdder;
 public final class InterceptorChainResolver {
 
     private final BeanContext beanContext;
-    private final Map<ChainKey, List<InterceptorReference>> chains = new ConcurrentHashMap<>();
-    // the chains again, under the interception as the processor recorded it, so that finding the chain of an element
-    // a second time reads nothing into a ChainKey. The associated interceptors of a construction are kept here too,
+    // the chains, under the interception as the processor recorded it, so that finding the chain of an element a
+    // second time reads nothing into a ChainKey. The associated interceptors of a construction are kept here too,
     // under a key of no kind, which no key of a chain is equal to
     private final Map<RecordedKey, List<InterceptorReference>> recorded = new ConcurrentHashMap<>();
     private final LongAdder readInterceptions = new LongAdder();
@@ -79,7 +78,6 @@ public final class InterceptorChainResolver {
     // the bindings an interceptor class declares, by its indexed definition, which every chain resolved asks of it
     private final Map<BeanType<?>, InterceptorBindings> interceptorBindings = new ConcurrentHashMap<>();
     private final Map<ReferenceKey, List<InterceptorReference>> references = new ConcurrentHashMap<>();
-    private final Map<AssociatedKey, List<InterceptorReference>> associated = new ConcurrentHashMap<>();
     // the interceptor classes whose instances are created with an object, by the definition of the object, which is
     // equal for every bean of it a definition Micronaut compiled creates
     private final Map<BeanDefinition<?>, List<Class<?>>> interceptorClasses = new ConcurrentHashMap<>();
@@ -100,14 +98,12 @@ public final class InterceptorChainResolver {
     /**
      * Resolves the chain of an intercepted element.
      *
-     * <p>A chain is remembered by what it is built from, which is the interception the processor declared on the
-     * element and the kind of interception. Two elements that declare the same interception share one chain, and
-     * the same element declared differently by two beans - a method two beans inherit from one superclass, or a
-     * class two factory methods produce - has a chain for each declaration.</p>
-     *
-     * <p>The chain is found again under the interception exactly as the processor recorded it, see
-     * {@link RecordedKey}, so that the bindings of an element are brought into the shape they are compared in once,
-     * when its chain is first resolved, rather than every time a bean is created or an invocation looks it up.</p>
+     * <p>A chain is remembered under the interception exactly as the processor recorded it on the element, and the
+     * kind of interception, see {@link RecordedKey}. Two elements recorded alike share one chain, and the same
+     * element declared differently by two beans - a method two beans inherit from one superclass, or a class two
+     * factory methods produce - has a chain for each declaration. The bindings of an element are brought into the
+     * shape they are compared in once, when its chain is first resolved, rather than every time a bean is created
+     * or an invocation looks it up.</p>
      *
      * @param interceptorKind The kind Micronaut intercepts the element as
      * @param metadata        The annotation metadata of the element
@@ -136,16 +132,11 @@ public final class InterceptorChainResolver {
         RecordedKey recordedKey = RecordedKey.of(kind, interception);
         List<InterceptorReference> chain = recorded.get(recordedKey);
         if (chain == null) {
-            ChainKey key = ChainKey.of(kind, interception);
             readInterceptions.increment();
-            chain = chains.get(key);
-            if (chain == null) {
-                // two threads may build the same chain, and the later put wins. The key is everything the chain is
-                // built from, so the two chains are equal and nothing is lost. Building inside a computeIfAbsent
-                // would instead hold a lock of the map across the bean context
-                chain = build(key);
-                chains.put(key, chain);
-            }
+            // two threads may build the same chain, and the later put wins. The key is everything the chain is
+            // built from, so the two chains are equal and nothing is lost. Building inside a computeIfAbsent would
+            // instead hold a lock of the map across the bean context
+            chain = build(ChainKey.of(kind, interception));
             recorded.put(recordedKey, chain);
         }
         return chain;
@@ -222,7 +213,7 @@ public final class InterceptorChainResolver {
      * classes the class names whether or not the constructor excludes them, from the bindings of the constructor, and
      * from the bindings of the class where the constructor replaces one of them with a binding of its own.
      * Every kind is resolved, so that an interceptor class declaring nothing but an {@code @AroundTimeout} method is
-     * among them as well. Remembered apart from the chains: these are not chains that run.</p>
+     * among them as well. Remembered beside the chains, under a key of no kind: these are not chains that run.</p>
      *
      * @param metadata The annotation metadata of the constructor
      * @return The interceptor methods of the associated classes, which may repeat an interceptor class
@@ -237,31 +228,25 @@ public final class InterceptorChainResolver {
         if (resolved != null) {
             return resolved;
         }
-        AssociatedKey key = new AssociatedKey(
-            List.of(interception.classValues(JakartaInterception.ASSOCIATED)),
-            InterceptorBindings.ofRecorded(interception.getAnnotations(JakartaInterception.BINDINGS)),
-            InterceptorBindings.ofRecorded(interception.getAnnotations(JakartaInterception.ASSOCIATED_BINDINGS)));
         readInterceptions.increment();
-        resolved = associated.get(key);
-        if (resolved == null) {
-            // as with the chains, two threads building the same list build equal lists. The interceptor classes
-            // are the same for every kind, so they are selected once, and only their methods are read by kind
-            Collection<BeanDefinition<?>> constructed = ordered(key.interceptors(), key.bindings());
-            Collection<BeanDefinition<?>> ofClass = key.classBindings().isEmpty()
-                ? List.of()
-                : ordered(List.of(), key.classBindings());
-            List<InterceptorReference> all = new ArrayList<>();
-            for (InterceptionKind kind : InterceptionKind.values()) {
-                for (BeanDefinition<?> definition : constructed) {
-                    all.addAll(references(definition, kind, false));
-                }
-                for (BeanDefinition<?> definition : ofClass) {
-                    all.addAll(references(definition, kind, false));
-                }
+        // as with the chains, two threads building the same list build equal lists. The interceptor classes are the
+        // same for every kind, so they are selected once, and only their methods are read by kind
+        InterceptorBindings classBindings =
+            InterceptorBindings.ofRecorded(interception.getAnnotations(JakartaInterception.ASSOCIATED_BINDINGS));
+        Collection<BeanDefinition<?>> constructed = ordered(
+            List.of(interception.classValues(JakartaInterception.ASSOCIATED)),
+            InterceptorBindings.ofRecorded(interception.getAnnotations(JakartaInterception.BINDINGS)));
+        Collection<BeanDefinition<?>> ofClass = classBindings.isEmpty() ? List.of() : ordered(List.of(), classBindings);
+        List<InterceptorReference> all = new ArrayList<>();
+        for (InterceptionKind kind : InterceptionKind.values()) {
+            for (BeanDefinition<?> definition : constructed) {
+                all.addAll(references(definition, kind, false));
             }
-            resolved = List.copyOf(all);
-            associated.put(key, resolved);
+            for (BeanDefinition<?> definition : ofClass) {
+                all.addAll(references(definition, kind, false));
+            }
         }
+        resolved = List.copyOf(all);
         recorded.put(recordedKey, resolved);
         return resolved;
     }
@@ -269,14 +254,15 @@ public final class InterceptorChainResolver {
     /**
      * How many chains have been resolved and remembered.
      *
-     * <p>Exposed so that a test can hold this map to its bounds: it is keyed by what a chain is built from rather
-     * than by the objects an invocation passes through, and must not grow with the beans of the application.</p>
+     * <p>Exposed so that a test can hold this map to its bounds: it is keyed by the interception the processor
+     * recorded rather than by the objects an invocation passes through, and must not grow with the beans of the
+     * application.</p>
      *
-     * @return The number of chains held
+     * @return The number of chains held, the associations of constructions among them
      */
     @Internal
     public int cachedChains() {
-        return chains.size();
+        return recorded.size();
     }
 
     /**
@@ -557,26 +543,9 @@ public final class InterceptorChainResolver {
     }
 
     /**
-     * What a chain is built from, and so what it is remembered by.
-     *
-     * <p>It is not the element itself. An executable method compares by its declaring type, its name and its
-     * argument types, so a method two beans inherit from one superclass is one key for both, and so is a class
-     * two factory methods produce, even where each of them binds it to different interceptors; the class of the
-     * intercepted object tells neither apart. What does tell them apart is the interception the processor declared
-     * on the element: the interceptor classes the element names, its bindings, its own interceptor methods and
-     * whether it excludes the rest, which with the kind is all a chain is built from. Equal keys therefore build
-     * equal chains, and the map stays as large as the number of different interceptions an application declares
-     * rather than growing with its elements or its beans.</p>
-     *
-     * <p>Those members are read out into this key rather than the annotation itself being held, for two reasons.
-     * {@code AnnotationValue.equals} compares the sizes of the two member maps and then skips a member the other
-     * map does not have, so an element declaring {@code self} and an element declaring {@code bindings} compare
-     * equal - and, for the right class name, hash alike - while naming entirely different interceptor methods; one
-     * of them would then be intercepted by the chain of the other. And an annotation read from metadata that
-     * contains an evaluated expression is handed back wrapped around the evaluation context of the invocation,
-     * which holds the object being invoked and its arguments; holding that as a key would keep them alive for as
-     * long as this resolver. What is held here is what the processor wrote: class objects, and the bindings read
-     * out of the values it recorded into {@link InterceptorBindings}, which belong to no invocation.</p>
+     * What a chain is built from: the interception the processor declared on the element, read into the shape a
+     * chain is built in, and the kind of interception. It is built once for each chain, when the chain is first
+     * resolved, and is not held; the chain is remembered under the {@link RecordedKey} of the element.
      *
      * @param kind         The kind of interception
      * @param interceptors The interceptor classes the element names, in the order they are invoked in
@@ -607,18 +576,6 @@ public final class InterceptorChainResolver {
                 interception.classValue(JakartaInterception.SELF).filter(type -> type != void.class).orElse(null),
                 interception.booleanValue(JakartaInterception.EXCLUDED).orElse(false));
         }
-    }
-
-    /**
-     * What the interceptor classes associated with a class are resolved from.
-     *
-     * @param interceptors The interceptor classes the class names
-     * @param bindings      The bindings of the constructor
-     * @param classBindings The bindings of the class, where they are not those of the constructor
-     */
-    private record AssociatedKey(List<Class<?>> interceptors,
-                                 InterceptorBindings bindings,
-                                 InterceptorBindings classBindings) {
     }
 
     /**

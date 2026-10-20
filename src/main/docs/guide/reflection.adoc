@@ -113,7 +113,10 @@ annotation instance as a dynamic proxy of the annotation type together with
 api:core.annotation.AnnotationValueProvider[], and a native image defines that proxy only when it was told to. The
 processor declares `@ReflectionConfig(type = ..., accessType = DYNAMIC_PROXY)` on an intercepted class for every
 binding annotation of the class, its constructor and its business methods, which `micronaut-graal` turns into the
-registration of that pair. This needs Micronaut Core 5.2 or later. A binding annotation whose builder was generated
+registration of that pair. A member of a binding annotation that returns an annotation, or an array of them, returns
+an instance built the same way, so the annotation types the members of a binding declare are registered too, and
+theirs in turn, whether the member is a binding one or not and whether its value is given or its default. This needs
+Micronaut Core 5.2 or later. A binding annotation whose builder was generated
 is built by the builder, which needs no proxy at all.
 
 An interceptor method out of reach of generated code is covered by the `@ReflectiveAccess` the processor declares on it, which

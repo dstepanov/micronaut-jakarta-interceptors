@@ -50,4 +50,17 @@ class NativeImageInterceptionTest {
                 Calls.RECORDED);
         }
     }
+
+    /**
+     * The members of a binding that return annotations, nested, defaulted or in an array, return instances built
+     * as the binding is, for which the processor declares the metadata as well.
+     */
+    @Test
+    void readsAnnotationsNestedInABindingInsideANativeImage() {
+        Calls.clear();
+        try (ApplicationContext context = ApplicationContext.run()) {
+            assertEquals("done", context.getBean(PolicyService.class).work());
+            assertEquals(List.of("service noted fallback [first, second]"), Calls.RECORDED);
+        }
+    }
 }

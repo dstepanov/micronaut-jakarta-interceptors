@@ -464,7 +464,7 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
             interceptMethod(model, method, classInterceptors, classBindings, classDeclares, context);
         }
         if (reflective) {
-            permitBindingSynthesis(element, constructor, methods, producers);
+            permitBindingSynthesis(element, constructor, methods, producers, context);
         }
     }
 
@@ -594,11 +594,17 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
      * {@code @ReflectionConfig(accessType = DYNAMIC_PROXY)} on an annotation type declares exactly that pair.
      * Declaring it here, where the bindings are read anyway, is what spares an application from declaring it by
      * hand for every binding annotation it has.</p>
+     *
+     * <p>A member of a binding annotation that is an annotation itself, or an array of them, returns an instance as
+     * well, built the same way, so the annotation types its members return are permitted too, and theirs in turn.
+     * The members are those the type declares rather than those a binding carries: a nonbinding member is left out
+     * of the binding, and the value it returns may be its default.</p>
      */
     private static void permitBindingSynthesis(ClassElement element,
                                                @Nullable MethodElement constructor,
                                                List<MethodElement> methods,
-                                               List<Producer> producers) {
+                                               List<Producer> producers,
+                                               VisitorContext context) {
         Set<String> bindings = new LinkedHashSet<>();
         for (AnnotationValue<?> binding : InterceptorClassScanner.bindingsOf(element)) {
             bindings.add(binding.getAnnotationName());
@@ -616,6 +622,23 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         for (Producer producer : producers) {
             for (AnnotationValue<?> binding : InterceptorClassScanner.bindingsOf(producer.element())) {
                 bindings.add(binding.getAnnotationName());
+            }
+        }
+        List<String> pending = new ArrayList<>(bindings);
+        while (!pending.isEmpty()) {
+            String name = pending.remove(pending.size() - 1);
+            if (!(context.getClassElement(name).orElse(null) instanceof AnnotationElement annotationType)) {
+                continue;
+            }
+            for (MethodElement member : annotationType.getEnclosedElements(ElementQuery.ALL_METHODS.onlyDeclared())) {
+                ClassElement returned = member.getReturnType();
+                if (returned.isArray()) {
+                    returned = returned.fromArray();
+                }
+                if (context.getClassElement(returned.getName()).orElse(null) instanceof AnnotationElement
+                    && bindings.add(returned.getName())) {
+                    pending.add(returned.getName());
+                }
             }
         }
         for (String binding : bindings) {

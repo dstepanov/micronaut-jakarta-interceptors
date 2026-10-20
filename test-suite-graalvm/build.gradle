@@ -6,11 +6,14 @@ dependencies {
     testAnnotationProcessor platform(libs.micronaut.core)
     testAnnotationProcessor projects.micronautJakartaInterceptorsProcessor
     testAnnotationProcessor mn.micronaut.inject.java
+    testAnnotationProcessor libs.jakarta.cdi.api
     // turns the @ReflectiveAccess and @ReflectionConfig the processor declares into the reachability metadata of the image
     testAnnotationProcessor mn.micronaut.graal
 
     testImplementation platform(libs.micronaut.core)
     testImplementation projects.micronautJakartaInterceptors
+    // declares @Nonbinding, which a member of a binding read inside the image carries
+    testImplementation libs.jakarta.cdi.api
     testImplementation mn.micronaut.core
     testImplementation mn.micronaut.inject
     testImplementation mn.micronaut.aop

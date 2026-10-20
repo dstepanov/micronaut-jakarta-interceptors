@@ -46,3 +46,5 @@ dependencies {
 
     testImplementation sourceSets.external.output
 }
+
+apply from: 'benchmark.gradle'

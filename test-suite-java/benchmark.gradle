@@ -1,0 +1,156 @@
+// A benchmark of resolving the chains of an application cold: a context with many intercepted elements, started
+// again and again, and every chain resolved for the first time in each. It also times creating the beans again once
+// their chains are known. It is run on request, `./gradlew :test-suite-java:benchmark`,
+// and is in no source set the `test` task compiles or runs. The intercepted classes are generated, so that the
+// application is large enough for the resolution to be measured.
+def generatedBenchmarkSources = layout.buildDirectory.dir('generated/benchmark/java')
+
+def generateBenchmarkSources = tasks.register('generateBenchmarkSources') {
+    def beans = (project.findProperty('benchmark.beans') ?: '200') as int
+    inputs.property('beans', beans)
+    outputs.dir(generatedBenchmarkSources)
+    doLast {
+        def pkg = 'io.micronaut.interceptor.benchmark.generated'
+        def root = generatedBenchmarkSources.get().dir(pkg.replace('.', '/')).asFile
+        root.deleteDir()
+        root.mkdirs()
+        def write = { String name, String body -> new File(root, "${name}.java").text = "package ${pkg};\n\n${body}" }
+        int bindings = 10
+        for (int b = 0; b < bindings; b++) {
+            write("B$b", """import jakarta.interceptor.InterceptorBinding;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+@InterceptorBinding
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.TYPE, ElementType.METHOD})
+public @interface B$b {
+}
+""")
+        }
+        // twenty interceptor classes bound by a binding annotation, the first ten by one binding each, the others by
+        // two, and five named directly with @Interceptors
+        int bound = 20
+        for (int i = 0; i < bound; i++) {
+            def own = i < bindings ? "@B${i}" : "@B${i % bindings}\n@B${(i + 3) % bindings}"
+            write("Bound$i", """import jakarta.annotation.Priority;
+import jakarta.interceptor.AroundInvoke;
+import jakarta.interceptor.Interceptor;
+import jakarta.interceptor.InvocationContext;
+
+@Interceptor
+${own}
+@Priority(${1000 + i * 10})
+public class Bound$i {
+
+    @AroundInvoke
+    public Object around(InvocationContext context) throws Exception {
+        Invocations.COUNT.increment();
+        return context.proceed();
+    }
+}
+""")
+        }
+        int direct = 5
+        for (int d = 0; d < direct; d++) {
+            write("Direct$d", """import jakarta.interceptor.AroundInvoke;
+import jakarta.interceptor.InvocationContext;
+
+public class Direct$d {
+
+    @AroundInvoke
+    public Object around(InvocationContext context) throws Exception {
+        Invocations.COUNT.increment();
+        return context.proceed();
+    }
+}
+""")
+        }
+        // each method declares five of the ten bindings, chosen by a fixed sequence, and names one of the directly
+        // named classes, which binds it to five to ten interceptor classes. The combinations differ enough for most
+        // methods to have a chain of their own
+        def random = new Random(42)
+        def all = []
+        for (int c = 0; c < beans; c++) {
+            def methods = new StringBuilder()
+            for (int m = 0; m < 5; m++) {
+                def chosen = (0..<bindings).toList()
+                Collections.shuffle(chosen, random)
+                def annotations = chosen.take(5).sort().collect { "    @B$it" }.join('\n')
+                methods << """
+${annotations}
+    @Interceptors(Direct${random.nextInt(direct)}.class)
+    public int m$m(int value) {
+        return value + $m;
+    }
+"""
+            }
+            write("Bean$c", """import io.micronaut.context.annotation.Prototype;
+import jakarta.interceptor.Interceptors;
+
+@Prototype
+public class Bean$c {
+${methods}}
+""")
+            all << "Bean${c}.class"
+        }
+        write('Invocations', """import java.util.concurrent.atomic.LongAdder;
+
+public final class Invocations {
+
+    public static final LongAdder COUNT = new LongAdder();
+
+    private Invocations() {
+    }
+}
+""")
+        write('GeneratedBeans', """import java.util.List;
+
+public final class GeneratedBeans {
+
+    public static final List<Class<?>> ALL = List.of(
+        ${all.join(',\n        ')});
+
+    private GeneratedBeans() {
+    }
+}
+""")
+    }
+}
+
+sourceSets {
+    benchmark {
+        java.srcDir 'src/benchmark/java'
+        java.srcDir generateBenchmarkSources
+    }
+}
+
+configurations {
+    benchmarkImplementation.extendsFrom testImplementation
+    benchmarkRuntimeOnly.extendsFrom testRuntimeOnly
+    benchmarkAnnotationProcessor.extendsFrom testAnnotationProcessor
+}
+
+tasks.register('benchmark', Test) {
+    description = 'Times resolving the chains of a large application cold, and creating its beans again'
+    group = 'verification'
+    testClassesDirs = sourceSets.benchmark.output.classesDirs
+    classpath = sourceSets.benchmark.runtimeClasspath
+    useJUnitPlatform()
+    // always run: the point is a new measurement
+    outputs.upToDateWhen { false }
+    maxHeapSize = '2g'
+    minHeapSize = '2g'
+    jvmArgs '-XX:+UseG1GC'
+    ['benchmark.warmup', 'benchmark.iterations', 'benchmark.rounds', 'benchmark.label', 'benchmark.out'].each { name ->
+        def value = project.findProperty(name)
+        if (value != null) {
+            systemProperty name, value
+        }
+    }
+    testLogging {
+        showStandardStreams = true
+    }
+}

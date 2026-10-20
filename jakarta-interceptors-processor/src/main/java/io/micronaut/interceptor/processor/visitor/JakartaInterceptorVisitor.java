@@ -531,6 +531,15 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
             // an interceptor class is not intercepted, as it is not where it is a bean of its own: its bindings
             // are the ones it binds to others, and a proxy of it would be a second bean the interceptor class is
             // looked up by, invoking its own interceptor methods on every call made to it
+            if (declaresInterception(member)) {
+                // what the member declares would intercept the interceptor class, and would otherwise be dropped
+                // without a word
+                throw new ProcessingException(member, "The factory member [" + member.getDeclaringType().getName()
+                    + "." + member.getName() + "] produces the interceptor class [" + producedType.getName()
+                    + "] and declares interceptor bindings or @Interceptors of its own. An interceptor class is not "
+                    + "intercepted, so they would bind nothing. Remove them from the member; the bindings the "
+                    + "interceptor class declares on itself are the ones it binds to other beans");
+            }
             return;
         }
         if (!declaresInterception(member)) {

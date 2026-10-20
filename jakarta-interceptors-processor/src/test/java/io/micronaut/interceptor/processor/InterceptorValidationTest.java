@@ -55,6 +55,82 @@ class InterceptorValidationTest {
         }
     }
 
+    private static final String PRODUCED_INTERCEPTOR = """
+        @InterceptorBinding
+        @Retention(RetentionPolicy.RUNTIME)
+        @Target({ElementType.TYPE, ElementType.METHOD})
+        @interface Guarded {
+        }
+
+        @InterceptorBinding
+        @Retention(RetentionPolicy.RUNTIME)
+        @Target({ElementType.TYPE, ElementType.METHOD})
+        @interface Audited {
+        }
+
+        @Interceptor
+        @Guarded
+        class GuardingInterceptor {
+            @AroundInvoke
+            Object intercept(InvocationContext context) throws Exception {
+                return context.proceed();
+            }
+        }
+
+        @Interceptor
+        @Audited
+        class AuditingInterceptor {
+            @AroundInvoke
+            Object intercept(InvocationContext context) throws Exception {
+                return context.proceed();
+            }
+        }
+        """;
+
+    @Test
+    void aBindingOnAFactoryMemberProducingAnInterceptorClassIsReported() {
+        String error = compile(PRODUCED_INTERCEPTOR + """
+            @io.micronaut.context.annotation.Factory
+            public class Subject {
+                @Singleton
+                @Audited
+                GuardingInterceptor guarding() {
+                    return new GuardingInterceptor();
+                }
+            }
+            """);
+        assertTrue(error.contains("produces the interceptor class"), error);
+    }
+
+    @Test
+    void interceptorsNamedOnAFactoryMemberProducingAnInterceptorClassAreReported() {
+        String error = compile(PRODUCED_INTERCEPTOR + """
+            @io.micronaut.context.annotation.Factory
+            public class Subject {
+                @Singleton
+                @jakarta.interceptor.Interceptors(AuditingInterceptor.class)
+                GuardingInterceptor guarding() {
+                    return new GuardingInterceptor();
+                }
+            }
+            """);
+        assertTrue(error.contains("produces the interceptor class"), error);
+    }
+
+    @Test
+    void aFactoryMemberProducingAnInterceptorClassBoundByItsOwnBindingsIsAllowed() {
+        compileSuccessfully(PRODUCED_INTERCEPTOR + """
+            @io.micronaut.context.annotation.Factory
+            public class Subject {
+                @Singleton
+                @io.micronaut.context.annotation.Executable
+                GuardingInterceptor guarding() {
+                    return new GuardingInterceptor();
+                }
+            }
+            """);
+    }
+
     @Test
     void anInterceptorClassWithoutAnInterceptorMethodIsReported() {
         String error = compile("""

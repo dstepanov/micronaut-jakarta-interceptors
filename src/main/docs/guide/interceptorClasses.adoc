@@ -83,7 +83,10 @@ public class AuditingInterceptor {
 
 An interceptor class may also be produced by a api:context.annotation.Factory[] method, when the application wants
 to configure the instance itself; that instance is then the one that intercepts, and its interceptor methods are
-still invoked through the executable methods generated for its class.
+still invoked through the executable methods generated for its class. The instance is produced as it is, never
+proxied or intercepted: the bindings the interceptor class declares are the ones it binds to other beans. A binding
+or an `@Interceptors` declared on the factory method itself would intercept the interceptor class, and is reported
+as a compilation error.
 
 An interceptor class without a scope of its own is a api:context.annotation.Prototype[]: an interceptor instance
 belongs to the object it intercepts, as the specification describes, and may hold state for the whole life of that

@@ -348,7 +348,7 @@ public final class InterceptorChainResolver {
         Set<BeanDefinition<?>> matching = new LinkedHashSet<>();
         for (BeanDefinition<JakartaInterceptorIndex> bound : beanContext.getBeanDefinitions(
             JakartaInterceptorIndex.class, new BoundInterceptorQualifier<>(bindingsOfElement, this::bindingsOf))) {
-            BeanDefinition<?> definition = describing(bound.getBeanType());
+            BeanDefinition<?> definition = describing(interceptedClassOf(bound));
             // a class that declares an interceptor method without declaring itself an interceptor class is one
             // only where it is named directly, and takes no part in what a binding annotation binds
             if (definition != null && definition.hasAnnotation(JakartaInterceptorSupport.INTERCEPTOR)
@@ -474,12 +474,35 @@ public final class InterceptorChainResolver {
                 || definition.getAnnotation(JakartaInterceptorMethods.class) == null) {
                 continue;
             }
+            // a proxy of the class, such as the one an executable factory method of it adds, can expose methods of
+            // its own without those the processor recorded on the class, so the bean of the class itself is preferred
             if (!definition.getExecutableMethods().isEmpty()) {
-                return definition;
+                if (definition.getBeanType() == interceptorClass) {
+                    return definition;
+                }
+                fallback = definition;
+            } else if (fallback == null) {
+                fallback = definition;
             }
-            fallback = definition;
         }
         return fallback;
+    }
+
+    /**
+     * The class a bean is a bean of, which for a bean Micronaut proxies is the class it proxies rather than the
+     * generated proxy: the proxy is not another interceptor class.
+     *
+     * @param bean The bean
+     * @return The class
+     */
+    static Class<?> interceptedClassOf(BeanType<?> bean) {
+        if (bean instanceof AdvisedBeanType<?> advised) {
+            return advised.getInterceptedType();
+        }
+        if (bean instanceof ProxyBeanDefinition<?> proxy) {
+            return proxy.getTargetType();
+        }
+        return bean.getBeanType();
     }
 
     /**

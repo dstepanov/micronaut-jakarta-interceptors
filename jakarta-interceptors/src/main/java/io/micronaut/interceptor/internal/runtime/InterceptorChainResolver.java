@@ -67,11 +67,9 @@ public final class InterceptorChainResolver {
 
     private final BeanContext beanContext;
     // the chains, under the interception as the processor recorded it, so that finding the chain of an element a
-    // second time reads nothing into a ChainKey. The associated interceptors of a construction are kept here too,
-    // under a key of no kind, which no key of a chain is equal to
+    // second time reads nothing into a ChainKey
     private final Map<RecordedKey, List<InterceptorReference>> recorded = new ConcurrentHashMap<>();
     private final LongAdder readInterceptions = new LongAdder();
-    private final LongAdder boundInterceptorLookups = new LongAdder();
     // an interceptor class describes itself the same way whichever element its chain was resolved for, so what is
     // read of it is read once rather than once for every element it intercepts
     private final Map<Class<?>, Optional<BeanDefinition<?>>> describing = new ConcurrentHashMap<>();
@@ -129,6 +127,11 @@ public final class InterceptorChainResolver {
         if (kind == null) {
             return List.of();
         }
+        return resolve(kind, interception);
+    }
+
+    private List<InterceptorReference> resolve(InterceptionKind kind,
+                                               @Nullable AnnotationValue<JakartaInterception> interception) {
         RecordedKey recordedKey = RecordedKey.of(kind, interception);
         List<InterceptorReference> chain = recorded.get(recordedKey);
         if (chain == null) {
@@ -155,18 +158,24 @@ public final class InterceptorChainResolver {
     }
 
     /**
-     * Resolves the interceptor classes that interpose on an object the definition creates, whose instances are
-     * created with the object: those of its construction, read from the constructor, those of its lifecycle, read
-     * from the class, and those of each of its methods.
+     * Resolves the interceptor classes associated with an object the definition creates, whose instances are
+     * created with the object: those of its construction, read from the constructor, those the class names or binds,
+     * read from the class, and those of each of its methods.
      *
      * <p>Those of the construction come first, as the ones the construction of the object runs through: Micronaut
      * creates the advice of a subclass it generates as it resolves the arguments of the constructor, before the
-     * around-construct chain starts, and the instances are created in this order then. Only what this module
-     * intercepts is asked for: an element it does not intercept has no chain, and resolving one would put an empty
-     * chain in the map for nothing. An interceptor method the class declares itself runs on the object, and has no
-     * instance of its own. The classes are remembered by the definition, rather than read from every chain of the
-     * object again for every bean of it created; two threads resolving them for one definition resolve the
-     * same.</p>
+     * around-construct chain starts, and the instances are created in this order then. Section 2.3 da) has every
+     * interceptor class associated with the class created before an {@code @AroundConstruct} method runs, which is
+     * more than the chains that run: a class the constructor excludes, or replaces the binding of with one of its
+     * own, and a class with no interceptor method of a kind anything of the object is intercepted as, such as an
+     * {@code @AroundTimeout} method of a bean nothing schedules. The interception of the class is therefore resolved
+     * for every kind, and the class-level classes of each kind are among those created.</p>
+     *
+     * <p>Only what this module intercepts is asked for: an element it does not intercept has no chain, and resolving
+     * one would put an empty chain in the map for nothing. An interceptor method the class declares itself runs on
+     * the object, and has no instance of its own. The classes are remembered by the definition, rather than read from
+     * every chain of the object again for every bean of it created; two threads resolving them for one definition
+     * resolve the same.</p>
      *
      * @param definition The definition of the object
      * @return The interceptor classes, each once, in the order they are first met
@@ -178,12 +187,13 @@ public final class InterceptorChainResolver {
             AnnotationMetadata constructorMetadata = definition.getConstructor().getAnnotationMetadata();
             if (constructorMetadata.hasAnnotation(JakartaInterception.class)) {
                 addInterceptorClasses(resolve(InterceptorKind.AROUND_CONSTRUCT, constructorMetadata), classes);
-                addInterceptorClasses(resolveAssociated(constructorMetadata), classes);
             }
-            AnnotationMetadata classMetadata = definition.getAnnotationMetadata();
-            if (classMetadata.hasAnnotation(JakartaInterception.class)) {
-                addInterceptorClasses(resolve(InterceptorKind.POST_CONSTRUCT, classMetadata), classes);
-                addInterceptorClasses(resolve(InterceptorKind.PRE_DESTROY, classMetadata), classes);
+            AnnotationValue<JakartaInterception> classInterception =
+                recordedInterception(definition.getAnnotationMetadata());
+            if (classInterception != null) {
+                for (InterceptionKind kind : InterceptionKind.values()) {
+                    addInterceptorClasses(resolve(kind, classInterception), classes);
+                }
             }
             for (ExecutableMethod<?, ?> method : definition.getExecutableMethods()) {
                 AnnotationMetadata methodMetadata = method.getAnnotationMetadata();
@@ -206,59 +216,13 @@ public final class InterceptorChainResolver {
     }
 
     /**
-     * Resolves the interceptor classes associated with the class of an object being constructed, whichever kinds of
-     * interceptor method they declare.
-     *
-     * <p>Read from the {@code associated} member the processor writes on the constructor, which lists the interceptor
-     * classes the class names whether or not the constructor excludes them, from the bindings of the constructor, and
-     * from the bindings of the class where the constructor replaces one of them with a binding of its own.
-     * Every kind is resolved, so that an interceptor class declaring nothing but an {@code @AroundTimeout} method is
-     * among them as well. Remembered beside the chains, under a key of no kind: these are not chains that run.</p>
-     *
-     * @param metadata The annotation metadata of the constructor
-     * @return The interceptor methods of the associated classes, which may repeat an interceptor class
-     */
-    List<InterceptorReference> resolveAssociated(AnnotationMetadata metadata) {
-        AnnotationValue<JakartaInterception> interception = recordedInterception(metadata);
-        if (interception == null) {
-            return List.of();
-        }
-        RecordedKey recordedKey = RecordedKey.of(null, interception);
-        List<InterceptorReference> resolved = recorded.get(recordedKey);
-        if (resolved != null) {
-            return resolved;
-        }
-        readInterceptions.increment();
-        // as with the chains, two threads building the same list build equal lists. The interceptor classes are the
-        // same for every kind, so they are selected once, and only their methods are read by kind
-        InterceptorBindings classBindings =
-            InterceptorBindings.ofRecorded(interception.getAnnotations(JakartaInterception.ASSOCIATED_BINDINGS));
-        Collection<BeanDefinition<?>> constructed = ordered(
-            List.of(interception.classValues(JakartaInterception.ASSOCIATED)),
-            InterceptorBindings.ofRecorded(interception.getAnnotations(JakartaInterception.BINDINGS)));
-        Collection<BeanDefinition<?>> ofClass = classBindings.isEmpty() ? List.of() : ordered(List.of(), classBindings);
-        List<InterceptorReference> all = new ArrayList<>();
-        for (InterceptionKind kind : InterceptionKind.values()) {
-            for (BeanDefinition<?> definition : constructed) {
-                all.addAll(references(definition, kind, false));
-            }
-            for (BeanDefinition<?> definition : ofClass) {
-                all.addAll(references(definition, kind, false));
-            }
-        }
-        resolved = List.copyOf(all);
-        recorded.put(recordedKey, resolved);
-        return resolved;
-    }
-
-    /**
      * How many chains have been resolved and remembered.
      *
      * <p>Exposed so that a test can hold this map to its bounds: it is keyed by the interception the processor
      * recorded rather than by the objects an invocation passes through, and must not grow with the beans of the
      * application.</p>
      *
-     * @return The number of chains held, the associations of constructions among them
+     * @return The number of chains held
      */
     @Internal
     public int cachedChains() {
@@ -276,19 +240,6 @@ public final class InterceptorChainResolver {
     @Internal
     public long readInterceptions() {
         return readInterceptions.sum();
-    }
-
-    /**
-     * How many times the interceptor classes a binding binds have been looked for among the beans.
-     *
-     * <p>Exposed so that a test can hold the resolver to looking for them once for each set of bindings a chain or
-     * an association is built from, rather than once for every kind of interception.</p>
-     *
-     * @return The number of lookups
-     */
-    @Internal
-    public long boundInterceptorLookups() {
-        return boundInterceptorLookups.sum();
     }
 
     private List<InterceptorReference> build(ChainKey key) {
@@ -363,7 +314,6 @@ public final class InterceptorChainResolver {
         }
         // a class a factory produces as well is indexed by the definition of the factory too, which carries what the
         // processor recorded on the class; both are described by the one definition, and the class is bound once
-        boundInterceptorLookups.increment();
         Set<BeanDefinition<?>> matching = new LinkedHashSet<>();
         for (BeanDefinition<JakartaInterceptorIndex> bound : beanContext.getBeanDefinitions(
             JakartaInterceptorIndex.class, new BoundInterceptorQualifier<>(bindingsOfElement, this::bindingsOf))) {

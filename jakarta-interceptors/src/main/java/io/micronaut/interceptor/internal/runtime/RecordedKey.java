@@ -45,7 +45,7 @@ import java.util.Objects;
  * <p>The members are those of the metadata Micronaut compiled: the resolver reads them from beneath the wrapper an
  * evaluated expression puts around the metadata of an invocation, so that nothing of an invocation is held here.</p>
  *
- * @param kind    The kind of interception, {@code null} for the interceptor classes associated with a class
+ * @param kind    The kind of interception
  * @param members The members of the interception as recorded, or {@code null} where the element records none
  * @param hash    The hash of the two, computed once. The members are hashed as Micronaut hashes the values of an
  *                annotation, which hashes an annotation a member holds by its name and its members, and an array by
@@ -54,19 +54,19 @@ import java.util.Objects;
  * @since 1.0
  */
 @Internal
-record RecordedKey(@Nullable InterceptionKind kind, @Nullable Map<CharSequence, Object> members, int hash) {
+record RecordedKey(InterceptionKind kind, @Nullable Map<CharSequence, Object> members, int hash) {
 
     /**
      * Reads the key of an interception as it was recorded.
      *
-     * @param kind         The kind of interception, {@code null} for the interceptor classes associated with a class
+     * @param kind         The kind of interception
      * @param interception The interception as recorded, or {@code null} where the element records none
      * @return The key
      */
-    static RecordedKey of(@Nullable InterceptionKind kind, @Nullable AnnotationValue<?> interception) {
+    static RecordedKey of(InterceptionKind kind, @Nullable AnnotationValue<?> interception) {
         Map<CharSequence, Object> members = interception == null ? null : interception.getValues();
         int membersHash = members == null ? 0 : AnnotationUtil.calculateHashCode(members);
-        return new RecordedKey(kind, members, 31 * Objects.hashCode(kind) + membersHash);
+        return new RecordedKey(kind, members, 31 * kind.hashCode() + membersHash);
     }
 
     @Override

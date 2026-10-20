@@ -62,16 +62,6 @@ public @interface JakartaInterception {
     String INTERCEPTORS = "interceptors";
 
     /**
-     * The name of {@link #associated()}.
-     */
-    String ASSOCIATED = "associated";
-
-    /**
-     * The name of {@link #associatedBindings()}.
-     */
-    String ASSOCIATED_BINDINGS = "associatedBindings";
-
-    /**
      * The name of {@link #self()}.
      */
     String SELF = "self";
@@ -98,29 +88,6 @@ public @interface JakartaInterception {
      * @return The interceptor classes
      */
     Class<?>[] interceptors() default {};
-
-    /**
-     * The interceptor classes the class of a constructor names with {@code jakarta.interceptor.Interceptors},
-     * recorded on the constructor whether or not it excludes them. They are associated with the class, and section
-     * 2.3 has them created before an around-construct interceptor method runs, even where the constructor is not
-     * intercepted by them.
-     *
-     * @return The interceptor classes
-     */
-    Class<?>[] associated() default {};
-
-    /**
-     * The binding annotations of the class of a constructor, recorded on the constructor. A
-     * constructor that declares a binding of a type its class declares is interposed on by the interceptors of its
-     * own binding, while the ones the binding of the class binds still interpose on the business methods: they are
-     * associated with the class, and section 2.3 has them created before an around-construct interceptor method
-     * runs.
-     *
-     * <p>Recorded as the {@link #bindings()} are.</p>
-     *
-     * @return The bindings of the class
-     */
-    BoundBinding[] associatedBindings() default {};
 
     /**
      * The class that declares interceptor methods on itself, which the specification invokes after every

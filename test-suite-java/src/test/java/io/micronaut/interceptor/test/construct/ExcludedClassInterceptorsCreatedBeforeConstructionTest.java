@@ -29,9 +29,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 2.3 da) has injection completed on every interceptor class associated with the target class before
- * an {@code @AroundConstruct} method runs. The association is read from the constructor's interception, which is
- * not the same set: the constructor may exclude the class interceptors, and an interceptor with only an
- * {@code @AroundTimeout} method has no AROUND reference.
+ * an {@code @AroundConstruct} method runs. That is more than the chains that run: the constructor may exclude the
+ * class interceptors, and an interceptor with only an {@code @AroundTimeout} method has no AROUND reference, so the
+ * interception of the class is resolved for every kind as the instances are created.
  */
 class ExcludedClassInterceptorsCreatedBeforeConstructionTest {
 

@@ -38,21 +38,14 @@ final class ConstructorInvocationContextAdapter extends AbstractInvocationContex
     implements MicronautConstructorInvocationContext {
 
     private final ConstructorInvocationContext<Object> context;
-    /**
-     * The interceptor classes associated with the object being constructed that take no part in its construction,
-     * whose instances still have to exist before an {@code @AroundConstruct} method runs.
-     */
-    private final List<InterceptorReference> associated;
     private @Nullable Object target;
     private boolean proceeding;
 
     ConstructorInvocationContextAdapter(ConstructorInvocationContext<Object> context,
                                         List<InterceptorReference> chain,
-                                        JakartaInterceptorAdvice advice,
-                                        List<InterceptorReference> associated) {
+                                        JakartaInterceptorAdvice advice) {
         super(context, chain, advice);
         this.context = context;
-        this.associated = associated;
     }
 
     @Override
@@ -106,12 +99,12 @@ final class ConstructorInvocationContextAdapter extends AbstractInvocationContex
      * <p>Every interceptor of the chain proceeds through this same context, so only the outermost call - the one the
      * advice makes - starts the construction.</p>
      *
-     * <p>It starts by creating the instance of every interceptor class associated with the object. Section 2.3 da)
-     * runs an {@code @AroundConstruct} method only after injection has completed on the instances of all the
-     * interceptor classes associated with the target class, which is more than the chain: an interceptor class bound
-     * to the object that declares no {@code @AroundConstruct} method takes no part in its construction and is still
-     * one of them. The chain itself would otherwise create the instance of each of its interceptors as the one before
-     * it proceeds, after that one has already begun.</p>
+     * <p>Section 2.3 da) runs an {@code @AroundConstruct} method only after injection has completed on the instances
+     * of all the interceptor classes associated with the target class, which is more than the chain. Those exist
+     * already: Micronaut hands the advice the bean it is created for before the construction starts, and the advice
+     * creates every instance of the object then, see {@link JakartaInterceptorAdvice}. The instances of the chain are
+     * still created here, before it starts, so that a chain never creates the instance of an interceptor as the one
+     * before it proceeds, after that one has already begun.</p>
      *
      * <p>An exception that leaves the chain, or a chain that returns without any interceptor having proceeded to the
      * constructor, leaves no object, and section 2.3 has the interceptor instances of an object that fails to be
@@ -129,7 +122,6 @@ final class ConstructorInvocationContextAdapter extends AbstractInvocationContex
         proceeding = true;
         try {
             createInterceptorInstances();
-            createInterceptorInstances(associated);
             return super.proceed();
         } finally {
             proceeding = false;

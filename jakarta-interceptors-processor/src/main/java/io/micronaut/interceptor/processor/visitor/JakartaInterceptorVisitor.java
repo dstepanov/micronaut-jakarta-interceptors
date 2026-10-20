@@ -444,18 +444,6 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
             constructor.annotate(JakartaInterception.class, builder -> {
                 interceptorMembers(builder, whenConstructed);
                 bindingsMember(builder, constructorBindings);
-                // the classes the class names stay associated with it even where the constructor excludes them,
-                // and are created before its construction is interposed on; see JakartaInterception.associated
-                if (!classInterceptors.isEmpty()) {
-                    builder.member(JakartaInterception.ASSOCIATED, classInterceptors.stream()
-                        .map(name -> new AnnotationClassValue<>(name))
-                        .toArray(AnnotationClassValue<?>[]::new));
-                }
-                // so do the interceptors the bindings of the class bind, where the constructor declares a binding
-                // that replaces one of them for its own chain
-                if (!classBindings.isEmpty() && !sameBindings(classBindings, constructorBindings)) {
-                    builder.member(JakartaInterception.ASSOCIATED_BINDINGS, written(classBindings));
-                }
             });
             // the specification hands an @AroundConstruct interceptor method a java.lang.reflect.Constructor, which
             // Micronaut Core looks up on the class by the argument types of the bean constructor, with or without

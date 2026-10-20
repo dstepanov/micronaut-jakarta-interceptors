@@ -210,7 +210,11 @@ context
 | Covered
 | AroundConstructInstancesTest, AssociatedInstancesTest: every interceptor class the class of the object is bound to
 is created and injected before the first around-construct method runs, including one that declares no
-around-construct method and therefore takes no part in the construction. An interceptor class bound to one method of
+around-construct method and therefore takes no part in the construction, one the constructor excludes or replaces
+the binding of with its own (ExcludedClassInterceptorsCreatedBeforeConstructionTest,
+ConstructorBindingAssociationTest), and whether the object is looked up, created through `BeanContext.createBean` or
+created as the target of a scoped proxy (AssociatedInstancesCreationPathsTest). The advice of the object creates
+them as Micronaut hands it the bean, before the construction starts. An interceptor class bound to one method of
 the object alone is created as the object finishes being created, whether it is proxied as a subclass, proxied with
 a separate target or produced by a factory method: EagerCreationTest; see the guide
 

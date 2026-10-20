@@ -10,28 +10,31 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 /**
- * The chains of an element and the interceptor classes associated with its construction are kept in one map, under
- * the interception the processor recorded, and only the kind tells the two apart.
+ * The chains of every kind are kept in one map, under the interception the processor recorded, and only the kind
+ * tells the chains of one interception apart.
  */
 class RecordedKeyTest {
 
     private static AnnotationValue<JakartaInterception> interception() {
         return AnnotationValue.builder(JakartaInterception.class)
-            .member(JakartaInterception.ASSOCIATED, new AnnotationClassValue<>(String.class))
+            .member(JakartaInterception.INTERCEPTORS, new AnnotationClassValue<>(String.class))
             .build();
     }
 
     @Test
-    void theKeyOfAnAssociationIsNotTheKeyOfAnyChainOfTheSameInterception() {
-        RecordedKey associated = RecordedKey.of(null, interception());
+    void theKeysOfTwoKindsOfTheSameInterceptionDiffer() {
         for (InterceptionKind kind : InterceptionKind.values()) {
-            assertNotEquals(RecordedKey.of(kind, interception()), associated, kind.toString());
+            for (InterceptionKind other : InterceptionKind.values()) {
+                if (kind != other) {
+                    assertNotEquals(RecordedKey.of(kind, interception()), RecordedKey.of(other, interception()),
+                        kind + " " + other);
+                }
+            }
         }
     }
 
     @Test
     void theSameInterceptionIsTheSameKey() {
-        assertEquals(RecordedKey.of(null, interception()), RecordedKey.of(null, interception()));
         assertEquals(RecordedKey.of(InterceptionKind.AROUND_CONSTRUCT, interception()),
             RecordedKey.of(InterceptionKind.AROUND_CONSTRUCT, interception()));
     }

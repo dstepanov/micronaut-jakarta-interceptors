@@ -231,8 +231,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         if (chain.isEmpty()) {
             return context.proceed();
         }
-        ConstructorInvocationContextAdapter invocation = new ConstructorInvocationContextAdapter(
-            context, chain, this, associatedWithTheClass(constructor.getAnnotationMetadata()));
+        ConstructorInvocationContextAdapter invocation = new ConstructorInvocationContextAdapter(context, chain, this);
         try {
             invocation.proceed();
         } catch (Exception e) {
@@ -249,29 +248,6 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
                 + "InvocationContext.proceed(), so no instance was created");
         }
         return constructed;
-    }
-
-    /**
-     * The interceptor classes the class of an object being constructed is bound to, other than those of its
-     * around-construct chain.
-     *
-     * <p>Section 2.3 da) has injection completed on the instances of all the interceptor classes associated with the
-     * target class before an {@code @AroundConstruct} method runs, so an interceptor class that declares nothing but
-     * an {@code @AroundInvoke} method, and therefore takes no part in the construction, is created then too. The
-     * association rules of the construction itself are untouched: what is created here interposes on nothing, and the
-     * chain the construction runs is still only the one resolved for it.</p>
-     *
-     * <p>Read from what the processor records on the constructor apart from its chain: the interceptor classes the
-     * class names, whether or not the constructor excludes them with {@code @ExcludeClassInterceptors}, and the
-     * bindings in effect on it. Every kind of interceptor method counts, an {@code @AroundTimeout} one included. An
-     * interceptor class bound to one method of the object alone is not among them: the methods of a bean are not reachable from a
-     * constructor interception, and it is created as the object finishes being created. See the guide.</p>
-     *
-     * @param metadata The annotation metadata of the constructor
-     * @return The interceptors, which may repeat those of the chain
-     */
-    private List<InterceptorReference> associatedWithTheClass(AnnotationMetadata metadata) {
-        return resolver.resolveAssociated(metadata);
     }
 
     /**

@@ -140,16 +140,6 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     }
 
     /**
-     * Creates the instance of every interceptor class of the given references that has none yet, for the interceptor
-     * classes of the object that are not part of this chain.
-     *
-     * @param references The interceptors
-     */
-    final void createInterceptorInstances(List<InterceptorReference> references) {
-        advice.createInterceptorInstances(references);
-    }
-
-    /**
      * Hands the invocation over to Micronaut, once every interceptor class of the chain has proceeded.
      *
      * <p>What it hands over to is whatever Micronaut ordered after the advice, which is not always the intercepted

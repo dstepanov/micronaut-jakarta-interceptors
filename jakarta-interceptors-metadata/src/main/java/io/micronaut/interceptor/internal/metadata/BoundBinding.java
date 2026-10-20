@@ -23,8 +23,8 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * The element type of the members that record interceptor bindings, {@link JakartaInterception#bindings()},
- * {@link JakartaInterception#associatedBindings()} and {@link JakartaInterceptorMethods#bindings()}.
+ * The element type of the members that record interceptor bindings, {@link JakartaInterception#bindings()} and
+ * {@link JakartaInterceptorMethods#bindings()}.
  *
  * <p>Nothing is recorded as this annotation. Each element of those members is the value of a binding annotation
  * itself, named by the binding annotation, as the processor reduced it to what it binds by: the members it defaults

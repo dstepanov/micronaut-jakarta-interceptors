@@ -392,15 +392,10 @@ public final class InterceptorChainResolver {
         if (positions.isEmpty()) {
             return byPriority;
         }
-        List<BeanDefinition<?>> ordered = new ArrayList<>(byPriority.size());
-        List<BeanDefinition<?>> listed = new ArrayList<>(positions.size());
-        for (BeanDefinition<?> definition : byPriority) {
-            (positions.containsKey(definition) ? listed : ordered).add(definition);
-        }
-        // a stable sort: two of one position stay in the order their priority and name gave them
-        listed.sort(Comparator.comparingInt(positions::get));
-        ordered.addAll(listed);
-        return ordered;
+        // a stable sort: the unlisted ones, at no position, come first in the order their priority and name gave
+        // them, and two of one position stay in that order as well
+        byPriority.sort(Comparator.comparingInt(definition -> positions.getOrDefault(definition, -1)));
+        return byPriority;
     }
 
     /**

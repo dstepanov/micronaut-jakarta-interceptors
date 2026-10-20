@@ -149,6 +149,51 @@ class BoundInterceptorEnablementTest {
         }
     }
 
+    static final String POSITIONS = "test.bound-interceptor-enablement.positions";
+
+    /**
+     * Lists the interceptor classes of this test at the positions the test asks for: {@code tie} lists the two
+     * named ones at one position, {@code all} lists every one, the prioritized one at the last position there is.
+     */
+    @Singleton
+    @Requires(property = POSITIONS)
+    public static class PositioningEnablement implements BoundInterceptorEnablement {
+
+        private final String positions;
+
+        PositioningEnablement(@io.micronaut.context.annotation.Value("${" + POSITIONS + "}") String positions) {
+            this.positions = positions;
+        }
+
+        @Override
+        public boolean isEnabled(BeanDefinition<?> interceptor) {
+            return true;
+        }
+
+        @Override
+        public int position(BeanDefinition<?> interceptor) {
+            Class<?> type = interceptor.getBeanType();
+            if (type == ZuluListedInterceptor.class || type == AlphaListedInterceptor.class) {
+                return 0;
+            }
+            return type == PrioritizedListedInterceptor.class && positions.equals("all") ? Integer.MAX_VALUE : -1;
+        }
+    }
+
+    @Test
+    void theInterceptorsListedAtOnePositionKeepTheOrderOfTheirPriorityAndName() {
+        try (ApplicationContext context = ApplicationContext.run(Map.of(POSITIONS, "tie"))) {
+            assertEquals("prioritized alpha zulu worked", context.getBean(ListedService.class).work());
+        }
+    }
+
+    @Test
+    void whenEveryInterceptorIsListedTheListAloneOrdersThem() {
+        try (ApplicationContext context = ApplicationContext.run(Map.of(POSITIONS, "all"))) {
+            assertEquals("alpha zulu prioritized worked", context.getBean(ListedService.class).work());
+        }
+    }
+
     @Test
     void boundInterceptorsAreOrderedByPriorityThenNameOnTheirOwn() {
         try (ApplicationContext context = ApplicationContext.run()) {

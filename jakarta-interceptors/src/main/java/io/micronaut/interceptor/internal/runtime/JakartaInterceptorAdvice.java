@@ -81,8 +81,6 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      */
     private final BeanDependencyResolver dependencies;
     private final Map<Class<?>, Object> instances = new HashMap<>(4);
-    /** Whether Micronaut handed this advice the bean it is created for, whose instances it created at once. */
-    private final boolean toldTheBean;
     /**
      * The business method chain of each method of the object, by the identity of the method, so that a call reads
      * neither the interception of the method nor the resolver's map. Copied on write: a method is added once, and
@@ -103,11 +101,11 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      * class, two of one {@code @EachBean} among them, are told apart. The one advice Micronaut creates for a bean
      * that declares several of these interceptions is handed the bean once, and creates the instances once.</p>
      *
-     * <p>Micronaut hands none to the advice of a bean created through {@code BeanContext.createBean}, which it
-     * creates without the creation its lookups begin, nor to the advice of a proxy whose target the context holds no
-     * registration for. The instances of the former are created by {@link InterceptorCreationListener} as the bean is
-     * created; the latter creates the instance of an interceptor class as the first chain that runs it is
-     * resolved.</p>
+     * <p>A bean created through {@code BeanContext.createBean} is handed to its advice as well, since Micronaut
+     * begins a creation for it as it does for a lookup. Micronaut hands none only to the advice of a proxy whose
+     * target the context holds no registration for: the context did not create that target, so there is no creation
+     * to read it from, and such an advice creates the instance of an interceptor class as the first chain that runs
+     * it is resolved.</p>
      *
      * @param resolver     The resolver of the interceptor chains
      * @param dependencies What the interceptor instances are resolved through, which owns those it creates
@@ -117,7 +115,6 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
                                     @Nullable InterceptionTarget target) {
         this.resolver = resolver;
         this.dependencies = dependencies;
-        this.toldTheBean = target != null;
         if (target != null) {
             createInterceptorInstancesOf(target.definition());
         }
@@ -251,22 +248,6 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
     }
 
     /**
-     * Creates now every interceptor instance that will interpose on the given object, unless Micronaut handed the
-     * advice the bean as it was created, which created them then.
-     *
-     * <p>Called by {@link InterceptorCreationListener} as the object is created, on the advice bound to it, which
-     * is the advice whose instances every interception of that object goes on to use. An instance created already
-     * is not created again.</p>
-     *
-     * @param definition The definition of the object
-     */
-    void createInterceptorInstances(BeanDefinition<?> definition) {
-        if (!toldTheBean) {
-            createInterceptorInstancesOf(definition);
-        }
-    }
-
-    /**
      * Creates now every interceptor instance that will interpose on the given object.
      *
      * <p>The specification creates an interceptor instance when the object it intercepts is created, whether or
@@ -280,30 +261,6 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         for (Class<?> interceptorClass : resolver.resolveInterceptorClasses(definition)) {
             interceptorInstance(interceptorClass);
         }
-    }
-
-    /**
-     * Whether this module intercepts anything of the object the given definition creates: its lifecycle, read from
-     * the class, or one of its methods.
-     *
-     * <p>It is the filter {@link #createInterceptorInstances(BeanDefinition)} applies element by element, asked of
-     * the whole definition. Where it is {@code false} there is no interceptor instance to create, so
-     * {@link InterceptorCreationListener}, which is handed every bean the context creates, need not look among the
-     * dependents of the object for an advice to ask.</p>
-     *
-     * @param definition The definition of the object
-     * @return Whether the class or one of its executable methods declares the interception of this module
-     */
-    static boolean intercepts(BeanDefinition<?> definition) {
-        if (definition.getAnnotationMetadata().hasAnnotation(JakartaInterception.class)) {
-            return true;
-        }
-        for (ExecutableMethod<?, ?> method : definition.getExecutableMethods()) {
-            if (method.getAnnotationMetadata().hasAnnotation(JakartaInterception.class)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**

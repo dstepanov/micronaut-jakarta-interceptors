@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * on the class so that its construction is intercepted as well. Micronaut hands the advice of the subclass the bean
  * it is created for as it resolves the arguments of the constructor, so the instances exist before the constructor
  * runs, as the reference implementation has them; a bean created through {@code BeanContext.createBean} is handed
- * none, and its instances are created with it all the same.
+ * to its advice as well, since Micronaut begins a creation for it as it does for a lookup.
  */
 class SubclassCreationTest {
 

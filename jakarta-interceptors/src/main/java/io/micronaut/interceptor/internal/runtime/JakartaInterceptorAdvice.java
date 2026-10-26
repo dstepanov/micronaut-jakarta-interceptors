@@ -38,13 +38,9 @@ import io.micronaut.interceptor.internal.metadata.JakartaInterception;
 import jakarta.interceptor.Interceptor;
 import org.jspecify.annotations.Nullable;
 
-import java.lang.annotation.Annotation;
 import java.util.HashMap;
-import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 /**
@@ -81,13 +77,6 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      */
     private final BeanDependencyResolver dependencies;
     private final Map<Class<?>, Object> instances = new HashMap<>(4);
-    /**
-     * The business method chain of each method of the object, by the identity of the method, so that a call reads
-     * neither the interception of the method nor the resolver's map. Copied on write: a method is added once, and
-     * two calls adding at once only cost the one that loses resolving again on its next call. A call the scheduler
-     * makes to a timeout method resolves its own chain, see {@link #intercept(MethodInvocationContext)}.
-     */
-    private volatile IdentityHashMap<ExecutableMethod<?, ?>, MethodChain> businessChains = new IdentityHashMap<>(0);
 
     /**
      * Creates the advice of one object.
@@ -145,53 +134,54 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         if (kind == InterceptorKind.POST_CONSTRUCT || kind == InterceptorKind.PRE_DESTROY) {
             return interceptLifecycle(context, kind);
         }
-        MethodChain business = businessChainOf(context, kind);
+        MethodChain chains = chainsOf(context.getExecutableMethod(), kind);
         // a method declaring @Scheduled is a timeout method only while the scheduler invokes it: a direct call by
         // the application is a business method invocation, and so is a call the method makes to itself
-        ScheduledInvocation.Entry entry = business.timeout() ? ScheduledInvocation.enter(context) : null;
-        if (entry == null) {
-            return proceed(context, business.chain(), null, business);
+        List<InterceptorReference> timeoutChain = chains.timeoutChain();
+        ScheduledInvocation.Entry entry = timeoutChain != null ? ScheduledInvocation.enter(context) : null;
+        if (timeoutChain == null || entry == null) {
+            return proceed(context, chains.businessChain(), null);
         }
         try (entry) {
-            return proceed(context, resolver.resolve(kind, context.getAnnotationMetadata(), true), entry.schedule(),
-                business);
+            return proceed(context, timeoutChain, entry.schedule());
         }
     }
 
     private @Nullable Object proceed(MethodInvocationContext<Object, Object> context,
                                      List<InterceptorReference> chain,
-                                     @Nullable AnnotationValue<?> schedule,
-                                     MethodChain business) {
+                                     @Nullable AnnotationValue<?> schedule) {
         if (chain.isEmpty()) {
             return context.proceed();
         }
         try {
-            return new BusinessMethodInvocationContext(context, chain, this, schedule, business).proceed();
+            return new BusinessMethodInvocationContext(context, chain, this, schedule).proceed();
         } catch (Exception e) {
             throw sneakyThrow(e);
         }
     }
 
     /**
-     * The chain of a business method invocation of a method, resolved on its first call.
+     * The chains of a method, kept by the method itself, which belongs to the context that created the object, so
+     * that a call reads neither the interception of the method nor the resolver's map.
      *
-     * @param context The invocation
-     * @param kind    The kind Micronaut intercepts the method as
-     * @return The chain, and whether the method is a timeout method when the scheduler invokes it
+     * <p>A subclass Micronaut generates to intercept a class creates the methods it is invoked through for each
+     * object, so an object keeps the chains of its own methods, and finds them in the resolver's map on its first
+     * call of each. Micronaut keeps no value for a method whose metadata holds an evaluated expression, and computes
+     * it for every call instead; the resolver's map answers that call as well.</p>
+     *
+     * @param method The intercepted method
+     * @param kind   The kind Micronaut intercepts the method as
+     * @return The chain of a business method invocation, and the one of a timeout method invocation where the method
+     * is a timeout method when the scheduler invokes it
      */
-    private MethodChain businessChainOf(MethodInvocationContext<Object, Object> context, InterceptorKind kind) {
-        ExecutableMethod<?, ?> method = context.getExecutableMethod();
-        MethodChain cached = businessChains.get(method);
-        if (cached != null) {
-            return cached;
-        }
-        AnnotationMetadata metadata = context.getAnnotationMetadata();
-        MethodChain resolved = new MethodChain(resolver.resolve(kind, metadata, false),
-            metadata.isTrue(JakartaInterception.class, JakartaInterception.TIMEOUT));
-        IdentityHashMap<ExecutableMethod<?, ?>, MethodChain> added = new IdentityHashMap<>(businessChains);
-        added.put(method, resolved);
-        businessChains = added;
-        return resolved;
+    private MethodChain chainsOf(ExecutableMethod<Object, Object> method, InterceptorKind kind) {
+        return method.getCachedValue(MethodChain.class, m -> {
+            AnnotationMetadata metadata = m.getAnnotationMetadata();
+            boolean timeout = metadata.getTargetAnnotationMetadata()
+                .isTrue(JakartaInterception.class, JakartaInterception.TIMEOUT);
+            return new MethodChain(resolver.resolve(kind, metadata, false),
+                timeout ? resolver.resolve(kind, metadata, true) : null);
+        });
     }
 
     /**
@@ -352,55 +342,14 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
     }
 
     /**
-     * The chain of the business method invocations of a method, and the bindings its invocations report, which
-     * depend on nothing but the compiled metadata of the method and are read once, the first time an interceptor
-     * asks for them, rather than for every invocation. Two invocations asking at once may both read them, and read
-     * the same.
+     * The chains of a method, as the method keeps them.
+     *
+     * @param businessChain The interceptors of a business method invocation, in the order they are invoked in
+     * @param timeoutChain  The interceptors of an invocation the scheduler makes, where the method is a timeout
+     *                      method then, or {@code null} where it is not
      */
-    static final class MethodChain {
-
-        private final List<InterceptorReference> chain;
-        private final boolean timeout;
-        private volatile @Nullable List<AnnotationValue<?>> bindingValues;
-        private volatile @Nullable Set<Annotation> bindings;
-
-        /**
-         * Remembers the chain of a method.
-         *
-         * @param chain   The interceptors, in the order they are invoked in
-         * @param timeout Whether the method is a timeout method when the scheduler invokes it, which then has a
-         *                chain of its own
-         */
-        MethodChain(List<InterceptorReference> chain, boolean timeout) {
-            this.chain = chain;
-            this.timeout = timeout;
-        }
-
-        List<InterceptorReference> chain() {
-            return chain;
-        }
-
-        boolean timeout() {
-            return timeout;
-        }
-
-        List<AnnotationValue<?>> bindingValues(Supplier<List<AnnotationValue<?>>> read) {
-            List<AnnotationValue<?>> values = bindingValues;
-            if (values == null) {
-                values = read.get();
-                bindingValues = values;
-            }
-            return values;
-        }
-
-        Set<Annotation> bindings(Supplier<Set<Annotation>> build) {
-            Set<Annotation> built = bindings;
-            if (built == null) {
-                built = build.get();
-                bindings = built;
-            }
-            return built;
-        }
+    private record MethodChain(List<InterceptorReference> businessChain,
+                               @Nullable List<InterceptorReference> timeoutChain) {
     }
 
     /**

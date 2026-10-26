@@ -228,4 +228,19 @@ class BoundInterceptorEnablementTest {
             assertEquals("switched worked", context.getBean(NamingService.class).work());
         }
     }
+
+    /**
+     * The chain of a method is kept by the method, which belongs to the context that loaded its bean: two contexts
+     * open at once in one virtual machine, enabling differently, each keep the chains of their own enablement.
+     */
+    @Test
+    void twoContextsOpenAtOnceEachKeepTheChainsOfTheirOwnEnablement() {
+        try (ApplicationContext disabling = ApplicationContext.run(Map.of(DISABLING, "true"));
+             ApplicationContext enabling = ApplicationContext.run()) {
+            assertEquals("worked", disabling.getBean(SwitchedService.class).work());
+            assertEquals("switched worked", enabling.getBean(SwitchedService.class).work());
+            assertEquals("worked", disabling.getBean(SwitchedService.class).work());
+            assertEquals("switched worked", enabling.getBean(SwitchedService.class).work());
+        }
+    }
 }

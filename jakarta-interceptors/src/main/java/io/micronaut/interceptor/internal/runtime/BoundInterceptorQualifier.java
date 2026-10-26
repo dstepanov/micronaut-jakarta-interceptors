@@ -32,7 +32,10 @@ import java.util.stream.Stream;
  *
  * <p>Micronaut's own {@code InterceptorBindingQualifier} selects an interceptor sharing any one binding with the
  * point, where the specification requires all of the interceptor's, so the comparison is
- * {@link InterceptorBindings#isBoundBy(InterceptorBindings)}. It is a filter, shaped as Micronaut's
+ * {@link InterceptorBindings#isBoundBy(InterceptorBindings)}. That holds with
+ * {@code @InterceptorBinding(matchAllOccurrences = true)} as well, which only Micronaut's interceptor registry
+ * applies, and only to Micronaut interceptors; and Micronaut leaves out a member a binding excludes only on the side
+ * that lists it, which a binding built from an annotation instance does not. It is a filter, shaped as Micronaut's
  * {@code FilteringQualifier} is, which is internal to Micronaut and so is not extended.</p>
  *
  * @param <T> The type the beans are looked up by

@@ -176,12 +176,22 @@ interceptors are created as its target is first resolved - and an intercepted li
 `BeanContext.createBean` is handed to its advice as well, since Micronaut begins a creation for it as it does for a
 lookup.
 
-Micronaut compares interceptor bindings through its own interceptor binding qualifier, which qualifies an
-interceptor bound by any one of the bindings of an element. The specification binds an interceptor only when every
-binding it declares, members included, is one of the element's, so the bindings are compared by this module's
-`InterceptorBindings` instead, through a qualifier of its own; see <<bindings,Interceptor Bindings>>. Binding types
-are not meta-annotated with Micronaut's own `@InterceptorBinding` for the same reason, and because doing so would
-have Micronaut proxy every class carrying a binding, interceptor classes included.
+The interceptor classes bound to an element are selected by this module's `InterceptorBindings`, through a
+qualifier of its own, rather than by Micronaut; see <<bindings,Interceptor Bindings>>. Micronaut 5.3 can match the
+occurrences of a repeatable binding as one group, as the specification does, when the binding sets the experimental
+`@InterceptorBinding(matchAllOccurrences = true)`, but its selection still differs in what it is given and in how it
+compares:
+
+* it selects Micronaut interceptors by Micronaut's own `@InterceptorBinding`, and its exact rule is applied by its
+interceptor registry alone, to beans that are Micronaut interceptors. Its interceptor binding qualifier, the one part
+another module can ask, qualifies an interceptor bound by any one of the bindings of an element. An interceptor
+class here is not a Micronaut interceptor, and binding types are not meta-annotated with Micronaut's
+`@InterceptorBinding`, since that would have Micronaut proxy every class carrying a binding, interceptor classes
+included;
+* it leaves out the `@Nonbinding` members of an occurrence only where that occurrence lists them. A binding built
+from an annotation instance lists none, so `@Noted(value = "one", note = "other")` built so does not match the
+`@Noted(value = "one", note = "first")` an element declares, where the member `note` does not bind. Micronaut CDI
+compares exactly such instances when its `BeanManager` is asked for the interceptors of a set of bindings.
 
 The map `InvocationContext.getContextData()` returns is created the first time an interceptor of the invocation asks
 for it, and kept among the attributes of the Micronaut invocation, which every advice of that invocation shares.

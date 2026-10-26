@@ -26,7 +26,6 @@ import io.micronaut.context.BeanDependencyResolver;
 import io.micronaut.context.InterceptionTarget;
 import io.micronaut.context.Qualifier;
 import io.micronaut.context.annotation.Prototype;
-import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.core.beans.BeanConstructor;
@@ -153,7 +152,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
             return proceed(context, business.chain(), null, business);
         }
         try (entry) {
-            return proceed(context, resolver.resolve(kind, context.getAnnotationMetadata(), true), entry.schedule(),
+            return proceed(context, resolver.resolve(kind, context.getExecutableMethod(), true), entry.schedule(),
                 business);
         }
     }
@@ -185,9 +184,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         if (cached != null) {
             return cached;
         }
-        AnnotationMetadata metadata = context.getAnnotationMetadata();
-        MethodChain resolved = new MethodChain(resolver.resolve(kind, metadata, false),
-            metadata.isTrue(JakartaInterception.class, JakartaInterception.TIMEOUT));
+        MethodChain resolved = new MethodChain(resolver.resolve(kind, method, false), resolver.isTimeout(method));
         IdentityHashMap<ExecutableMethod<?, ?>, MethodChain> added = new IdentityHashMap<>(businessChains);
         added.put(method, resolved);
         businessChains = added;
@@ -202,7 +199,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      * not proceed keeps all of them from running.</p>
      */
     private @Nullable Object interceptLifecycle(MethodInvocationContext<Object, Object> context, InterceptorKind kind) {
-        List<InterceptorReference> chain = resolver.resolve(kind, context.getAnnotationMetadata());
+        List<InterceptorReference> chain = resolver.resolve(kind, context.getExecutableMethod(), true);
         if (chain.isEmpty()) {
             context.proceed();
             return context.getTarget();

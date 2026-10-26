@@ -128,12 +128,49 @@ public final class InterceptorChainResolver {
         if (kind == null) {
             return List.of();
         }
-        return resolve(kind, interception);
+        return resolve(RecordedKey.of(kind, interception), kind, interception);
     }
 
-    private List<InterceptorReference> resolve(InterceptionKind kind,
+    /**
+     * Resolves the chain of a method, invoked as a business method or running a lifecycle event of its bean.
+     *
+     * <p>The interception is read from what the method keeps of it, see {@link MethodInterception}: the method's
+     * metadata is the metadata of every invocation of it, beneath the wrapper an evaluated expression puts around
+     * it, and what it records is read once for the method rather than once for every bean created that invokes
+     * it.</p>
+     *
+     * @param interceptorKind The kind Micronaut intercepts the method as
+     * @param method          The method
+     * @param scheduled       Whether the scheduler is invoking the method, without which a timeout method is
+     *                        interposed on as a business method
+     * @return The interceptors, in the order they are invoked in
+     */
+    List<InterceptorReference> resolve(InterceptorKind interceptorKind, ExecutableMethod<?, ?> method, boolean scheduled) {
+        MethodInterception recorded = interceptionOf(method);
+        InterceptionKind kind = InterceptionKind.of(interceptorKind, scheduled && recorded.timeout());
+        if (kind == null) {
+            return List.of();
+        }
+        return resolve(recorded.key(kind), kind, recorded.interception());
+    }
+
+    /**
+     * Whether a method is a timeout method when the scheduler invokes it.
+     *
+     * @param method The method
+     * @return Whether it is
+     */
+    boolean isTimeout(ExecutableMethod<?, ?> method) {
+        return interceptionOf(method).timeout();
+    }
+
+    private static MethodInterception interceptionOf(ExecutableMethod<?, ?> method) {
+        return method.getCachedValue(MethodInterception.class, MethodInterception::of);
+    }
+
+    private List<InterceptorReference> resolve(RecordedKey recordedKey,
+                                               InterceptionKind kind,
                                                @Nullable AnnotationValue<JakartaInterception> interception) {
-        RecordedKey recordedKey = RecordedKey.of(kind, interception);
         List<InterceptorReference> chain = recorded.get(recordedKey);
         if (chain == null) {
             readInterceptions.increment();
@@ -154,7 +191,7 @@ public final class InterceptorChainResolver {
      * invocation. The interception holds no expression, so it reads the same beneath the wrapper, and what is read
      * there can be remembered without keeping an invocation alive.</p>
      */
-    private static @Nullable AnnotationValue<JakartaInterception> recordedInterception(AnnotationMetadata metadata) {
+    static @Nullable AnnotationValue<JakartaInterception> recordedInterception(AnnotationMetadata metadata) {
         return metadata.getTargetAnnotationMetadata().getAnnotation(JakartaInterception.class);
     }
 
@@ -193,13 +230,12 @@ public final class InterceptorChainResolver {
                 recordedInterception(definition.getAnnotationMetadata());
             if (classInterception != null) {
                 for (InterceptionKind kind : InterceptionKind.values()) {
-                    addInterceptorClasses(resolve(kind, classInterception), classes);
+                    addInterceptorClasses(resolve(RecordedKey.of(kind, classInterception), kind, classInterception), classes);
                 }
             }
             for (ExecutableMethod<?, ?> method : definition.getExecutableMethods()) {
-                AnnotationMetadata methodMetadata = method.getAnnotationMetadata();
-                if (methodMetadata.hasAnnotation(JakartaInterception.class)) {
-                    addInterceptorClasses(resolve(InterceptorKind.AROUND, methodMetadata), classes);
+                if (method.getAnnotationMetadata().hasAnnotation(JakartaInterception.class)) {
+                    addInterceptorClasses(resolve(InterceptorKind.AROUND, method, true), classes);
                 }
             }
             resolved = List.copyOf(classes);

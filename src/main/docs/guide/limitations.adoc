@@ -183,11 +183,13 @@ from an annotation instance lists none, so `@Noted(value = "one", note = "other"
 `@Noted(value = "one", note = "first")` an element declares, where the member `note` does not bind. Micronaut CDI
 compares exactly such instances when its `BeanManager` is asked for the interceptors of a set of bindings.
 
-The chains of a method are kept by the method, which Micronaut lets an interceptor keep a value derived from. The
-subclass Micronaut generates to intercept a class creates the methods it is invoked through for each object it
-creates, though, and Micronaut keeps no value for a method whose metadata holds an evaluated expression, nor offers
-one for a constructor or a bean definition. The resolver therefore keeps a chain under the interception the
-processor recorded as well, which a new object finds on its first call of each method.
+A method keeps what its compiled metadata alone gives - the interception the processor recorded, the key of its chain
+for each kind of interception, and the bindings its invocations report - through Micronaut's experimental
+`ExecutableMethod.getCachedValue`. The chains themselves depend on the interceptor classes a context holds and
+enables, so they stay with the resolver of each context, under the key the method keeps, and each object keeps the
+chains of the methods it is called through. Micronaut keeps no value for a method whose metadata holds an evaluated
+expression, nor offers one for a constructor or a bean definition, where the resolver reads the interception
+again.
 
 The map `InvocationContext.getContextData()` returns is created the first time an interceptor of the invocation asks
 for it, and kept among the attributes of the Micronaut invocation, which every advice of that invocation shares.

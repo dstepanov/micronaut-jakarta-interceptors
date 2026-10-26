@@ -230,8 +230,9 @@ class BoundInterceptorEnablementTest {
     }
 
     /**
-     * The chain of a method is kept by the method, which belongs to the context that loaded its bean: two contexts
-     * open at once in one virtual machine, enabling differently, each keep the chains of their own enablement.
+     * A method keeps only what its compiled metadata records, and the chain resolved from it stays with the resolver
+     * of each context: two contexts open at once in one virtual machine, enabling differently, each keep the chains
+     * of their own enablement, even where they share the methods of a proxy.
      */
     @Test
     void twoContextsOpenAtOnceEachKeepTheChainsOfTheirOwnEnablement() {

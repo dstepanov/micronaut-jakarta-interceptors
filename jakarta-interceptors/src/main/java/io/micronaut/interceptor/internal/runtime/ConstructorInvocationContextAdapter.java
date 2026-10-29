@@ -39,7 +39,6 @@ final class ConstructorInvocationContextAdapter extends AbstractInvocationContex
 
     private final ConstructorInvocationContext<Object> context;
     private @Nullable Object target;
-    private boolean proceeding;
 
     ConstructorInvocationContextAdapter(ConstructorInvocationContext<Object> context,
                                         List<InterceptorReference> chain,
@@ -50,15 +49,6 @@ final class ConstructorInvocationContextAdapter extends AbstractInvocationContex
 
     @Override
     public @Nullable Object getTarget() {
-        return target;
-    }
-
-    /**
-     * Returns the instance the constructor produced.
-     *
-     * @return The instance, or {@code null} when the interceptor never proceeded
-     */
-    @Nullable Object constructed() {
         return target;
     }
 
@@ -91,41 +81,6 @@ final class ConstructorInvocationContextAdapter extends AbstractInvocationContex
     @Override
     public void setParameters(@Nullable Object[] params) {
         writeParameters(params);
-    }
-
-    /**
-     * Runs the chain once every interceptor instance of it exists.
-     *
-     * <p>Every interceptor of the chain proceeds through this same context, so only the outermost call - the one the
-     * advice makes - starts the construction.</p>
-     *
-     * <p>Section 2.3 da) runs an {@code @AroundConstruct} method only after injection has completed on the instances
-     * of all the interceptor classes associated with the target class, which is more than the chain. Those exist
-     * already: Micronaut hands the advice the bean it is created for before the construction starts, and the advice
-     * creates every instance of the object then, see {@link JakartaInterceptorAdvice}. The instances of the chain are
-     * still created here, before it starts, so that a chain never creates the instance of an interceptor as the one
-     * before it proceeds, after that one has already begun.</p>
-     *
-     * <p>An exception that leaves the chain, or a chain that returns without any interceptor having proceeded to the
-     * constructor, leaves no object, and section 2.3 has the interceptor instances of an object that fails to be
-     * created destroyed. Micronaut does that: it destroys the dependents of a bean whose creation fails, and the
-     * advice holding the instances is one of them.</p>
-     *
-     * @return What the chain returned
-     * @throws Exception What the chain threw
-     */
-    @Override
-    public @Nullable Object proceed() throws Exception {
-        if (proceeding) {
-            return super.proceed();
-        }
-        proceeding = true;
-        try {
-            createInterceptorInstances();
-            return super.proceed();
-        } finally {
-            proceeding = false;
-        }
     }
 
     /**

@@ -227,6 +227,13 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         }
         ConstructorInvocationContextAdapter invocation = new ConstructorInvocationContextAdapter(context, chain, this);
         try {
+            // section 2.3 da) runs an @AroundConstruct method only once injection has completed on the instances of
+            // every interceptor class associated with the target class. Those exist already, created when Micronaut
+            // handed the advice the bean it is created for; the instances of the chain are created here as well, so
+            // that a chain never creates the instance of an interceptor after the one before it has begun. Should the
+            // chain fail, Micronaut destroys the dependents of the bean it failed to create, the advice among them,
+            // and the instances with it, as section 2.3 has them destroyed
+            createInterceptorInstances(chain);
             invocation.proceed();
         } catch (Exception e) {
             // unlike a lifecycle callback, an around-construct interceptor method may throw what the constructor
@@ -235,7 +242,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
             // reaches the caller unchanged, and anything else is the cause of the failure to create the bean
             throw sneakyThrow(e);
         }
-        Object constructed = invocation.constructed();
+        Object constructed = invocation.getTarget();
         if (constructed == null) {
             throw new IllegalStateException("An @AroundConstruct interceptor of ["
                 + constructor.getDeclaringBeanType().getName() + "] returned without calling "

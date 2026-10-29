@@ -46,9 +46,11 @@ class CdiInvocationRulesTest {
             Calls.clear();
             service.toString("a ");
             service.equals(service);
+            service.equals(new Object[0]);
             service.work();
             assertEquals(
-                List.of("secure", "toString overload", "secure", "equals overload", "secure", "work"),
+                List.of("secure", "toString overload", "secure", "equals overload", "secure", "equals array overload",
+                    "secure", "work"),
                 List.copyOf(Calls.RECORDED));
         }
     }

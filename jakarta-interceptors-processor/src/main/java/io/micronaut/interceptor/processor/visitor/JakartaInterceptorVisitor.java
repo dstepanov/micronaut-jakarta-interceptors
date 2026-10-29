@@ -32,6 +32,7 @@ import io.micronaut.core.annotation.ReflectionConfig;
 import io.micronaut.core.annotation.ReflectiveAccess;
 import io.micronaut.core.annotation.TypeHint;
 import io.micronaut.inject.ast.AnnotationElement;
+import io.micronaut.inject.ast.AnnotationMemberElement;
 import io.micronaut.inject.ast.ClassElement;
 import io.micronaut.inject.ast.Element;
 import io.micronaut.inject.ast.ElementQuery;
@@ -418,6 +419,11 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         for (Producer producer : producers) {
             interceptProduced(producer, context);
         }
+        if (reflective) {
+            // before the class is found to intercept nothing itself: the member of a factory may be the one place a
+            // binding is declared
+            permitBindingSynthesis(element, constructor, methods, producers, context);
+        }
         if (!classDeclares && !constructorDeclares
             && methods.stream().noneMatch(JakartaInterceptorVisitor::declaresInterception)) {
             return;
@@ -454,9 +460,6 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         }
         for (MethodElement method : methods) {
             interceptMethod(model, method, classInterceptors, classBindings, classDeclares, context);
-        }
-        if (reflective) {
-            permitBindingSynthesis(element, constructor, methods, producers, context);
         }
     }
 
@@ -640,8 +643,8 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
             if (!(context.getClassElement(name).orElse(null) instanceof AnnotationElement annotationType)) {
                 continue;
             }
-            for (MethodElement member : annotationType.getEnclosedElements(ElementQuery.ALL_METHODS.onlyDeclared())) {
-                ClassElement returned = member.getReturnType();
+            for (AnnotationMemberElement member : annotationType.getMembers()) {
+                ClassElement returned = member.getType();
                 if (returned.isArray()) {
                     returned = returned.fromArray();
                 }
@@ -967,7 +970,9 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
             return false;
         }
         for (int i = 0; i < ours.length; i++) {
-            if (!ours[i].getType().getName().equals(theirs[i].getType().getName())) {
+            ClassElement our = ours[i].getType();
+            ClassElement their = theirs[i].getType();
+            if (!our.getName().equals(their.getName()) || our.getArrayDimensions() != their.getArrayDimensions()) {
                 return false;
             }
         }
@@ -1019,13 +1024,15 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
     /**
      * Tells whether a class still has the method one of its classes declared, which it does not when a subclass
      * overrides it: the methods of a class are the ones in effect on it, and an override takes the place of the
-     * method it overrides.
+     * method it overrides. The method is matched by its signature as well as its name, as an interceptor method
+     * accepts an {@code InvocationContext} and an overload of the same name left in effect is not one.
      */
     private static boolean stillDeclares(ClassElement element, String declaringType, String name) {
         return element.getEnclosedElements(ElementQuery.ALL_METHODS)
             .stream()
             .anyMatch(method -> method.getName().equals(name)
-                && method.getDeclaringType().getName().equals(declaringType));
+                && method.getDeclaringType().getName().equals(declaringType)
+                && InterceptorClassScanner.acceptsInvocationContext(method));
     }
 
     /**
@@ -1055,7 +1062,7 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
         return switch (method.getName()) {
             case "toString", "hashCode", "clone", "finalize" -> parameters.length == 0;
             case "equals" -> parameters.length == 1
-                && Object.class.getName().equals(parameters[0].getType().getName());
+                && InterceptorClassScanner.isType(parameters[0].getType(), Object.class.getName());
             default -> false;
         };
     }

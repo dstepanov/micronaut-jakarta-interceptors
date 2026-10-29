@@ -179,13 +179,6 @@ public final class BindingValue {
     }
 
     /**
-     * @return The members that bind, spelt as Micronaut records them
-     */
-    public Map<String, Object> members() {
-        return members;
-    }
-
-    /**
      * The binding as a value of its annotation, as the processor records it: the members that bind, spelt as
      * Micronaut records them, and the members excluded from it listed under
      * {@value AnnotationUtil#NON_BINDING_ATTRIBUTE}.
@@ -333,7 +326,8 @@ public final class BindingValue {
         if (value instanceof EvaluatedExpressionReference expression) {
             return writable(expression.annotationValue(), excluded, withDefaults, leaveOutUndefaultedEmptyStrings);
         }
-        return value;
+        // an array is copied, as the one the binding was read from stays the caller's
+        return copyOf(value);
     }
 
     /**

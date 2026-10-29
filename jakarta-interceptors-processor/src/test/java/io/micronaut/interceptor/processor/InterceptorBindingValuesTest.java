@@ -126,8 +126,8 @@ class InterceptorBindingValuesTest {
         BindingValue binding =
             InterceptorBindingValues.of(declared, name -> List.of("value"));
 
-        assertEquals(Map.of("value", "a"), binding.members());
         AnnotationValue<?> written = binding.toAnnotationValue();
+        assertEquals("a", written.stringValue().orElse(null));
         assertFalse(written.contains("comment"));
         assertFalse(written.contains("note"));
         assertArrayEquals(new String[]{"comment", "note"}, written.stringValues(AnnotationUtil.NON_BINDING_ATTRIBUTE));
@@ -147,7 +147,7 @@ class InterceptorBindingValuesTest {
         BindingValue binding = InterceptorBindingValues.of(declared,
             name -> name.equals("test.Held") ? List.of("note") : List.of());
 
-        AnnotationValue<?> written = (AnnotationValue<?>) binding.members().get("value");
+        AnnotationValue<?> written = binding.toAnnotationValue().getAnnotation("value").orElseThrow();
         assertEquals("a", written.stringValue().orElse(null));
         assertFalse(written.contains("note"));
         assertArrayEquals(new String[]{"note"}, written.stringValues(AnnotationUtil.NON_BINDING_ATTRIBUTE));

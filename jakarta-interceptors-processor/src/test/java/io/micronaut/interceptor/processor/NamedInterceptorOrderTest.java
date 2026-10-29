@@ -101,6 +101,31 @@ class NamedInterceptorOrderTest {
         }
         """;
 
+    /**
+     * The same superclass with an ordinary method sharing the name of its interceptor method, which the class
+     * inherits and which interposes on nothing. It is a bean of its own, so that it is visited in the order it is
+     * compiled in, and what it declared is recorded on it before the class naming its subclass is visited.
+     */
+    private static final String OVERLOADED_BASE = """
+        package io.micronaut.interceptor.test.order;
+
+        import jakarta.inject.Singleton;
+        import jakarta.interceptor.AroundInvoke;
+        import jakarta.interceptor.InvocationContext;
+
+        @Singleton
+        public class OverriddenBase {
+            @AroundInvoke
+            public Object around(InvocationContext context) throws Exception {
+                return context.proceed();
+            }
+
+            public Object around(String value) {
+                return value;
+            }
+        }
+        """;
+
     private static final String OVERRIDDEN_CONSUMER = """
         package io.micronaut.interceptor.test.order;
 
@@ -162,6 +187,17 @@ class NamedInterceptorOrderTest {
         assertFalse(proxied(produced, "OverriddenConsumer"), produced.toString());
 
         produced = compile(OVERRIDDEN_CONSUMER, OVERRIDDEN, OVERRIDDEN_BASE);
+        assertFalse(proxied(produced, "OverriddenConsumer"), produced.toString());
+    }
+
+    /**
+     * An inherited method that only shares its name with the overridden interceptor method is not one, and does not
+     * keep the named class in.
+     */
+    @Test
+    void anOverloadOfTheOverriddenInterceptorMethodDoesNotKeepTheNamedClass() {
+        List<String> produced = compile(OVERLOADED_BASE, OVERRIDDEN, OVERRIDDEN_CONSUMER);
+
         assertFalse(proxied(produced, "OverriddenConsumer"), produced.toString());
     }
 }

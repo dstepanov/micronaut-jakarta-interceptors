@@ -264,10 +264,27 @@ public final class InterceptorClassScanner {
         return element.getAnnotationMetadata();
     }
 
-    private static boolean acceptsInvocationContext(MethodElement method) {
+    /**
+     * Tells whether a method accepts a single {@code InvocationContext}, which is what an interceptor method accepts.
+     *
+     * @param method The method
+     * @return Whether it does
+     */
+    public static boolean acceptsInvocationContext(MethodElement method) {
         ParameterElement[] parameters = method.getParameters();
-        return parameters.length == 1
-            && parameters[0].getType().getName().equals(JakartaInterceptors.INVOCATION_CONTEXT);
+        return parameters.length == 1 && isType(parameters[0].getType(), JakartaInterceptors.INVOCATION_CONTEXT);
+    }
+
+    /**
+     * Tells whether a type is the class of a name, rather than an array of it: Micronaut names an array by the class
+     * of its components, and keeps how many dimensions it has apart from that name.
+     *
+     * @param type The type
+     * @param name The name of the class
+     * @return Whether the type is that class
+     */
+    public static boolean isType(ClassElement type, String name) {
+        return !type.isArray() && type.getName().equals(name);
     }
 
     /**
@@ -287,7 +304,7 @@ public final class InterceptorClassScanner {
                 + "] of [" + declaringClass.getName() + "] must not be static, final or abstract");
         }
         boolean returnsTheResult = kind == InterceptionKind.AROUND_INVOKE || kind == InterceptionKind.AROUND_TIMEOUT;
-        boolean returnsObject = Object.class.getName().equals(method.getReturnType().getName());
+        boolean returnsObject = isType(method.getReturnType(), Object.class.getName());
         if (returnsTheResult && !returnsObject) {
             throw new ProcessingException(method, "The @" + simpleName(annotation) + " method [" + method.getName()
                 + "] of [" + declaringClass.getName() + "] must return Object, but it returns ["

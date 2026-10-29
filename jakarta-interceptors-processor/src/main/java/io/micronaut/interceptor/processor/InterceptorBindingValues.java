@@ -20,9 +20,8 @@ import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationUtil;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
-import io.micronaut.inject.ast.ClassElement;
+import io.micronaut.inject.ast.AnnotationElement;
 import io.micronaut.inject.ast.Element;
-import io.micronaut.inject.ast.ElementQuery;
 import io.micronaut.inject.visitor.VisitorContext;
 import io.micronaut.interceptor.internal.metadata.BindingValue;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorSupport;
@@ -117,25 +116,16 @@ public final class InterceptorBindingValues {
      * Reads the members excluded from a binding annotation off the annotation type itself, remembering what it read:
      * the same annotation is reached as often as it is declared, and it is the same annotation every time.
      *
-     * <p>Javac and the Groovy compiler answer the members of an annotation as its methods. KSP answers them as its
-     * properties and no methods, a Java annotation on the classpath included, so those are read where there are no
-     * methods.</p>
-     *
      * @param context The visitor context, which resolves the annotation types
      * @return The excluded members of any binding annotation the compilation can see
      */
     public static ExcludedMembers excludedMembersOf(VisitorContext context) {
         Map<String, List<String>> read = new HashMap<>();
         return name -> read.computeIfAbsent(name, annotationName -> {
-            ClassElement annotationType = context.getClassElement(annotationName).orElse(null);
-            if (annotationType == null) {
+            if (!(context.getClassElement(annotationName).orElse(null) instanceof AnnotationElement annotationType)) {
                 return List.of();
             }
-            List<? extends Element> members = annotationType.getEnclosedElements(ElementQuery.ALL_METHODS);
-            if (members.isEmpty()) {
-                members = annotationType.getBeanProperties();
-            }
-            return members.stream()
+            return annotationType.getMembers().stream()
                 .filter(member -> member.hasAnnotation(JakartaInterceptors.NONBINDING)
                     || member.hasAnnotation(NonBinding.class))
                 .map(Element::getName)

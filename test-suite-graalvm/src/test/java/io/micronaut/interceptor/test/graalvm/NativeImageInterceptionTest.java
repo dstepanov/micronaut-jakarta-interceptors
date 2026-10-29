@@ -63,4 +63,17 @@ class NativeImageInterceptionTest {
             assertEquals(List.of("service noted fallback [first, second]"), Calls.RECORDED);
         }
     }
+
+    /**
+     * A binding declared only on the member of a factory producing a bean is built as an instance as well, the
+     * annotation its member returns included.
+     */
+    @Test
+    void readsABindingOnlyAFactoryMemberDeclaresInsideANativeImage() {
+        Calls.clear();
+        try (ApplicationContext context = ApplicationContext.run()) {
+            assertEquals("done", context.getBean(ProducedService.class).work());
+            assertEquals(List.of("produced factory"), Calls.RECORDED);
+        }
+    }
 }

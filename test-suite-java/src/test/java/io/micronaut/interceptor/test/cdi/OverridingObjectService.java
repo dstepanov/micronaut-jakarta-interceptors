@@ -38,6 +38,11 @@ public class OverridingObjectService {
         return this == other;
     }
 
+    public boolean equals(Object[] others) {
+        Calls.RECORDED.add("equals array overload");
+        return others.length == 0;
+    }
+
     public String work() {
         Calls.RECORDED.add("work");
         return "done";

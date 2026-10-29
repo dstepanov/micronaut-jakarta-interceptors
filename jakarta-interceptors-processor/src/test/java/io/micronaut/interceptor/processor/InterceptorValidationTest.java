@@ -156,6 +156,34 @@ class InterceptorValidationTest {
     }
 
     @Test
+    void anInterceptorMethodThatReturnsAnArrayOfObjectsIsReported() {
+        String error = compile("""
+            @Interceptor
+            public class Subject {
+                @AroundInvoke
+                public Object[] intercept(InvocationContext context) throws Exception {
+                    return new Object[] {context.proceed()};
+                }
+            }
+            """);
+        assertTrue(error.contains("must return Object"), error);
+    }
+
+    @Test
+    void anInterceptorMethodThatAcceptsAnArrayOfInvocationContextsIsReported() {
+        String error = compile("""
+            @Interceptor
+            public class Subject {
+                @AroundInvoke
+                public Object intercept(InvocationContext[] contexts) throws Exception {
+                    return contexts[0].proceed();
+                }
+            }
+            """);
+        assertTrue(error.contains("must accept a single"), error);
+    }
+
+    @Test
     void twoInterceptorMethodsOfTheSameKindAreReported() {
         String error = compile("""
             @Interceptor

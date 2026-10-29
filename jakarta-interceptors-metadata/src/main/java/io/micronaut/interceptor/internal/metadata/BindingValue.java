@@ -20,6 +20,7 @@ import io.micronaut.core.annotation.AnnotationUtil;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.core.expressions.EvaluatedExpressionReference;
+import io.micronaut.core.util.CollectionUtils;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -86,8 +87,8 @@ public final class BindingValue {
         this.name = name;
         this.nonBinding = nonBinding;
         this.members = members;
-        Map<String, Object> normalized = new LinkedHashMap<>(members.size());
-        Map<CharSequence, Object> matchedMembers = new LinkedHashMap<>(members.size() + 1);
+        Map<String, Object> normalized = CollectionUtils.newLinkedHashMap(members.size());
+        Map<CharSequence, Object> matchedMembers = CollectionUtils.newLinkedHashMap(members.size() + 1);
         members.forEach((member, value) -> {
             if (!isEmptyString(value)) {
                 Object normalizedValue = normalize(value);
@@ -175,7 +176,7 @@ public final class BindingValue {
         members.remove(AnnotationUtil.NON_BINDING_ATTRIBUTE);
         members.remove(AnnotationUtil.STEREOTYPES_MEMBER);
         members.keySet().removeAll(nonBinding);
-        Map<String, Object> written = new LinkedHashMap<>(members.size());
+        Map<String, Object> written = CollectionUtils.newLinkedHashMap(members.size());
         members.forEach((member, value) -> written.put(member, writable(value, excluded, withDefaults,
             leaveOutUndefaultedEmptyStrings)));
         return new BindingValue(name, Collections.unmodifiableSet(nonBinding), Collections.unmodifiableMap(written));
@@ -206,7 +207,7 @@ public final class BindingValue {
      * @return The value
      */
     public AnnotationValue<?> toAnnotationValue() {
-        Map<CharSequence, Object> written = new LinkedHashMap<>(members.size() + 1);
+        Map<CharSequence, Object> written = CollectionUtils.newLinkedHashMap(members.size() + 1);
         members.forEach((member, value) -> written.put(member, copyOf(value)));
         // the excluded members are listed for whatever the binding is compared with, which may be the value of an
         // annotation instance that carries all of its members and says nothing of which bind
@@ -306,7 +307,7 @@ public final class BindingValue {
 
     private static AnnotationValue<?> copyOf(AnnotationValue<?> annotation) {
         Map<CharSequence, Object> values = annotation.getValues();
-        Map<CharSequence, Object> copies = new LinkedHashMap<>(values.size());
+        Map<CharSequence, Object> copies = CollectionUtils.newLinkedHashMap(values.size());
         values.forEach((member, value) -> copies.put(member, copyOf(value)));
         return AnnotationValue.builder(annotation.getAnnotationName()).members(copies).build();
     }

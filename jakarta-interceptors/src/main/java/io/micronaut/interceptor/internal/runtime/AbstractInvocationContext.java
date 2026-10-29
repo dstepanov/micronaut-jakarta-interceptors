@@ -21,6 +21,7 @@ import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.core.convert.value.MutableConvertibleValues;
 import io.micronaut.core.type.Argument;
+import io.micronaut.core.util.CollectionUtils;
 import io.micronaut.interceptor.MicronautInvocationContext;
 import io.micronaut.interceptor.spi.InterceptorBindings;
 import io.micronaut.reflection.ReflectionExecutables;
@@ -355,7 +356,7 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
         }
         AnnotationMetadata annotationMetadata = bindingMetadata();
         String accessor = "getInterceptorBindings()";
-        Set<Annotation> resolved = new LinkedHashSet<>(values.size());
+        Set<Annotation> resolved = CollectionUtils.newLinkedHashSet(values.size());
         for (AnnotationValue<?> value : values) {
             bindingType(annotationMetadata, value.getAnnotationName(), accessor)
                 .ifPresent(type -> resolved.add(instanceOf(type, value, accessor)));

@@ -18,6 +18,7 @@ package io.micronaut.interceptor.processor;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
+import io.micronaut.core.util.CollectionUtils;
 import io.micronaut.inject.ast.ClassElement;
 import io.micronaut.inject.ast.Element;
 import io.micronaut.inject.ast.ElementQuery;
@@ -224,7 +225,7 @@ public final class InterceptorClassScanner {
             declared.addAll(annotationMetadata.getDeclaredStereotypeAnnotationNames());
         }
         // a map keyed by name keeps the bindings distinct while preserving the declaration order
-        Map<String, AnnotationValue<?>> bindings = new LinkedHashMap<>(names.size());
+        Map<String, AnnotationValue<?>> bindings = CollectionUtils.newLinkedHashMap(names.size());
         for (String name : names) {
             if (JakartaInterceptorSupport.INTERCEPTOR_BINDING.equals(name)) {
                 // a binding annotation names itself among its bindings; it is not one of its own

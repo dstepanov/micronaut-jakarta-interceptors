@@ -20,6 +20,7 @@ import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationUtil;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
+import io.micronaut.core.util.CollectionUtils;
 import io.micronaut.inject.ast.ClassElement;
 import io.micronaut.inject.ast.Element;
 import io.micronaut.inject.ast.ElementQuery;
@@ -29,7 +30,6 @@ import io.micronaut.interceptor.internal.metadata.JakartaInterceptorSupport;
 
 import java.lang.annotation.Annotation;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -73,7 +73,7 @@ public final class InterceptorBindingValues {
         if (names.isEmpty()) {
             return Set.of();
         }
-        Set<BindingValue> bindings = new LinkedHashSet<>(names.size());
+        Set<BindingValue> bindings = CollectionUtils.newLinkedHashSet(names.size());
         for (String name : names) {
             // a repeatable binding binds by every occurrence of it the element carries, each of which is a binding
             // of its own: an interceptor declaring one of them is bound to the element, and one declaring an

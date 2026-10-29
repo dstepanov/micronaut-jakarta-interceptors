@@ -64,9 +64,37 @@ record RecordedKey(InterceptionKind kind, @Nullable Map<CharSequence, Object> me
      * @return The key
      */
     static RecordedKey of(InterceptionKind kind, @Nullable AnnotationValue<?> interception) {
-        Map<CharSequence, Object> members = interception == null ? null : interception.getValues();
-        int membersHash = members == null ? 0 : AnnotationUtil.calculateHashCode(members);
-        return new RecordedKey(kind, members, 31 * kind.hashCode() + membersHash);
+        Map<CharSequence, Object> members = membersOf(interception);
+        return new RecordedKey(kind, members, hash(kind, hashOf(members)));
+    }
+
+    /**
+     * Reads the key of an interception as it was recorded for every kind of interception, hashing its members once.
+     *
+     * @param interception The interception as recorded, or {@code null} where the element records none
+     * @return The keys, by the ordinal of their kind
+     */
+    static RecordedKey[] ofEveryKind(@Nullable AnnotationValue<?> interception) {
+        Map<CharSequence, Object> members = membersOf(interception);
+        int membersHash = hashOf(members);
+        InterceptionKind[] kinds = InterceptionKind.values();
+        RecordedKey[] keys = new RecordedKey[kinds.length];
+        for (InterceptionKind kind : kinds) {
+            keys[kind.ordinal()] = new RecordedKey(kind, members, hash(kind, membersHash));
+        }
+        return keys;
+    }
+
+    private static @Nullable Map<CharSequence, Object> membersOf(@Nullable AnnotationValue<?> interception) {
+        return interception == null ? null : interception.getValues();
+    }
+
+    private static int hashOf(@Nullable Map<CharSequence, Object> members) {
+        return members == null ? 0 : AnnotationUtil.calculateHashCode(members);
+    }
+
+    private static int hash(InterceptionKind kind, int membersHash) {
+        return 31 * kind.hashCode() + membersHash;
     }
 
     @Override

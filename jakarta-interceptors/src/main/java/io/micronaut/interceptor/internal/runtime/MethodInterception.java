@@ -56,11 +56,7 @@ record MethodInterception(@Nullable AnnotationValue<JakartaInterception> interce
     static MethodInterception of(ExecutableMethod<?, ?> method) {
         AnnotationValue<JakartaInterception> interception = InterceptorChainResolver.recordedInterception(
             method.getAnnotationMetadata());
-        InterceptionKind[] kinds = InterceptionKind.values();
-        RecordedKey[] keys = new RecordedKey[kinds.length];
-        for (InterceptionKind kind : kinds) {
-            keys[kind.ordinal()] = RecordedKey.of(kind, interception);
-        }
+        RecordedKey[] keys = RecordedKey.ofEveryKind(interception);
         boolean timeout = interception != null && interception.booleanValue(JakartaInterception.TIMEOUT).orElse(false);
         return new MethodInterception(interception, timeout, keys);
     }

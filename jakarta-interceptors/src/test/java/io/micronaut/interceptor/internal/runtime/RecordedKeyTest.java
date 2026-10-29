@@ -34,6 +34,18 @@ class RecordedKeyTest {
     }
 
     @Test
+    void theKeysOfEveryKindAreTheKeysOfEachKind() {
+        RecordedKey[] keys = RecordedKey.ofEveryKind(interception());
+        for (InterceptionKind kind : InterceptionKind.values()) {
+            RecordedKey key = RecordedKey.of(kind, interception());
+            assertEquals(key, keys[kind.ordinal()], kind.toString());
+            assertEquals(key.hashCode(), keys[kind.ordinal()].hashCode(), kind.toString());
+        }
+        assertEquals(RecordedKey.of(InterceptionKind.AROUND_INVOKE, null),
+            RecordedKey.ofEveryKind(null)[InterceptionKind.AROUND_INVOKE.ordinal()]);
+    }
+
+    @Test
     void theSameInterceptionIsTheSameKey() {
         assertEquals(RecordedKey.of(InterceptionKind.AROUND_CONSTRUCT, interception()),
             RecordedKey.of(InterceptionKind.AROUND_CONSTRUCT, interception()));

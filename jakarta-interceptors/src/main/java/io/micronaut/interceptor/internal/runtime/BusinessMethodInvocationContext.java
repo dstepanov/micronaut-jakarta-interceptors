@@ -87,7 +87,6 @@ final class BusinessMethodInvocationContext extends AbstractInvocationContext
     @Override
     public Method getMethod() {
         // getMethod returns a java.lang.reflect.Method, which only the platform can produce
-        requireReflectionModule("getMethod()");
         return PlatformReflection.method(context.getExecutableMethod());
     }
 

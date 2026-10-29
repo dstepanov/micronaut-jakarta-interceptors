@@ -29,7 +29,7 @@ class PlatformReflectionUnavailableTest {
     @Test
     void anAccessorThatNeedsTheModuleNamesTheDependency() {
         UnsupportedOperationException failure = assertThrows(UnsupportedOperationException.class,
-            () -> AbstractInvocationContext.requireReflectionModule("getMethod()"));
+            () -> PlatformReflection.requireModule("getMethod()"));
 
         assertTrue(failure.getMessage().contains("InvocationContext.getMethod()"), failure.getMessage());
         assertTrue(failure.getMessage().contains("io.micronaut:micronaut-reflection"), failure.getMessage());
@@ -43,12 +43,12 @@ class PlatformReflectionUnavailableTest {
     @Test
     void theModuleIsLookedForOnce() {
         UnsupportedOperationException first = assertThrows(UnsupportedOperationException.class,
-            () -> AbstractInvocationContext.requireReflectionModule("getInterceptorBindings()"));
+            () -> PlatformReflection.requireModule("getInterceptorBindings()"));
         UnsupportedOperationException later = assertThrows(UnsupportedOperationException.class,
-            () -> AbstractInvocationContext.requireReflectionModule("getInterceptorBinding(Class)"));
+            () -> PlatformReflection.requireModule("getInterceptorBinding(Class)"));
 
-        assertNotNull(AbstractInvocationContext.ReflectionModule.MISSING);
-        assertSame(AbstractInvocationContext.ReflectionModule.MISSING, first.getCause());
+        assertNotNull(PlatformReflection.Module.MISSING);
+        assertSame(PlatformReflection.Module.MISSING, first.getCause());
         assertSame(first.getCause(), later.getCause());
         assertTrue(later.getMessage().contains("InvocationContext.getInterceptorBinding(Class)"), later.getMessage());
     }

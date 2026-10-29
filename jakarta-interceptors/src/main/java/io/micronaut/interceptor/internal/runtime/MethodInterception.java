@@ -31,9 +31,10 @@ import org.jspecify.annotations.Nullable;
  * and handed to every lookup. The resolver remembers a chain under the very key it is later asked for, which a
  * lookup then finds without hashing or comparing anything.</p>
  *
- * <p>What is kept is derived from the method's compiled metadata alone, which every application context of the JVM
- * shares: no chain, bean or other state of a context, so it is the same for each of them. The chains themselves
- * depend on the beans of a context, and stay with the resolver of each.</p>
+ * <p>What is kept is derived from the method's compiled metadata alone: no chain, bean or other state of a context.
+ * The chains themselves depend on the beans of a context, and stay with the resolver of each. It is read from the
+ * unevaluated metadata, beneath the wrapper an evaluated expression puts around it, so it is kept even for a method
+ * another of whose annotations holds an expression.</p>
  *
  * @param interception The interception as recorded, or {@code null} where the method records none
  * @param timeout      Whether the method is a timeout method when the scheduler invokes it

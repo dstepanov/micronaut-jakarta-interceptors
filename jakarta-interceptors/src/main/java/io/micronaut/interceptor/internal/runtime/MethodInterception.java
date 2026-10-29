@@ -35,6 +35,10 @@ import org.jspecify.annotations.Nullable;
  * shares: no chain, bean or other state of a context, so it is the same for each of them. The chains themselves
  * depend on the beans of a context, and stay with the resolver of each.</p>
  *
+ * <p>It is kept through {@link ExecutableMethod#getCachedUnevaluatedValue}, as the interception holds no evaluated
+ * expression and is read beneath the wrapper one puts around the metadata: a method an annotation of which holds one
+ * keeps it as well.</p>
+ *
  * @param interception The interception as recorded, or {@code null} where the method records none
  * @param timeout      Whether the method is a timeout method when the scheduler invokes it
  * @param keys         The key of the interception for each kind, by the ordinal of the kind

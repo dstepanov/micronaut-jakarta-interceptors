@@ -165,7 +165,7 @@ public final class InterceptorChainResolver {
     }
 
     private static MethodInterception interceptionOf(ExecutableMethod<?, ?> method) {
-        return method.getCachedValue(MethodInterception.class, MethodInterception::of);
+        return method.getCachedUnevaluatedValue(MethodInterception.class, MethodInterception::of);
     }
 
     private List<InterceptorReference> resolve(RecordedKey recordedKey,

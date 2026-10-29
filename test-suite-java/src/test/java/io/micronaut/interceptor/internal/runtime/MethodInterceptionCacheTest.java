@@ -21,6 +21,7 @@ import static java.lang.annotation.ElementType.METHOD;
 import static java.lang.annotation.ElementType.TYPE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The interception a method records is read once and kept by the method, and the chain of every bean created of a
@@ -60,6 +61,37 @@ class MethodInterceptionCacheTest {
         }
     }
 
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target(METHOD)
+    public @interface Described {
+        String value();
+    }
+
+    @Prototype
+    @Kept
+    public static class EvaluatedPrototype {
+        @Described("#{ 'evaluated' }")
+        public String work() {
+            return "worked";
+        }
+    }
+
+    @Test
+    void aMethodWhoseMetadataHoldsAnEvaluatedExpressionKeepsWhatItRecordsAsWell() {
+        try (ApplicationContext context = ApplicationContext.run()) {
+            assertEquals("worked", context.getBean(EvaluatedPrototype.class).work());
+            assertEquals("worked", context.getBean(EvaluatedPrototype.class).work());
+
+            ExecutableMethod<EvaluatedPrototype, Object> work =
+                context.getBeanDefinition(EvaluatedPrototype.class).getRequiredMethod("work");
+            assertTrue(work.getAnnotationMetadata().hasEvaluatedExpressions());
+            MethodInterception kept = work.getCachedUnevaluatedValue(MethodInterception.class, method -> {
+                throw new AssertionError("the interception is read from the compiled metadata alone, and kept");
+            });
+            assertSame(kept, work.getCachedUnevaluatedValue(MethodInterception.class, MethodInterception::of));
+        }
+    }
+
     @Test
     void theMethodKeepsWhatItRecordsAndEveryBeanFindsItsChainUnderIt() {
         try (ApplicationContext context = ApplicationContext.run()) {
@@ -76,7 +108,7 @@ class MethodInterceptionCacheTest {
             assertEquals(202, CALLS.size(), "each bean is created and invoked through its chain");
             ExecutableMethod<KeptPrototype, Object> work =
                 context.getBeanDefinition(KeptPrototype.class).getRequiredMethod("work");
-            MethodInterception kept = work.getCachedValue(MethodInterception.class, method -> {
+            MethodInterception kept = work.getCachedUnevaluatedValue(MethodInterception.class, method -> {
                 throw new AssertionError("the method keeps what it records once it has been invoked");
             });
             assertSame(kept.key(InterceptionKind.AROUND_INVOKE), kept.key(InterceptionKind.AROUND_INVOKE));

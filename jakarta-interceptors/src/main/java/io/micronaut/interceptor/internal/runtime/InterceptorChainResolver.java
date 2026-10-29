@@ -148,6 +148,9 @@ public final class InterceptorChainResolver {
     }
 
     private static MethodInterception interceptionOf(ExecutableMethod<?, ?> method) {
+        // the interception holds no evaluated expression and is read beneath the wrapper one puts around the
+        // metadata, so it is kept for a method whose other annotations have one as well, which getCachedValue would
+        // compute again on every call
         return method.getCachedUnevaluatedValue(MethodInterception.class, MethodInterception::of);
     }
 

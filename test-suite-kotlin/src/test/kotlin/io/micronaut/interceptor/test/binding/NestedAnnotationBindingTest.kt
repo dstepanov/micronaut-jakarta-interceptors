@@ -7,8 +7,9 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
 /**
- * A binding whose members hold annotations, one of them and an array of them, binds by the members of those that
- * bind, as in Java, and the processor permits building every one of those annotation types as an instance.
+ * A binding whose members hold annotations, one of them and an array of another, binds by the members of those that
+ * bind, as in Java, and the processor permits building every one of those annotation types as an instance, the ones
+ * reached only through the array included.
  */
 class NestedAnnotationBindingTest {
 
@@ -19,6 +20,8 @@ class NestedAnnotationBindingTest {
             val service = context.getBean(GovernedService::class.java)
             assertEquals("work", service.work())
             assertEquals("other", service.other())
+            assertEquals("other clause", service.otherClause())
+            assertEquals("other detail", service.otherDetail())
             assertEquals(listOf("governed work"), GovernCalls.recorded)
         }
     }
@@ -32,7 +35,11 @@ class NestedAnnotationBindingTest {
                     .contains(TypeHint.AccessType.DYNAMIC_PROXY) }
                 .mapNotNull { it.stringValue("type").orElse(null) }
                 .toSet()
-            assertEquals(setOf(Governed::class.java.name, Rule::class.java.name), permitted)
+            assertEquals(
+                setOf(Governed::class.java.name, Rule::class.java.name, Clause::class.java.name,
+                    Detail::class.java.name),
+                permitted
+            )
         }
     }
 }

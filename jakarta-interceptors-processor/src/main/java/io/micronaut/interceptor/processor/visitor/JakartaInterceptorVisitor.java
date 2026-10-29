@@ -32,6 +32,7 @@ import io.micronaut.core.annotation.ReflectionConfig;
 import io.micronaut.core.annotation.ReflectiveAccess;
 import io.micronaut.core.annotation.TypeHint;
 import io.micronaut.inject.ast.AnnotationElement;
+import io.micronaut.inject.ast.AnnotationMemberElement;
 import io.micronaut.inject.ast.ClassElement;
 import io.micronaut.inject.ast.Element;
 import io.micronaut.inject.ast.ElementQuery;
@@ -647,8 +648,8 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
             if (!(context.getClassElement(name).orElse(null) instanceof AnnotationElement annotationType)) {
                 continue;
             }
-            for (MethodElement member : annotationType.getEnclosedElements(ElementQuery.ALL_METHODS.onlyDeclared())) {
-                ClassElement returned = member.getReturnType();
+            for (AnnotationMemberElement member : annotationType.getMembers()) {
+                ClassElement returned = member.getType();
                 if (returned.isArray()) {
                     returned = returned.fromArray();
                 }

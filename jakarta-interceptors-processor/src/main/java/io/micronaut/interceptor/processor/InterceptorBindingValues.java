@@ -21,13 +21,18 @@ import io.micronaut.core.annotation.AnnotationUtil;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.inject.ast.AnnotationElement;
+import io.micronaut.inject.ast.ClassElement;
 import io.micronaut.inject.ast.Element;
 import io.micronaut.inject.visitor.VisitorContext;
 import io.micronaut.interceptor.internal.metadata.BindingValue;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorSupport;
 
 import java.lang.annotation.Annotation;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -90,6 +95,67 @@ public final class InterceptorBindingValues {
             }
         }
         return bindings;
+    }
+
+    /**
+     * Reads what the bindings of a class are compared by: every binding it declares or inherits from its
+     * superclasses, which is what an {@code @Inherited} binding annotation asks for.
+     *
+     * @param type     The class
+     * @param excluded The members excluded from a binding annotation, by its name
+     * @return The bindings, in a stable order: by the name of the annotation, the occurrences of one in the order
+     * they are declared in
+     */
+    public static List<BindingValue> ofClass(ClassElement type, ExcludedMembers excluded) {
+        return sorted(of(type.getAnnotationMetadata(), excluded));
+    }
+
+    /**
+     * Reads what the bindings of a member of a class are compared by.
+     *
+     * <p>Comparing an interceptor with an element it might intercept is comparing the members of their binding
+     * annotations, the ones they default to filled in and the ones excluded from the binding left out. Which
+     * members those are does not depend on the running application, so it is worked out here, and each binding is
+     * written out as the value of its annotation that the runtime compares.</p>
+     *
+     * <p>A binding a member declares replaces the one of the same type its class declares - the whole of it, so a
+     * member the declaration leaves to its default takes the default rather than the value the class gives it. The
+     * metadata Micronaut hands out for a method merges the two member by member instead, so the class and the
+     * member are read apart: the bindings of the class first, and the ones the member's own metadata holds written
+     * over them by type. A binding declared on another annotation is one of the element's as well, which is why
+     * the bindings are looked for by their stereotype rather than among the annotations the element declares
+     * itself. One the member only inherits from a method it overrides is not, see
+     * {@link InterceptorClassScanner#declaresItself(AnnotationMetadata, String)}.</p>
+     *
+     * <p>A repeatable binding is as many bindings as the element carries occurrences of it, so the bindings are kept
+     * by type as a list rather than as one: what a member declares of a type replaces every occurrence of that type
+     * its class declares, and the occurrences of a type the member says nothing about are all inherited.</p>
+     *
+     * @param member        The member: a method, a constructor, or a member of a factory producing a bean
+     * @param ownerBindings The bindings of the class the member belongs to, see {@link #ofClass}
+     * @param excluded      The members excluded from a binding annotation, by its name
+     * @return The bindings, in a stable order: by the name of the annotation, the occurrences of one in the order
+     * they are declared in
+     */
+    public static List<BindingValue> ofMember(Element member, List<BindingValue> ownerBindings, ExcludedMembers excluded) {
+        Map<String, List<BindingValue>> bindings = byType(ownerBindings);
+        AnnotationMetadata own = InterceptorClassScanner.ownMetadataOf(member);
+        Map<String, List<BindingValue>> declared = byType(of(own, excluded));
+        declared.keySet().removeIf(name -> !InterceptorClassScanner.declaresItself(own, name));
+        bindings.putAll(declared);
+        return sorted(bindings.values().stream().flatMap(List::stream).toList());
+    }
+
+    private static Map<String, List<BindingValue>> byType(Collection<BindingValue> bindings) {
+        Map<String, List<BindingValue>> byType = new LinkedHashMap<>();
+        for (BindingValue binding : bindings) {
+            byType.computeIfAbsent(binding.name(), name -> new ArrayList<>()).add(binding);
+        }
+        return byType;
+    }
+
+    private static List<BindingValue> sorted(Collection<BindingValue> bindings) {
+        return bindings.stream().sorted(Comparator.comparing(BindingValue::name)).toList();
     }
 
     /**

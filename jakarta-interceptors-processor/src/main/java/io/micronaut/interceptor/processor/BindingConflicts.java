@@ -64,13 +64,16 @@ public final class BindingConflicts {
      * <p>What an element declares itself is read from the element; the annotations it declares are followed from
      * there, so a binding reached through a superclass is found on the superclass rather than here.</p>
      *
-     * @param element The element the bindings are declared on
-     * @param context The visitor context, which resolves the annotation types that are followed
+     * @param element  The element the bindings are declared on
+     * @param context  The visitor context, which resolves the annotation types that are followed
+     * @param excluded The members excluded from a binding annotation, which take no part in what it binds by
      * @return The name of the conflicting binding annotation, or {@code null} when there is none
      */
-    public static @Nullable String conflictOf(Element element, VisitorContext context) {
+    public static @Nullable String conflictOf(Element element,
+                                              VisitorContext context,
+                                              InterceptorBindingValues.ExcludedMembers excluded) {
         AnnotationMetadata metadata = element.getAnnotationMetadata();
-        return conflictOf(metadata, metadata.getAnnotationNames(), context);
+        return conflictOf(metadata, metadata.getAnnotationNames(), context, excluded);
     }
 
     /**
@@ -80,22 +83,25 @@ public final class BindingConflicts {
      * with the metadata of the class it belongs to, so following all of them would report the conflicts of the
      * class here as well, once for every member of it; those are the class's own and are reported there.</p>
      *
-     * @param element The member the bindings are declared on
-     * @param context The visitor context, which resolves the annotation types that are followed
+     * @param element  The member the bindings are declared on
+     * @param context  The visitor context, which resolves the annotation types that are followed
+     * @param excluded The members excluded from a binding annotation, which take no part in what it binds by
      * @return The name of the conflicting binding annotation, or {@code null} when there is none
      */
-    public static @Nullable String declaredConflictOf(Element element, VisitorContext context) {
+    public static @Nullable String declaredConflictOf(Element element,
+                                                      VisitorContext context,
+                                                      InterceptorBindingValues.ExcludedMembers excluded) {
         AnnotationMetadata metadata = element.getAnnotationMetadata();
-        return conflictOf(metadata, metadata.getDeclaredAnnotationNames(), context);
+        return conflictOf(metadata, metadata.getDeclaredAnnotationNames(), context, excluded);
     }
 
     private static @Nullable String conflictOf(AnnotationMetadata metadata,
                                                Collection<String> names,
-                                               VisitorContext context) {
+                                               VisitorContext context,
+                                               InterceptorBindingValues.ExcludedMembers excluded) {
         // two occurrences of a binding disagree when what they bind by differs, which is what reducing each of them
         // to its binding says - the members excluded from the annotation type left out of both, which Micronaut
         // records on each occurrence, and which an annotation a member holds is supplied with
-        InterceptorBindingValues.ExcludedMembers excluded = InterceptorBindingValues.excludedMembersOf(context);
         Set<String> conflicts = resolve(metadata, names, context, excluded,
             new HashMap<>(), new HashSet<>(), new ArrayList<>()).conflicts();
         return conflicts.isEmpty() ? null : conflicts.iterator().next();

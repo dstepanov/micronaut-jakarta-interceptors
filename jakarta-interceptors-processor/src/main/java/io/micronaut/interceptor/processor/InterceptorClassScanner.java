@@ -33,7 +33,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -218,11 +217,6 @@ public final class InterceptorClassScanner {
         // neither. A class, on the other hand, keeps the bindings it inherits from its superclasses, which is what
         // an @Inherited binding annotation asks for
         boolean isClass = element instanceof ClassElement;
-        Set<String> declared = new HashSet<>();
-        if (!isClass) {
-            declared.addAll(annotationMetadata.getDeclaredAnnotationNames());
-            declared.addAll(annotationMetadata.getDeclaredStereotypeAnnotationNames());
-        }
         // a map keyed by name keeps the bindings distinct while preserving the declaration order
         Map<String, AnnotationValue<?>> bindings = new LinkedHashMap<>(names.size());
         for (String name : names) {
@@ -230,10 +224,7 @@ public final class InterceptorClassScanner {
                 // a binding annotation names itself among its bindings; it is not one of its own
                 continue;
             }
-            // a repeatable binding the member declares more than once is declared through its container, and is
-            // found by its occurrences
-            if (!isClass && !declared.contains(name)
-                && annotationMetadata.getDeclaredAnnotationValuesByName(name).isEmpty()) {
+            if (!isClass && !declaresItself(annotationMetadata, name)) {
                 continue;
             }
             Optional<AnnotationValue<Annotation>> binding = annotationMetadata.findAnnotation(name);
@@ -243,6 +234,24 @@ public final class InterceptorClassScanner {
             binding.ifPresent(av -> bindings.put(name, av));
         }
         return List.copyOf(bindings.values());
+    }
+
+    /**
+     * Tells whether a member declares a binding itself, or through an annotation it declares, rather than inheriting
+     * it from a method it overrides: the metadata of a method also holds the annotations of the method it overrides,
+     * which are no bindings of the override.
+     *
+     * <p>A repeatable binding the member declares more than once is declared through its container, and is found by
+     * its occurrences.</p>
+     *
+     * @param own  The metadata of the member alone, see {@link #ownMetadataOf(Element)}
+     * @param name The name of the binding annotation
+     * @return Whether the member declares it
+     */
+    public static boolean declaresItself(AnnotationMetadata own, String name) {
+        return own.getDeclaredAnnotationNames().contains(name)
+            || own.getDeclaredStereotypeAnnotationNames().contains(name)
+            || !own.getDeclaredAnnotationValuesByName(name).isEmpty();
     }
 
     /**

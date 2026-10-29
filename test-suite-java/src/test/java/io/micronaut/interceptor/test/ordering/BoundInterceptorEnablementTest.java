@@ -17,6 +17,7 @@ package io.micronaut.interceptor.test.ordering;
 
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.context.annotation.Requires;
+import io.micronaut.core.annotation.Order;
 import io.micronaut.inject.BeanDefinition;
 import io.micronaut.interceptor.spi.BoundInterceptorEnablement;
 import jakarta.inject.Singleton;
@@ -131,8 +132,12 @@ class BoundInterceptorEnablementTest {
 
     static final String LISTING = "test.bound-interceptor-enablement.listing";
 
-    /** Lists two interceptor classes against the order of their names, where the test asks for it. */
+    /**
+     * Lists two interceptor classes against the order of their names, where the test asks for it. It is ordered
+     * before {@link PositioningEnablement}, so that where both are there it is the one asked first.
+     */
     @Singleton
+    @Order(1)
     @Requires(property = LISTING, value = "true")
     public static class ListingEnablement implements BoundInterceptorEnablement {
         @Override
@@ -156,6 +161,7 @@ class BoundInterceptorEnablementTest {
      * named ones at one position, {@code all} lists every one, the prioritized one at the last position there is.
      */
     @Singleton
+    @Order(2)
     @Requires(property = POSITIONS)
     public static class PositioningEnablement implements BoundInterceptorEnablement {
 
@@ -219,6 +225,19 @@ class BoundInterceptorEnablementTest {
     void anInterceptorThatIsNotEnabledIsLeftOutOfTheChainsItsBindingBinds() {
         try (ApplicationContext context = ApplicationContext.run(Map.of(DISABLING, "true"))) {
             assertEquals("worked", context.getBean(SwitchedService.class).work());
+        }
+    }
+
+    /**
+     * Where several modules provide one, an interceptor class is enabled only where every one of them enables it,
+     * and is at the position the first of them to list it gives it, in the order the beans are ordered by.
+     */
+    @Test
+    void severalModulesEnableAnInterceptorTogetherAndTheFirstToListItPlacesIt() {
+        try (ApplicationContext context = ApplicationContext.run(Map.of(DISABLING, "true", LISTING, "true",
+            POSITIONS, "tie"))) {
+            assertEquals("worked", context.getBean(SwitchedService.class).work());
+            assertEquals("prioritized zulu alpha worked", context.getBean(ListedService.class).work());
         }
     }
 

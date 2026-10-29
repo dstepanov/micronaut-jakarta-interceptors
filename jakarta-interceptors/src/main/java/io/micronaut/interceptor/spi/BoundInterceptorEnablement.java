@@ -32,6 +32,11 @@ import io.micronaut.inject.BeanDefinition;
  * declares on itself. A chain is remembered once it is resolved, so the answer for an interceptor class must not
  * change while the context runs.</p>
  *
+ * <p>Several modules may each provide one. An interceptor class is then enabled only where every one of them enables
+ * it, and the position it is listed at is the one the first of them to answer a position gives it, the beans being
+ * asked in the order Micronaut orders them by: {@link io.micronaut.core.order.Ordered}, or
+ * {@link io.micronaut.core.annotation.Order}.</p>
+ *
  * @author Denis Stepanov
  * @since 1.0
  */

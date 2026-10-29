@@ -2,10 +2,9 @@ package io.micronaut.interceptor.test.timeout;
 
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.interceptor.test.ScheduledFixtures;
+import io.micronaut.interceptor.test.ScheduledRecords;
 import io.micronaut.scheduling.annotation.Scheduled;
 import jakarta.inject.Singleton;
-
-import java.util.concurrent.CountDownLatch;
 
 @Singleton
 @Requires(property = ScheduledFixtures.ENABLED, value = "true")
@@ -13,11 +12,17 @@ import java.util.concurrent.CountDownLatch;
 @Watched
 public class ScheduledService {
 
-    static final CountDownLatch SCHEDULED_RAN = new CountDownLatch(1);
+    static final String RAN = "ScheduledService";
+
+    private final ScheduledRecords records;
+
+    public ScheduledService(ScheduledRecords records) {
+        this.records = records;
+    }
 
     @Scheduled(fixedDelay = "20ms", initialDelay = "10ms")
     public void onSchedule() {
-        SCHEDULED_RAN.countDown();
+        records.ran(RAN);
     }
 
     public String business() {

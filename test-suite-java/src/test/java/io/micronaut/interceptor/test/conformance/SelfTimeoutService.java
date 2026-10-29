@@ -2,12 +2,11 @@ package io.micronaut.interceptor.test.conformance;
 
 import io.micronaut.context.annotation.Requires;
 import io.micronaut.interceptor.test.ScheduledFixtures;
+import io.micronaut.interceptor.test.ScheduledRecords;
 import io.micronaut.scheduling.annotation.Scheduled;
 import jakarta.inject.Singleton;
 import jakarta.interceptor.AroundTimeout;
 import jakarta.interceptor.InvocationContext;
-
-import java.util.concurrent.CountDownLatch;
 
 /**
  * Section 2.8 bb): an around-timeout method may be declared on the target class itself.
@@ -16,17 +15,23 @@ import java.util.concurrent.CountDownLatch;
 @Requires(property = ScheduledFixtures.ENABLED, value = "true")
 public class SelfTimeoutService {
 
-    static final CountDownLatch RAN = new CountDownLatch(1);
-    static volatile boolean intercepted;
+    static final String RAN = "SelfTimeoutService";
+    static final String INTERCEPTED = "SelfTimeoutService.intercepted";
+
+    private final ScheduledRecords records;
+
+    public SelfTimeoutService(ScheduledRecords records) {
+        this.records = records;
+    }
 
     @Scheduled(fixedDelay = "20ms", initialDelay = "10ms")
     public void onSchedule() {
-        RAN.countDown();
+        records.ran(RAN);
     }
 
     @AroundTimeout
     Object aroundItsOwnTimeout(InvocationContext context) throws Exception {
-        intercepted = true;
+        records.record(INTERCEPTED, context.getMethod().getName());
         return context.proceed();
     }
 }

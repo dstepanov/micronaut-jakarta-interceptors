@@ -1,12 +1,10 @@
 package io.micronaut.interceptor.test.timeout;
 
+import io.micronaut.interceptor.test.ScheduledRecords;
 import jakarta.interceptor.AroundInvoke;
 import jakarta.interceptor.AroundTimeout;
 import jakarta.interceptor.Interceptor;
 import jakarta.interceptor.InvocationContext;
-
-import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * An interceptor declaring both kinds: the specification has {@code @AroundInvoke} interpose on business methods
@@ -16,17 +14,23 @@ import java.util.concurrent.CopyOnWriteArrayList;
 @Timed
 public class TimedInterceptor {
 
-    static final List<String> CALLS = new CopyOnWriteArrayList<>();
+    static final String LOG = "TimedInterceptor";
+
+    private final ScheduledRecords records;
+
+    public TimedInterceptor(ScheduledRecords records) {
+        this.records = records;
+    }
 
     @AroundInvoke
     public Object aroundInvoke(InvocationContext context) throws Exception {
-        CALLS.add("aroundInvoke " + context.getMethod().getName());
+        records.record(LOG, "aroundInvoke " + context.getMethod().getName());
         return context.proceed();
     }
 
     @AroundTimeout
     public Object aroundTimeout(InvocationContext context) throws Exception {
-        CALLS.add("aroundTimeout " + context.getMethod().getName() + " " + context.getTimer());
+        records.record(LOG, "aroundTimeout " + context.getMethod().getName() + " " + context.getTimer());
         return context.proceed();
     }
 }

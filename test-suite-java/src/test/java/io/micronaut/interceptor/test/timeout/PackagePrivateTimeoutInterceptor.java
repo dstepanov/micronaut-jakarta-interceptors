@@ -1,5 +1,6 @@
 package io.micronaut.interceptor.test.timeout;
 
+import io.micronaut.interceptor.test.ScheduledRecords;
 import jakarta.interceptor.AroundTimeout;
 import jakarta.interceptor.Interceptor;
 import jakarta.interceptor.InvocationContext;
@@ -9,9 +10,15 @@ import jakarta.interceptor.InvocationContext;
 @Varied
 public class PackagePrivateTimeoutInterceptor {
 
+    private final ScheduledRecords records;
+
+    public PackagePrivateTimeoutInterceptor(ScheduledRecords records) {
+        this.records = records;
+    }
+
     @AroundTimeout
     Object aroundTimeout(InvocationContext context) throws Exception {
-        VariedCalls.RECORDED.add("package-private");
+        records.record(VariedCalls.LOG, "package-private");
         return context.proceed();
     }
 }

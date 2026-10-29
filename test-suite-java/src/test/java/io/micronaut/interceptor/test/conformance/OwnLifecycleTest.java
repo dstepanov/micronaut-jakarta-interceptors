@@ -2,10 +2,10 @@ package io.micronaut.interceptor.test.conformance;
 
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.interceptor.test.ScheduledFixtures;
+import io.micronaut.interceptor.test.ScheduledRecords;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -43,10 +43,11 @@ class OwnLifecycleTest {
     @Test
     void invokesAnAroundTimeoutMethodDeclaredOnTheTargetClass() throws Exception {
         try (ApplicationContext context = ScheduledFixtures.run()) {
-            assertTrue(SelfTimeoutService.RAN.await(5, TimeUnit.SECONDS), "the schedule did not run");
-            Thread.sleep(100);
+            ScheduledRecords records = context.getBean(ScheduledRecords.class);
+            assertTrue(records.awaitRun(SelfTimeoutService.RAN), "the schedule did not run");
 
-            assertTrue(SelfTimeoutService.intercepted,
+            // the around-timeout method records before it proceeds to the method, which is what counts the run down
+            assertTrue(records.recorded(SelfTimeoutService.INTERCEPTED).contains("onSchedule"),
                 "the around-timeout method of the target class interposes on its scheduled method");
         }
     }

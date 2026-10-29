@@ -29,6 +29,7 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -317,7 +318,11 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     }
 
     final Set<Annotation> resolveBindings() {
-        return BindingAnnotationAccess.build(bindingMetadata(), getInterceptorBindingValues());
+        List<AnnotationValue<?>> values = getInterceptorBindingValues();
+        if (values.isEmpty()) {
+            return Collections.emptySet();
+        }
+        return BindingAnnotationAccess.build(bindingMetadata(), values);
     }
 
     /**

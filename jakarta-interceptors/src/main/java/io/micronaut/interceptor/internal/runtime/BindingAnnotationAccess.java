@@ -125,13 +125,10 @@ final class BindingAnnotationAccess {
      * Builds every binding annotation from the binding values.
      *
      * @param metadata The metadata the bindings were read from, which finds the type of a binding by its name
-     * @param values   The binding values
+     * @param values   The binding values, of which there is at least one
      * @return The binding annotations
      */
     static Set<Annotation> build(AnnotationMetadata metadata, List<AnnotationValue<?>> values) {
-        if (values.isEmpty()) {
-            return Collections.emptySet();
-        }
         String accessor = "getInterceptorBindings()";
         Set<Annotation> resolved = CollectionUtils.newLinkedHashSet(values.size());
         for (AnnotationValue<?> value : values) {

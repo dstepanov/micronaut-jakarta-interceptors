@@ -15,6 +15,8 @@
  */
 package io.micronaut.interceptor.spi;
 
+import io.micronaut.aop.ExactInterceptorBindingQualifier;
+import io.micronaut.aop.InterceptorKind;
 import io.micronaut.context.BeanContext;
 import io.micronaut.context.Qualifier;
 import io.micronaut.core.annotation.AnnotationClassValue;
@@ -78,14 +80,23 @@ public final class InterceptorBindings {
 
     private final List<BindingValue> bindings;
     private final int hash;
+    // the bindings in the shape they are compared in, and as an interception point Micronaut selects the
+    // interceptors of with its exact rule: every binding of an interceptor applies at the point
+    private final List<AnnotationValue<?>> matched;
+    private final ExactInterceptorBindingQualifier<?> point;
 
     private InterceptorBindings(List<BindingValue> bindings) {
         this.bindings = bindings;
         Set<String> names = new HashSet<>();
+        List<AnnotationValue<?>> values = new ArrayList<>(bindings.size());
         for (BindingValue binding : bindings) {
             names.add(binding.name());
+            values.add(binding.matched());
         }
         this.hash = names.hashCode();
+        this.matched = values;
+        // the kind takes no part in comparing occurrences, which carry no kind of their own
+        this.point = ExactInterceptorBindingQualifier.ofOccurrences(values, InterceptorKind.AROUND);
     }
 
     /**
@@ -348,28 +359,14 @@ public final class InterceptorBindings {
      *
      * <p>An interceptor declaring no binding is bound to nothing: it applies only where an element names it.</p>
      *
+     * <p>It is Micronaut's exact interceptor binding rule, {@link ExactInterceptorBindingQualifier#matches(Collection)},
+     * applied to the bindings in the shape they are compared in.</p>
+     *
      * @param point The bindings of the interception point
      * @return Whether the interceptor is bound to the point
      */
     public boolean isBoundBy(InterceptorBindings point) {
-        if (bindings.isEmpty()) {
-            return false;
-        }
-        for (BindingValue binding : bindings) {
-            if (!point.contains(binding)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private boolean contains(BindingValue binding) {
-        for (BindingValue candidate : bindings) {
-            if (candidate.matches(binding)) {
-                return true;
-            }
-        }
-        return false;
+        return point.point.matches(matched);
     }
 
     /**
@@ -386,17 +383,7 @@ public final class InterceptorBindings {
         if (!(o instanceof InterceptorBindings other) || bindings.size() != other.bindings.size()) {
             return false;
         }
-        for (BindingValue binding : bindings) {
-            if (!other.contains(binding)) {
-                return false;
-            }
-        }
-        for (BindingValue binding : other.bindings) {
-            if (!contains(binding)) {
-                return false;
-            }
-        }
-        return true;
+        return bindings.isEmpty() || (isBoundBy(other) && other.isBoundBy(this));
     }
 
     /**

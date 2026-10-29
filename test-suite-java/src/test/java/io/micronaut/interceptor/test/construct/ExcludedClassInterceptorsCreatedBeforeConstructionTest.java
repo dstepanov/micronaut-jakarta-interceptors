@@ -2,6 +2,8 @@ package io.micronaut.interceptor.test.construct;
 
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.context.annotation.Prototype;
+import io.micronaut.context.annotation.Requires;
+import io.micronaut.interceptor.test.ScheduledFixtures;
 import io.micronaut.scheduling.annotation.Scheduled;
 import jakarta.annotation.Priority;
 import jakarta.inject.Inject;
@@ -49,7 +51,7 @@ class ExcludedClassInterceptorsCreatedBeforeConstructionTest {
 
     @Test
     void aTimeoutOnlyClassInterceptorIsInjectedBeforeTheConstruction() {
-        try (ApplicationContext context = ApplicationContext.run()) {
+        try (ApplicationContext context = ScheduledFixtures.run()) {
             RECORDED.clear();
             context.getBean(TimedBuiltService.class);
 
@@ -153,6 +155,7 @@ class ExcludedClassInterceptorsCreatedBeforeConstructionTest {
     }
 
     @Prototype
+    @Requires(property = ScheduledFixtures.ENABLED, value = "true")
     @TimedAndBuilt
     public static class TimedBuiltService {
 

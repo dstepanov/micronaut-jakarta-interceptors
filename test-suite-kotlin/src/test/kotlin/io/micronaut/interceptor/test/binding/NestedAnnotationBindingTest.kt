@@ -1,0 +1,45 @@
+package io.micronaut.interceptor.test.binding
+
+import io.micronaut.context.ApplicationContext
+import io.micronaut.core.annotation.ReflectionConfig
+import io.micronaut.core.annotation.TypeHint
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Test
+
+/**
+ * A binding whose members hold annotations, one of them and an array of another, binds by the members of those that
+ * bind, as in Java, and the processor permits building every one of those annotation types as an instance, the ones
+ * reached only through the array included.
+ */
+class NestedAnnotationBindingTest {
+
+    @Test
+    fun leavesTheMembersOfANestedAnnotationThatDoNotBindOutOfTheBinding() {
+        ApplicationContext.run().use { context ->
+            GovernCalls.recorded.clear()
+            val service = context.getBean(GovernedService::class.java)
+            assertEquals("work", service.work())
+            assertEquals("other", service.other())
+            assertEquals("other clause", service.otherClause())
+            assertEquals("other detail", service.otherDetail())
+            assertEquals(listOf("governed work"), GovernCalls.recorded)
+        }
+    }
+
+    @Test
+    fun permitsBuildingTheBindingAndTheAnnotationsItsMembersHold() {
+        ApplicationContext.run().use { context ->
+            val permitted = context.getBeanDefinition(GovernedService::class.java)
+                .getAnnotationValuesByType(ReflectionConfig::class.java)
+                .filter { it.enumValues("accessType", TypeHint.AccessType::class.java)
+                    .contains(TypeHint.AccessType.DYNAMIC_PROXY) }
+                .mapNotNull { it.stringValue("type").orElse(null) }
+                .toSet()
+            assertEquals(
+                setOf(Governed::class.java.name, Rule::class.java.name, Clause::class.java.name,
+                    Detail::class.java.name),
+                permitted
+            )
+        }
+    }
+}

@@ -367,7 +367,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         public <B extends BeanType<T>> Stream<B> reduce(Class<T> beanType, Stream<B> candidates) {
             // the class may be the proxy Micronaut generated for a scoped bean, which resolves the bean it
             // proxies with this same qualifier: a bean of a class the proxy extends is that one, and stays
-            return candidates.filter(candidate -> InterceptorChainResolver.isOfClass(candidate, type)
+            return candidates.filter(candidate -> InterceptorDefinitions.isOfClass(candidate, type)
                 || candidate.getBeanType().isAssignableFrom(type));
         }
     }

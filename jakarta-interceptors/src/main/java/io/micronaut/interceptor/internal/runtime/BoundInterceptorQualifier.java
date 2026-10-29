@@ -30,12 +30,12 @@ import java.util.stream.Stream;
  * Selects the interceptor classes bound to an interception point: the ones every binding of which is a binding of
  * the point.
  *
- * <p>Micronaut's own {@code InterceptorBindingQualifier} selects an interceptor sharing any one binding with the
- * point, where the specification requires all of the interceptor's, so the comparison is
- * {@link InterceptorBindings#isBoundBy(InterceptorBindings)}. That holds with
- * {@code @InterceptorBinding(matchAllOccurrences = true)} as well, which only Micronaut's interceptor registry
- * applies, and only to Micronaut interceptors; and Micronaut leaves out a member a binding excludes only on the side
- * that lists it, which a binding built from an annotation instance does not. It is a filter, shaped as Micronaut's
+ * <p>The comparison is Micronaut's exact interceptor binding rule, {@code ExactInterceptorBindingQualifier}, through
+ * {@link InterceptorBindings#isBoundBy(InterceptorBindings)}. That qualifier reads the bindings of a candidate from
+ * the {@code io.micronaut.aop.InterceptorBinding} values of its metadata, which an interceptor class of this module
+ * does not carry: the processor records its bindings itself, and declaring Micronaut's binding on a Jakarta binding
+ * type would have Micronaut proxy every class it is declared on, interceptor classes included. So this qualifier
+ * reads the bindings recorded on each candidate and hands them to the rule. It is a filter, shaped as Micronaut's
  * {@code FilteringQualifier} is, which is internal to Micronaut and so is not extended.</p>
  *
  * @param <T> The type the beans are looked up by

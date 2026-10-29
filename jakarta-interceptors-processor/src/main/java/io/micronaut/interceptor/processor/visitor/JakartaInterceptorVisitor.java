@@ -40,6 +40,7 @@ import io.micronaut.inject.ast.MethodElement;
 import io.micronaut.inject.ast.ParameterElement;
 import io.micronaut.inject.ast.PropertyElement;
 import io.micronaut.inject.processing.ProcessingException;
+import io.micronaut.inject.visitor.TypeElementQuery;
 import io.micronaut.inject.visitor.TypeElementVisitor;
 import io.micronaut.inject.visitor.VisitorContext;
 import io.micronaut.interceptor.metadata.InterceptionKind;
@@ -102,6 +103,12 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
     @Override
     public VisitorKind getVisitorKind() {
         return VisitorKind.ISOLATING;
+    }
+
+    // the work is done in visitClass, which queries the members it needs itself
+    @Override
+    public TypeElementQuery query() {
+        return TypeElementQuery.onlyClass();
     }
 
     /**

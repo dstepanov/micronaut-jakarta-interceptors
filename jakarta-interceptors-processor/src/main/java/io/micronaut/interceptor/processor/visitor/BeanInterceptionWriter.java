@@ -66,9 +66,9 @@ final class BeanInterceptionWriter {
      * Declares the interception of a class and of its methods.
      */
     static void intercept(ClassElement element,
-                                  InterceptorClassModel model,
-                                  boolean declaredAsABean,
-                                  VisitorContext context) {
+                          InterceptorClassModel model,
+                          boolean declaredAsABean,
+                          VisitorContext context) {
         boolean reflective = BindingReflectionHints.reflectiveAccessors(context);
         List<String> classInterceptors = namedInterceptors(element, context);
         MethodElement constructor = element.getPrimaryConstructor().orElse(null);

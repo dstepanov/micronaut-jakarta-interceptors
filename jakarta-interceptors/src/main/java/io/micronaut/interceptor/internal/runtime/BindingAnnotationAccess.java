@@ -146,8 +146,8 @@ final class BindingAnnotationAccess {
      * module to build.</p>
      */
     private static Optional<? extends Class<? extends Annotation>> bindingType(AnnotationMetadata metadata,
-                                                                              String name,
-                                                                              String accessor) {
+                                                                               String name,
+                                                                               String accessor) {
         Optional<AnnotationBuilder<?>> builder = AnnotationBuilder.find(name);
         if (builder.isPresent()) {
             return Optional.of(builder.get().annotationType());

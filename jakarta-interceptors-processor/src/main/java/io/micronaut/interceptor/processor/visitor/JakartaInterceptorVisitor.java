@@ -69,6 +69,7 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
      */
     private static final Set<ElementType> BINDING_TARGETS =
         Set.of(ElementType.TYPE, ElementType.METHOD, ElementType.CONSTRUCTOR);
+
     @Override
     public VisitorKind getVisitorKind() {
         return VisitorKind.ISOLATING;

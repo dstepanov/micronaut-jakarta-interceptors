@@ -55,9 +55,9 @@ final class InterceptorMethodWriter {
      * the class that declares it, so the annotation that would make Micronaut invoke it as one is taken off.
      */
     static void declareInterceptorMethods(InterceptorClassModel model,
-                                                 boolean declaredAsABean,
-                                                 boolean isInterceptorClass,
-                                                 VisitorContext context) {
+                                          boolean declaredAsABean,
+                                          boolean isInterceptorClass,
+                                          VisitorContext context) {
         ClassElement interceptorClass = model.interceptorClass();
         if (!declaredAsABean) {
             // an interceptor class need not be a bean of its own, whether it declares @Interceptor or is named

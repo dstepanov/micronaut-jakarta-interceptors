@@ -151,16 +151,16 @@ public final class InterceptorBindingValues {
      * they are declared in
      */
     public static List<BindingValue> bindingsOf(Element element,
-                                                                      @Nullable ClassElement owner,
-                                                                      VisitorContext context) {
-        InterceptorBindingValues.ExcludedMembers excluded = InterceptorBindingValues.excludedMembersOf(context);
+                                                @Nullable ClassElement owner,
+                                                VisitorContext context) {
+        ExcludedMembers excluded = excludedMembersOf(context);
         Map<String, List<BindingValue>> bindings = new LinkedHashMap<>();
         if (owner != null) {
-            groupByType(InterceptorBindingValues.of(owner.getAnnotationMetadata(), excluded), bindings);
+            groupByType(of(owner.getAnnotationMetadata(), excluded), bindings);
         }
         AnnotationMetadata own = InterceptorClassScanner.ownMetadataOf(element);
         Map<String, List<BindingValue>> declared = new LinkedHashMap<>();
-        groupByType(InterceptorBindingValues.of(own, excluded), declared);
+        groupByType(of(own, excluded), declared);
         if (owner != null) {
             // the metadata of a method also holds the annotations of the method it overrides. A binding declared
             // on an overridden method is not a binding of the override, so only the ones the member declares

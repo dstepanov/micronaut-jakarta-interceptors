@@ -85,10 +85,10 @@ final class BindingReflectionHints {
      * of the binding, and the value it returns may be its default.</p>
      */
     static void permitBindingSynthesis(ClassElement element,
-                                               @Nullable MethodElement constructor,
-                                               List<MethodElement> methods,
-                                               List<BeanInterceptionWriter.Producer> producers,
-                                               VisitorContext context) {
+                                       @Nullable MethodElement constructor,
+                                       List<MethodElement> methods,
+                                       List<BeanInterceptionWriter.Producer> producers,
+                                       VisitorContext context) {
         Set<String> bindings = new LinkedHashSet<>();
         for (AnnotationValue<?> binding : InterceptorClassScanner.bindingsOf(element)) {
             bindings.add(binding.getAnnotationName());

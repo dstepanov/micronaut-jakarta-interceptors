@@ -18,8 +18,10 @@ package io.micronaut.interceptor.internal.runtime;
 import io.micronaut.context.BeanContext;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
+import io.micronaut.inject.AdvisedBeanType;
 import io.micronaut.inject.BeanDefinition;
 import io.micronaut.inject.BeanType;
+import io.micronaut.inject.ProxyBeanDefinition;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorIndex;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorMethods;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorSupport;
@@ -226,7 +228,7 @@ final class InterceptorDefinitions {
         for (BeanDefinition<?> definition : beanContext.getBeanDefinitions(interceptorClass)) {
             // a subclass that is an interceptor class too is a bean of this type as well, and describes itself:
             // its bindings and its interceptor methods are not those of the class asked about
-            if (!InterceptorChainResolver.isOfClass(definition, interceptorClass)
+            if (!isOfClass(definition, interceptorClass)
                 || definition.getAnnotation(JakartaInterceptorMethods.class) == null) {
                 continue;
             }
@@ -239,6 +241,22 @@ final class InterceptorDefinitions {
             fallback = definition;
         }
         return fallback;
+    }
+
+    /**
+     * Whether a bean is a bean of the class itself rather than of a subclass of it. A lookup by type finds both,
+     * and a subclass is another bean: what it declares is not what the class declares.
+     *
+     * <p>A bean Micronaut proxies is of the class when the class is the one it proxies.</p>
+     *
+     * @param bean The bean
+     * @param type The class
+     * @return Whether the bean is of the class
+     */
+    static boolean isOfClass(BeanType<?> bean, Class<?> type) {
+        return bean.getBeanType() == type
+            || bean instanceof AdvisedBeanType<?> advised && advised.getInterceptedType() == type
+            || bean instanceof ProxyBeanDefinition<?> proxy && proxy.getTargetType() == type;
     }
 
     /**

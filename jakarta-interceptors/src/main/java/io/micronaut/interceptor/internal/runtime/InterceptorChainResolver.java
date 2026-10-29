@@ -23,11 +23,8 @@ import io.micronaut.context.BeanContext;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
-import io.micronaut.inject.AdvisedBeanType;
 import io.micronaut.inject.BeanDefinition;
-import io.micronaut.inject.BeanType;
 import io.micronaut.inject.ExecutableMethod;
-import io.micronaut.inject.ProxyBeanDefinition;
 import io.micronaut.interceptor.metadata.InterceptionKind;
 import io.micronaut.interceptor.internal.metadata.JakartaInterception;
 import jakarta.inject.Singleton;
@@ -317,22 +314,6 @@ public final class InterceptorChainResolver {
             ordered.putIfAbsent(definition.getBeanType(), describing == null ? definition : describing);
         }
         return ordered.values();
-    }
-
-    /**
-     * Whether a bean is a bean of the class itself rather than of a subclass of it. A lookup by type finds both,
-     * and a subclass is another bean: what it declares is not what the class declares.
-     *
-     * <p>A bean Micronaut proxies is of the class when the class is the one it proxies.</p>
-     *
-     * @param bean The bean
-     * @param type The class
-     * @return Whether the bean is of the class
-     */
-    static boolean isOfClass(BeanType<?> bean, Class<?> type) {
-        return bean.getBeanType() == type
-            || bean instanceof AdvisedBeanType<?> advised && advised.getInterceptedType() == type
-            || bean instanceof ProxyBeanDefinition<?> proxy && proxy.getTargetType() == type;
     }
 
     /**

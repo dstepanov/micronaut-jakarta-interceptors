@@ -121,7 +121,7 @@ public final class BindingValue {
      * @return The binding
      */
     public static BindingValue reduce(AnnotationValue<?> annotation, Function<String, ? extends Collection<String>> excluded) {
-        return of(annotation, excluded, false, true, true);
+        return of(annotation, excluded, false, ReadMode.COMPILE);
     }
 
     /**
@@ -131,7 +131,7 @@ public final class BindingValue {
      * @return The binding
      */
     public static BindingValue ofRecorded(AnnotationValue<?> recorded) {
-        return of(recorded, NONE_EXCLUDED, false, false, false);
+        return of(recorded, NONE_EXCLUDED, false, ReadMode.RECORDED);
     }
 
     /**
@@ -142,20 +142,19 @@ public final class BindingValue {
      * @return The binding
      */
     public static BindingValue of(AnnotationValue<?> value) {
-        return of(value, NONE_EXCLUDED, false, true, false);
+        return of(value, NONE_EXCLUDED, false, ReadMode.VALUE);
     }
 
     private static BindingValue of(AnnotationValue<?> annotation,
                                    Function<String, ? extends Collection<String>> excluded,
                                    boolean nested,
-                                   boolean withDefaults,
-                                   boolean leaveOutUndefaultedEmptyStrings) {
+                                   ReadMode mode) {
         String name = annotation.getAnnotationName();
         // the keys are read as strings so that two bindings compare by the names of their members, which a
         // CharSequence does not promise to do
         Map<String, Object> members = new LinkedHashMap<>();
         Set<String> defaulted = new TreeSet<>();
-        Map<CharSequence, Object> defaults = withDefaults ? annotation.getDefaultValues() : null;
+        Map<CharSequence, Object> defaults = mode.withDefaults ? annotation.getDefaultValues() : null;
         if (defaults != null) {
             defaults.forEach((member, value) -> {
                 members.put(member.toString(), value);
@@ -163,7 +162,7 @@ public final class BindingValue {
             });
         }
         annotation.getValues().forEach((member, value) -> members.put(member.toString(), value));
-        if (leaveOutUndefaultedEmptyStrings) {
+        if (mode.leavesOutUndefaultedEmptyStrings) {
             members.entrySet().removeIf(entry -> !defaulted.contains(entry.getKey()) && isEmptyString(entry.getValue()));
         }
         Set<String> nonBinding = new TreeSet<>(Arrays.asList(annotation.stringValues(AnnotationUtil.NON_BINDING_ATTRIBUTE)));
@@ -177,8 +176,7 @@ public final class BindingValue {
         members.remove(AnnotationUtil.STEREOTYPES_MEMBER);
         members.keySet().removeAll(nonBinding);
         Map<String, Object> written = CollectionUtils.newLinkedHashMap(members.size());
-        members.forEach((member, value) -> written.put(member, writable(value, excluded, withDefaults,
-            leaveOutUndefaultedEmptyStrings)));
+        members.forEach((member, value) -> written.put(member, writable(value, excluded, mode)));
         return new BindingValue(name, Collections.unmodifiableSet(nonBinding), Collections.unmodifiableMap(written));
     }
 
@@ -326,16 +324,14 @@ public final class BindingValue {
      */
     private static Object writable(Object value,
                                    Function<String, ? extends Collection<String>> excluded,
-                                   boolean withDefaults,
-                                   boolean leaveOutUndefaultedEmptyStrings) {
+                                   ReadMode mode) {
         if (value instanceof AnnotationValue<?> annotation) {
-            return of(annotation, excluded, true, withDefaults, leaveOutUndefaultedEmptyStrings).toAnnotationValue();
+            return of(annotation, excluded, true, mode).toAnnotationValue();
         }
         if (value instanceof AnnotationValue<?>[] annotations) {
             AnnotationValue<?>[] written = new AnnotationValue<?>[annotations.length];
             for (int i = 0; i < annotations.length; i++) {
-                written[i] = of(annotations[i], excluded, true, withDefaults, leaveOutUndefaultedEmptyStrings)
-                    .toAnnotationValue();
+                written[i] = of(annotations[i], excluded, true, mode).toAnnotationValue();
             }
             return written;
         }
@@ -354,7 +350,7 @@ public final class BindingValue {
                 .toArray(AnnotationClassValue<?>[]::new);
         }
         if (value instanceof EvaluatedExpressionReference expression) {
-            return writable(expression.annotationValue(), excluded, withDefaults, leaveOutUndefaultedEmptyStrings);
+            return writable(expression.annotationValue(), excluded, mode);
         }
         return value;
     }
@@ -415,5 +411,36 @@ public final class BindingValue {
             }
             default -> value;
         };
+    }
+
+    /**
+     * How a binding is read, which an annotation its members hold is read the same way as.
+     */
+    private enum ReadMode {
+
+        /**
+         * A binding annotation as the processor reduces it before recording it: the defaults the value carries are
+         * filled in, and an empty string it carries no default for is left out, see {@link BindingValue#reduce}.
+         */
+        COMPILE(true, true),
+
+        /**
+         * Any value of a binding annotation: the defaults the value carries are filled in, see {@link BindingValue#of}.
+         */
+        VALUE(true, false),
+
+        /**
+         * A binding the processor recorded, which has its defaults filled in already and is read without them, see
+         * {@link BindingValue#ofRecorded}.
+         */
+        RECORDED(false, false);
+
+        private final boolean withDefaults;
+        private final boolean leavesOutUndefaultedEmptyStrings;
+
+        ReadMode(boolean withDefaults, boolean leavesOutUndefaultedEmptyStrings) {
+            this.withDefaults = withDefaults;
+            this.leavesOutUndefaultedEmptyStrings = leavesOutUndefaultedEmptyStrings;
+        }
     }
 }

@@ -82,7 +82,9 @@ interceptors of a target with the target, and the proxy intercepts each call wit
 
 Whichever shape the bean has, Micronaut tells the interceptors it creates for the bean which bean that is, through
 its `InterceptionTarget`, and every interceptor instance of the object is created then, from the definition of that
-bean, which carries its qualifier: two beans of one class, two of one `@EachBean` among them, are told apart.
+bean, which carries its qualifier: two beans of one class, two of one `@EachBean` among them, are told apart. A bean
+created through `BeanContext.createBean` is told to its interceptors as well, as one created for a lookup or an
+injection is.
 
 An interceptor declared `@Singleton` is shared by every object it intercepts and belongs to none of them, so it
 is destroyed with the context, as any other singleton is - after the objects it intercepted, so that the

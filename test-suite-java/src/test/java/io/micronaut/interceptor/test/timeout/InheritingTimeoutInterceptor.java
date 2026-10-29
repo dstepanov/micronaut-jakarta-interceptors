@@ -1,5 +1,6 @@
 package io.micronaut.interceptor.test.timeout;
 
+import io.micronaut.interceptor.test.ScheduledRecords;
 import jakarta.interceptor.AroundTimeout;
 import jakarta.interceptor.Interceptor;
 import jakarta.interceptor.InvocationContext;
@@ -12,9 +13,13 @@ import jakarta.interceptor.InvocationContext;
 @Varied
 public class InheritingTimeoutInterceptor extends BaseTimeoutInterceptor {
 
+    public InheritingTimeoutInterceptor(ScheduledRecords records) {
+        super(records);
+    }
+
     @AroundTimeout
     public Object declaredAroundTimeout(InvocationContext context) throws Exception {
-        VariedCalls.RECORDED.add("declared");
+        records.record(VariedCalls.LOG, "declared");
         return context.proceed();
     }
 }

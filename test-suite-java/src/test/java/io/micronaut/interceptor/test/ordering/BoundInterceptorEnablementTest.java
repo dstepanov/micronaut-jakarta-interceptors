@@ -228,4 +228,20 @@ class BoundInterceptorEnablementTest {
             assertEquals("switched worked", context.getBean(NamingService.class).work());
         }
     }
+
+    /**
+     * A method keeps only what its compiled metadata records, and the chain resolved from it stays with the resolver
+     * of each context: two contexts open at once in one virtual machine, enabling differently, each keep the chains
+     * of their own enablement, even where they share the methods of a proxy.
+     */
+    @Test
+    void twoContextsOpenAtOnceEachKeepTheChainsOfTheirOwnEnablement() {
+        try (ApplicationContext disabling = ApplicationContext.run(Map.of(DISABLING, "true"));
+             ApplicationContext enabling = ApplicationContext.run()) {
+            assertEquals("worked", disabling.getBean(SwitchedService.class).work());
+            assertEquals("switched worked", enabling.getBean(SwitchedService.class).work());
+            assertEquals("worked", disabling.getBean(SwitchedService.class).work());
+            assertEquals("switched worked", enabling.getBean(SwitchedService.class).work());
+        }
+    }
 }

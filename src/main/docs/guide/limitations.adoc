@@ -166,22 +166,37 @@ See <<conformance,Conformance>>, section 3.3.
 A few things are done here in a way Micronaut itself does not yet offer a better one for. None of them changes what
 an application sees; each is recorded so that it can be replaced once Micronaut publishes what it needs.
 
-The advice of an object learns the bean it is created for from Micronaut's experimental `InterceptionTarget`, and
-creates every interceptor instance of the object then, from the definition of that bean, which carries its
-qualifier: two beans of one class, two of one `@EachBean` among them, are told apart. Micronaut hands it to the
-advice of every bean it creates for a lookup or an injection, whichever shape the bean has: the subclass it
-generates to intercept the methods of a class, a proxy with a separate target - one resolving its target lazily,
-`@Around(proxyTarget = true, lazy = true)` or a bean of a scope that resolves through a proxy, included, whose
-interceptors are created as its target is first resolved - and an intercepted lifecycle. A bean created through
-`BeanContext.createBean` is handed to its advice as well, since Micronaut begins a creation for it as it does for a
-lookup.
+Two bindings are compared by Micronaut, with `AnnotationValue.matches`, which leaves out the `@Nonbinding` members
+either of them lists, and an interceptor class is bound to an element by Micronaut's experimental exact rule,
+`ExactInterceptorBindingQualifier`: every binding of the interceptor class applies at the element, the occurrences
+of a repeatable binding compared as one group. What the module still does itself, and why, is pinned by
+`MicronautBindingGapsTest`, which fails once Micronaut answers as the specification does:
 
-Micronaut compares interceptor bindings through its own interceptor binding qualifier, which qualifies an
-interceptor bound by any one of the bindings of an element. The specification binds an interceptor only when every
-binding it declares, members included, is one of the element's, so the bindings are compared by this module's
-`InterceptorBindings` instead, through a qualifier of its own; see <<bindings,Interceptor Bindings>>. Binding types
-are not meta-annotated with Micronaut's own `@InterceptorBinding` for the same reason, and because doing so would
-have Micronaut proxy every class carrying a binding, interceptor classes included.
+* the bindings are those the processor recorded. Micronaut's qualifier reads the bindings of an element and of a
+candidate from Micronaut's own `@InterceptorBinding`, with the occurrences on a method replacing those of its class.
+Binding types are not meta-annotated with it, since that would have Micronaut proxy every class carrying a binding,
+interceptor classes included, so the processor records the bindings, a method's replacing its class's, and a
+qualifier of this module hands them to the rule;
+* each binding is brought into one shape first. Micronaut compares an empty string as a value, although it records
+no default of an empty string, so `@Region("")` would not match `@Region`; and it compares an enum constant with
+its name, and a class with the class value compiled metadata holds, by `equals`, as a binding built from an
+annotation instance holds them;
+* the interceptor classes are ordered by `@Priority`, and one that declares none at
+`Interceptor.Priority.APPLICATION`, where Micronaut orders it at 0, and a `BoundInterceptorEnablement` decides which
+are enabled, which Micronaut has nothing of. An interceptor class must declare `@Interceptor` to be bound, which
+Micronaut's rule, comparing bindings alone, leaves to the caller; and Micronaut has no kind of interception for an
+`@AroundTimeout` method.
+
+A method keeps what its compiled metadata alone gives - the interception the processor recorded, the key of its chain
+for each kind of interception, and the bindings its invocations report - through Micronaut's experimental
+`ExecutableMethod.getCachedValue`, and the interception through `getCachedUnevaluatedValue`, which keeps it for a
+method an annotation of which holds an evaluated expression as well. Micronaut gives the objects of a proxied class
+one method per definition, but the chains depend on the interceptor classes a context holds and enables, so they
+stay with the resolver of each context, under the key the method keeps, and each object keeps the chains of the
+methods it is called through. Resolving the chain again for each new object instead, without the resolver's map,
+makes creating a bean and calling each of its methods half as slow again; and without the chains each object keeps,
+a call takes about five times as long. Micronaut offers no such value for a constructor or a bean definition, where
+the resolver reads the interception again.
 
 The map `InvocationContext.getContextData()` returns is created the first time an interceptor of the invocation asks
 for it, and kept among the attributes of the Micronaut invocation, which every advice of that invocation shares.

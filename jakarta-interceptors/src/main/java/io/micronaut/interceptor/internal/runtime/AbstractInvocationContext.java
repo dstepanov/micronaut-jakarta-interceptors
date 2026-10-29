@@ -15,7 +15,6 @@
  */
 package io.micronaut.interceptor.internal.runtime;
 
-import io.micronaut.core.annotation.AnnotationBuilder;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
@@ -23,7 +22,6 @@ import io.micronaut.core.convert.value.MutableConvertibleValues;
 import io.micronaut.core.type.Argument;
 import io.micronaut.interceptor.MicronautInvocationContext;
 import io.micronaut.interceptor.spi.InterceptorBindings;
-import io.micronaut.reflection.ReflectionExecutables;
 import jakarta.interceptor.InvocationContext;
 import org.jspecify.annotations.Nullable;
 
@@ -32,11 +30,8 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -272,21 +267,9 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     public <T extends Annotation> @Nullable T getInterceptorBinding(Class<T> annotationType) {
         Set<Annotation> resolved = bindings;
         if (resolved != null) {
-            for (Annotation binding : resolved) {
-                if (binding.annotationType().equals(annotationType)) {
-                    return annotationType.cast(binding);
-                }
-            }
-            return null;
+            return BindingAnnotationAccess.first(resolved, annotationType);
         }
-        String name = annotationType.getName();
-        for (AnnotationValue<?> value : getInterceptorBindingValues()) {
-            if (value.getAnnotationName().equals(name)) {
-                // getInterceptorBinding returns the annotation itself, so one has to be built
-                return instanceOf(annotationType, value, "getInterceptorBinding(Class)");
-            }
-        }
-        return null;
+        return BindingAnnotationAccess.first(getInterceptorBindingValues(), annotationType);
     }
 
     /**
@@ -302,23 +285,9 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     public <T extends Annotation> Set<T> getInterceptorBindings(Class<T> annotationType) {
         Set<Annotation> resolved = bindings;
         if (resolved != null) {
-            Set<T> matching = new LinkedHashSet<>(1);
-            for (Annotation binding : resolved) {
-                if (binding.annotationType().equals(annotationType)) {
-                    matching.add(annotationType.cast(binding));
-                }
-            }
-            return Collections.unmodifiableSet(matching);
+            return BindingAnnotationAccess.all(resolved, annotationType);
         }
-        String name = annotationType.getName();
-        Set<T> matching = new LinkedHashSet<>(1);
-        for (AnnotationValue<?> value : getInterceptorBindingValues()) {
-            if (value.getAnnotationName().equals(name)) {
-                // the bindings are the annotations themselves, so they have to be built
-                matching.add(instanceOf(annotationType, value, "getInterceptorBindings(Class)"));
-            }
-        }
-        return Collections.unmodifiableSet(matching);
+        return BindingAnnotationAccess.all(getInterceptorBindingValues(), annotationType);
     }
 
     /**
@@ -353,91 +322,7 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
         if (values.isEmpty()) {
             return Collections.emptySet();
         }
-        AnnotationMetadata annotationMetadata = bindingMetadata();
-        String accessor = "getInterceptorBindings()";
-        Set<Annotation> resolved = new LinkedHashSet<>(values.size());
-        for (AnnotationValue<?> value : values) {
-            bindingType(annotationMetadata, value.getAnnotationName(), accessor)
-                .ifPresent(type -> resolved.add(instanceOf(type, value, accessor)));
-        }
-        return Collections.unmodifiableSet(resolved);
-    }
-
-    /**
-     * The type of a binding annotation the element carries, found by its name.
-     *
-     * <p>A binding whose builder Micronaut generated with {@code @RegisterAnnotations} is found through the builder,
-     * which knows its type. Any other is a class found by its name, whose instances are left to the reflection
-     * module to build.</p>
-     */
-    private static Optional<? extends Class<? extends Annotation>> bindingType(AnnotationMetadata metadata,
-                                                                              String name,
-                                                                              String accessor) {
-        Optional<AnnotationBuilder<?>> builder = AnnotationBuilder.find(name);
-        if (builder.isPresent()) {
-            return Optional.of(builder.get().annotationType());
-        }
-        // finding the class asks nothing of the reflection module, but building its instance does, so its absence
-        // is reported here, before the type is looked for
-        requireReflectionModule(accessor);
-        return metadata.getAnnotationType(name);
-    }
-
-    /**
-     * Builds an instance of a binding annotation from the value Micronaut recorded for it.
-     *
-     * <p>A builder Micronaut generated for the annotation with {@code @RegisterAnnotations} builds it without the
-     * reflection module, and without a proxy class. An annotation without one is synthesized by the reflection
-     * module.</p>
-     *
-     * @param value A value of the annotation of the given type, which is what it is read as
-     */
-    @SuppressWarnings("unchecked")
-    private static <T extends Annotation> T instanceOf(Class<T> annotationType,
-                                                       AnnotationValue<?> value,
-                                                       String accessor) {
-        AnnotationValue<T> typed = (AnnotationValue<T>) value;
-        Optional<AnnotationBuilder<T>> builder = AnnotationBuilder.find(annotationType);
-        if (builder.isPresent()) {
-            return builder.get().build(typed);
-        }
-        requireReflectionModule(accessor);
-        return PlatformReflection.annotation(annotationType, typed);
-    }
-
-    /**
-     * Makes sure the reflection module is on the classpath before {@link PlatformReflection} is used to answer an
-     * accessor.
-     *
-     * <p>{@link PlatformReflection} links to that module and fails to load without it. Rather than recognising that
-     * failure among the others an accessor may run into, the module is looked for once, by {@link ReflectionModule},
-     * and an accessor that needs it asks first. A class of the application that is missing - one a binding annotation
-     * refers to, for instance - therefore fails as it is, naming that class, and is never taken for the module.</p>
-     *
-     * @param accessor The accessor of {@code InvocationContext} that was called
-     * @throws UnsupportedOperationException naming the accessor and the dependency to add, where the module is absent
-     */
-    static void requireReflectionModule(String accessor) {
-        NoClassDefFoundError missing = ReflectionModule.MISSING;
-        if (missing != null) {
-            throw reflectionUnavailable(accessor, missing);
-        }
-    }
-
-    /**
-     * The failure of an accessor that returns an object of the reflection of the platform, in an application
-     * without the module that answers it.
-     *
-     * @param accessor The accessor of {@code InvocationContext} that was called
-     * @param cause    What looking for the module failed with
-     * @return The exception to throw
-     */
-    static UnsupportedOperationException reflectionUnavailable(String accessor, NoClassDefFoundError cause) {
-        return new UnsupportedOperationException("InvocationContext." + accessor + " returns an object of the Java"
-            + " reflection API, which needs io.micronaut:micronaut-reflection on the classpath (or"
-            + " io.micronaut.cdi:micronaut-cdi-reflection, which brings it, when the interceptors are used through"
-            + " Micronaut CDI). Add that dependency, or read the interception through MicronautInvocationContext,"
-            + " which reflects on nothing.", cause);
+        return BindingAnnotationAccess.build(bindingMetadata(), values);
     }
 
     /**
@@ -513,33 +398,5 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
         }
         // an argument of a primitive type is passed boxed, and its wrapper type is the type itself otherwise
         return argument.getWrapperType().isInstance(value);
-    }
-
-    /**
-     * Whether the reflection module is on the classpath, found out the first time an accessor that needs it is
-     * called - a class is initialized on its first use, so an application whose interceptors call none of those
-     * accessors never looks for the module at all.
-     */
-    static final class ReflectionModule {
-
-        /**
-         * What loading a class of the module failed with, or {@code null} where the module is there. It is the
-         * cause of every failure that reports the module missing, which is the same for each of them.
-         */
-        @SuppressWarnings("StaticAssignmentOfThrowable")
-        static final @Nullable NoClassDefFoundError MISSING = find();
-
-        private ReflectionModule() {
-        }
-
-        private static @Nullable NoClassDefFoundError find() {
-            try {
-                // a class literal is resolved, and so loaded, where it is evaluated
-                Objects.requireNonNull(ReflectionExecutables.class);
-                return null;
-            } catch (NoClassDefFoundError e) {
-                return e;
-            }
-        }
     }
 }

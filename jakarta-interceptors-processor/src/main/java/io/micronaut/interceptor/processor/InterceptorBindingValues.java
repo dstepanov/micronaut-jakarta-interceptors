@@ -20,16 +20,22 @@ import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationUtil;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
+import io.micronaut.core.util.CollectionUtils;
+import io.micronaut.inject.ast.AnnotationElement;
 import io.micronaut.inject.ast.ClassElement;
 import io.micronaut.inject.ast.Element;
-import io.micronaut.inject.ast.ElementQuery;
 import io.micronaut.inject.visitor.VisitorContext;
 import io.micronaut.interceptor.internal.metadata.BindingValue;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorSupport;
 
+import org.jspecify.annotations.Nullable;
+
 import java.lang.annotation.Annotation;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -73,7 +79,7 @@ public final class InterceptorBindingValues {
         if (names.isEmpty()) {
             return Set.of();
         }
-        Set<BindingValue> bindings = new LinkedHashSet<>(names.size());
+        Set<BindingValue> bindings = CollectionUtils.newLinkedHashSet(names.size());
         for (String name : names) {
             // a repeatable binding binds by every occurrence of it the element carries, each of which is a binding
             // of its own: an interceptor declaring one of them is bound to the element, and one declaring an
@@ -114,12 +120,90 @@ public final class InterceptorBindingValues {
     }
 
     /**
+     * Reads what the bindings of an element are compared by.
+     *
+     * <p>Comparing an interceptor with an element it might intercept is comparing the members of their binding
+     * annotations, the ones they default to filled in and the ones excluded from the binding left out. Which
+     * members those are does not depend on the running application, so it is worked out here, and each binding is
+     * written out as the value of its annotation that the runtime compares.</p>
+     *
+     * <p>A binding a member declares replaces the one of the same type its class declares - the whole of it, so a
+     * member the declaration leaves to its default takes the default rather than the value the class gives it. The
+     * metadata Micronaut hands out for a method merges the two member by member instead, so the class and the
+     * member are read apart: the bindings of the class first, and the ones the member's own metadata holds written
+     * over them by type. A binding declared on another annotation is one of the element's as well, which is why
+     * the bindings are looked for by their stereotype rather than among the annotations the element declares
+     * itself.</p>
+     *
+     * <p>A repeatable binding is as many bindings as the element carries occurrences of it, so the bindings are kept
+     * by type as a list rather than as one: what a member declares of a type replaces every occurrence of that type
+     * its class declares, and the occurrences of a type the member says nothing about are all inherited.</p>
+     *
+     * <p>The members excluded from a binding are the ones Micronaut records on each occurrence, every member the
+     * annotation type excludes whether or not the occurrence declares a value for it, so an interceptor and the
+     * element it intercepts agree on which members are compared. An annotation held by a member of a binding is
+     * recorded without them, and has them read off its type.</p>
+     *
+     * @param element The element
+     * @param owner   The class the element belongs to, or {@code null} when the element is the class
+     * @param context The visitor context, which resolves the binding annotation types
+     * @return The bindings, in a stable order: by the name of the annotation, the occurrences of one in the order
+     * they are declared in
+     */
+    public static List<BindingValue> bindingsOf(Element element,
+                                                @Nullable ClassElement owner,
+                                                VisitorContext context) {
+        ExcludedMembers excluded = excludedMembersOf(context);
+        Map<String, List<BindingValue>> bindings = new LinkedHashMap<>();
+        if (owner != null) {
+            groupByType(of(owner.getAnnotationMetadata(), excluded), bindings);
+        }
+        AnnotationMetadata own = InterceptorClassScanner.ownMetadataOf(element);
+        Map<String, List<BindingValue>> declared = new LinkedHashMap<>();
+        groupByType(of(own, excluded), declared);
+        if (owner != null) {
+            // the metadata of a method also holds the annotations of the method it overrides. A binding declared
+            // on an overridden method is not a binding of the override, so only the ones the member declares
+            // itself, or that an annotation it declares carries, are kept
+            Set<String> ownAnnotations = new HashSet<>(own.getDeclaredAnnotationNames());
+            ownAnnotations.addAll(own.getDeclaredStereotypeAnnotationNames());
+            // a repeatable binding is declared through its container, and is found by its occurrences
+            declared.keySet().removeIf(name -> !ownAnnotations.contains(name)
+                && own.getDeclaredAnnotationValuesByName(name).isEmpty());
+        }
+        bindings.putAll(declared);
+        return bindings.values()
+            .stream()
+            .flatMap(List::stream)
+            .sorted(Comparator.comparing(BindingValue::name))
+            .toList();
+    }
+
+    /**
+     * The bindings as they are written out: the value of each binding annotation, named by the annotation.
+     *
+     * @param bindings The bindings
+     * @return The values
+     */
+    public static AnnotationValue<?>[] written(List<BindingValue> bindings) {
+        return bindings.stream()
+            .map(BindingValue::toAnnotationValue)
+            .toArray(AnnotationValue<?>[]::new);
+    }
+
+    private static void groupByType(Set<BindingValue> read,
+                                    Map<String, List<BindingValue>> into) {
+        for (BindingValue binding : read) {
+            into.computeIfAbsent(binding.name(), name -> new ArrayList<>()).add(binding);
+        }
+    }
+
+    /**
      * Reads the members excluded from a binding annotation off the annotation type itself, remembering what it read:
      * the same annotation is reached as often as it is declared, and it is the same annotation every time.
      *
-     * <p>Javac and the Groovy compiler answer the members of an annotation as its methods. KSP answers them as its
-     * properties and no methods, a Java annotation on the classpath included, so those are read where there are no
-     * methods.</p>
+     * <p>The members are those Micronaut answers for the annotation type under every compiler alike: javac and the
+     * Groovy compiler answer them as methods, KSP as properties.</p>
      *
      * @param context The visitor context, which resolves the annotation types
      * @return The excluded members of any binding annotation the compilation can see
@@ -127,15 +211,10 @@ public final class InterceptorBindingValues {
     public static ExcludedMembers excludedMembersOf(VisitorContext context) {
         Map<String, List<String>> read = new HashMap<>();
         return name -> read.computeIfAbsent(name, annotationName -> {
-            ClassElement annotationType = context.getClassElement(annotationName).orElse(null);
-            if (annotationType == null) {
+            if (!(context.getClassElement(annotationName).orElse(null) instanceof AnnotationElement annotationType)) {
                 return List.of();
             }
-            List<? extends Element> members = annotationType.getEnclosedElements(ElementQuery.ALL_METHODS);
-            if (members.isEmpty()) {
-                members = annotationType.getBeanProperties();
-            }
-            return members.stream()
+            return annotationType.getMembers().stream()
                 .filter(member -> member.hasAnnotation(JakartaInterceptors.NONBINDING)
                     || member.hasAnnotation(NonBinding.class))
                 .map(Element::getName)

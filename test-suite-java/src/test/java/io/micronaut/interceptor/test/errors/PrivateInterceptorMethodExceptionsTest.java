@@ -4,6 +4,7 @@ import io.micronaut.context.ApplicationContext;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.propagation.PropagatedContext;
 import io.micronaut.inject.ExecutableMethod;
+import io.micronaut.interceptor.test.ScheduledFixtures;
 import io.micronaut.scheduling.ScheduledExecution;
 import io.micronaut.scheduling.annotation.Scheduled;
 import org.junit.jupiter.api.AfterAll;
@@ -26,7 +27,7 @@ class PrivateInterceptorMethodExceptionsTest {
 
     @BeforeAll
     static void startContext() {
-        context = ApplicationContext.run();
+        context = ScheduledFixtures.run();
     }
 
     @AfterAll

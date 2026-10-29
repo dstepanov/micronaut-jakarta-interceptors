@@ -80,9 +80,13 @@ final class InterceptorDefinitions {
      * an interceptor to an element when every binding of the interceptor is a binding of the element.
      *
      * <p>The processor recorded the bindings of both as the values of their binding annotations, reduced to what
-     * they bind by, and {@link InterceptorBindings} compares them. Micronaut's own interceptor binding qualifier
-     * selects an interceptor sharing any one binding with the element, so the interceptors are selected with a
-     * qualifier of this module's.</p>
+     * they bind by. The comparison is Micronaut's exact interceptor binding rule,
+     * {@code ExactInterceptorBindingQualifier}, which {@link InterceptorBindings#isBoundBy(InterceptorBindings)}
+     * applies: an interceptor is bound when every binding it declares matches one of the element, member by member
+     * through {@code AnnotationValue.matches}. That qualifier reads the bindings of a candidate from the
+     * {@code io.micronaut.aop.InterceptorBinding} values of its metadata, which an interceptor class of this module
+     * does not carry, so the candidates are filtered with {@link BoundInterceptorQualifier}, which hands the rule the
+     * bindings the processor recorded on each of them instead.</p>
      *
      * <p>They are asked for by the type the processor indexed them under rather than by reading every bean
      * definition of the context and keeping the ones that are interceptor classes. An index is what the context

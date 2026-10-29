@@ -8,11 +8,11 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Reading the interception of an element into what its chain is remembered by brings every binding of it into the
+ * Reading the interception of an element into what its chain is built from brings every binding of it into the
  * shape bindings are compared in, which is the costly part of resolving a chain. It is done once for each
  * interception an application records, not again for every bean created and every invocation that looks the chain up.
  */
-class ChainKeyReadTest {
+class InterceptionReadTest {
 
     @Test
     void readsTheInterceptionOfAnElementOnceHoweverManyBeansPassThroughIt() {

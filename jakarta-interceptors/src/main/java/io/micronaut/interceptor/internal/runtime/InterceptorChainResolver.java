@@ -68,7 +68,7 @@ public final class InterceptorChainResolver {
 
     private final BeanContext beanContext;
     // the chains, under the interception as the processor recorded it, so that finding the chain of an element a
-    // second time reads nothing into a ChainKey
+    // second time reads nothing of the interception
     private final Map<RecordedKey, List<InterceptorReference>> recorded = new ConcurrentHashMap<>();
     private final LongAdder readInterceptions = new LongAdder();
     // an interceptor class describes itself the same way whichever element its chain was resolved for, so what is
@@ -180,7 +180,7 @@ public final class InterceptorChainResolver {
             // two threads may build the same chain, and the later put wins. The key is everything the chain is
             // built from, so the two chains are equal and nothing is lost. Building inside a computeIfAbsent would
             // instead hold a lock of the map across the bean context
-            chain = build(ChainKey.of(kind, interception));
+            chain = build(kind, interception);
             recorded.put(recordedKey, chain);
         }
         return chain;
@@ -282,15 +282,21 @@ public final class InterceptorChainResolver {
         return readInterceptions.sum();
     }
 
-    private List<InterceptorReference> build(ChainKey key) {
-        // the chain is built from the key alone, which is what lets it be remembered under the key
-        InterceptionKind kind = key.kind();
-        if (key.excluded()) {
+    /**
+     * Builds a chain from the interception the processor recorded on an element and the kind of interception, which
+     * is everything it is built from, so that it can be remembered under the {@link RecordedKey} of the two.
+     */
+    private List<InterceptorReference> build(InterceptionKind kind,
+                                             @Nullable AnnotationValue<JakartaInterception> interception) {
+        // an element that records no interception names no interceptor class and has no binding to be bound by
+        if (interception == null || interception.booleanValue(JakartaInterception.EXCLUDED).orElse(false)) {
             return List.of();
         }
-        Collection<BeanDefinition<?>> ordered = ordered(key.interceptors(), key.bindings());
+        Collection<BeanDefinition<?>> ordered = ordered(
+            List.of(interception.classValues(JakartaInterception.INTERCEPTORS)),
+            InterceptorBindings.ofRecorded(interception.getAnnotations(JakartaInterception.BINDINGS)));
         // the interceptor methods a class declares on itself are invoked after every interceptor class
-        Class<?> self = key.self();
+        Class<?> self = interception.classValue(JakartaInterception.SELF).filter(type -> type != void.class).orElse(null);
         List<InterceptorReference> chain = new ArrayList<>(ordered.size() + 1);
         for (BeanDefinition<?> definition : ordered) {
             chain.addAll(references(definition, kind, false));
@@ -556,42 +562,6 @@ public final class InterceptorChainResolver {
         // the list is shared between every chain that includes this interceptor, so it is not one of theirs to
         // change
         return List.copyOf(references);
-    }
-
-    /**
-     * What a chain is built from: the interception the processor declared on the element, read into the shape a
-     * chain is built in, and the kind of interception. It is built once for each chain, when the chain is first
-     * resolved, and is not held; the chain is remembered under the {@link RecordedKey} of the element.
-     *
-     * @param kind         The kind of interception
-     * @param interceptors The interceptor classes the element names, in the order they are invoked in
-     * @param bindings     The bindings of the element
-     * @param self         The class whose own interceptor methods interpose on the element, or {@code null}
-     * @param excluded     Whether the element is not intercepted at all
-     */
-    record ChainKey(InterceptionKind kind,
-                    List<Class<?>> interceptors,
-                    InterceptorBindings bindings,
-                    @Nullable Class<?> self,
-                    boolean excluded) {
-
-        /**
-         * Reads the key of an element out of the interception the processor declared on it.
-         *
-         * @param kind         The kind of interception
-         * @param interception The interception, or {@code null} where the element declares none
-         * @return The key
-         */
-        static ChainKey of(InterceptionKind kind, @Nullable AnnotationValue<JakartaInterception> interception) {
-            if (interception == null) {
-                return new ChainKey(kind, List.of(), InterceptorBindings.ofValues(List.of()), null, false);
-            }
-            return new ChainKey(kind,
-                List.of(interception.classValues(JakartaInterception.INTERCEPTORS)),
-                InterceptorBindings.ofRecorded(interception.getAnnotations(JakartaInterception.BINDINGS)),
-                interception.classValue(JakartaInterception.SELF).filter(type -> type != void.class).orElse(null),
-                interception.booleanValue(JakartaInterception.EXCLUDED).orElse(false));
-        }
     }
 
     /**

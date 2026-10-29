@@ -19,38 +19,14 @@ class ChainKeyReadTest {
         try (ApplicationContext context = ApplicationContext.run()) {
             InterceptorChainResolver resolver = context.getBean(InterceptorChainResolver.class);
             context.createBean(PrototypeService.class).work();
-            long settled = settled(resolver);
+            long read = resolver.readInterceptions();
 
             for (int i = 0; i < 200; i++) {
                 context.createBean(PrototypeService.class).work();
             }
 
-            assertEquals(settled, resolver.readInterceptions(),
+            assertEquals(read, resolver.readInterceptions(),
                 "the interception of an element is read once, however many beans of it are created");
         }
-    }
-
-    /**
-     * The count once the beans the scheduler creates on a thread of its own have been resolved, which is the count
-     * holding still across consecutive reads.
-     */
-    private static long settled(InterceptorChainResolver resolver) {
-        long previous = -1;
-        int stable = 0;
-        for (int attempt = 0; attempt < 100; attempt++) {
-            long current = resolver.readInterceptions();
-            stable = current == previous ? stable + 1 : 0;
-            if (stable == 5) {
-                return current;
-            }
-            previous = current;
-            try {
-                Thread.sleep(20);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new IllegalStateException("Interrupted while waiting for the count to settle", e);
-            }
-        }
-        throw new AssertionError("The count never settled, last seen " + previous);
     }
 }

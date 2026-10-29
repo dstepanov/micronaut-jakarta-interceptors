@@ -1,6 +1,7 @@
 package io.micronaut.interceptor.test.conformance;
 
 import io.micronaut.context.ApplicationContext;
+import io.micronaut.interceptor.test.ScheduledFixtures;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -41,7 +42,7 @@ class OwnLifecycleTest {
     /** 2.8 bb) An around-timeout method may be declared on the target class. */
     @Test
     void invokesAnAroundTimeoutMethodDeclaredOnTheTargetClass() throws Exception {
-        try (ApplicationContext context = ApplicationContext.run()) {
+        try (ApplicationContext context = ScheduledFixtures.run()) {
             assertTrue(SelfTimeoutService.RAN.await(5, TimeUnit.SECONDS), "the schedule did not run");
             Thread.sleep(100);
 

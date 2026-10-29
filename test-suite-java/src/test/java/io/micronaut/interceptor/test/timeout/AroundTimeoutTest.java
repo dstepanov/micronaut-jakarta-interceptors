@@ -1,6 +1,7 @@
 package io.micronaut.interceptor.test.timeout;
 
 import io.micronaut.context.ApplicationContext;
+import io.micronaut.interceptor.test.ScheduledFixtures;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -16,7 +17,7 @@ class AroundTimeoutTest {
 
     @Test
     void interposesOnAScheduledMethodAndOnABusinessMethodApart() throws Exception {
-        try (ApplicationContext context = ApplicationContext.run()) {
+        try (ApplicationContext context = ScheduledFixtures.run()) {
             assertTrue(ScheduledService.SCHEDULED_RAN.await(5, TimeUnit.SECONDS), "the schedule did not run");
 
             assertEquals("business", context.getBean(ScheduledService.class).business());
@@ -33,7 +34,7 @@ class AroundTimeoutTest {
 
     @Test
     void showsTheScheduleAsTheTimer() throws Exception {
-        try (ApplicationContext context = ApplicationContext.run()) {
+        try (ApplicationContext context = ScheduledFixtures.run()) {
             assertTrue(ScheduledService.SCHEDULED_RAN.await(5, TimeUnit.SECONDS), "the schedule did not run");
 
             String call = TimedInterceptor.CALLS.stream()
@@ -50,7 +51,7 @@ class AroundTimeoutTest {
      */
     @Test
     void interposesOnAScheduledMethodThroughAPrivateAroundTimeout() throws Exception {
-        try (ApplicationContext context = ApplicationContext.run()) {
+        try (ApplicationContext context = ScheduledFixtures.run()) {
             assertTrue(PrivatelyTimedService.RAN.await(5, TimeUnit.SECONDS), "the schedule did not run");
 
             List<String> calls = List.copyOf(PrivateTimeoutInterceptor.CALLS);
@@ -60,7 +61,7 @@ class AroundTimeoutTest {
 
     @Test
     void interposesOnAScheduledMethodThroughAnInterceptorNamedDirectly() throws Exception {
-        try (ApplicationContext context = ApplicationContext.run()) {
+        try (ApplicationContext context = ScheduledFixtures.run()) {
             assertTrue(NamedScheduledService.RAN.await(5, TimeUnit.SECONDS), "the schedule did not run");
 
             List<String> calls = List.copyOf(NamedTimeoutInterceptor.CALLS);
@@ -70,7 +71,7 @@ class AroundTimeoutTest {
 
     @Test
     void fallsBackToAroundInvokeWhenNoTimeoutMethodIsDeclared() throws Exception {
-        try (ApplicationContext context = ApplicationContext.run()) {
+        try (ApplicationContext context = ScheduledFixtures.run()) {
             assertTrue(ScheduledService.SCHEDULED_RAN.await(5, TimeUnit.SECONDS), "the schedule did not run");
 
             List<String> calls = List.copyOf(OnlyAroundInvokeInterceptor.CALLS);
@@ -87,7 +88,7 @@ class AroundTimeoutTest {
      */
     @Test
     void namesATimeoutInterceptorOnTheMethodRatherThanOnTheClass() throws Exception {
-        try (ApplicationContext context = ApplicationContext.run()) {
+        try (ApplicationContext context = ScheduledFixtures.run()) {
             context.getBean(MethodNamedScheduledService.class);
             assertTrue(MethodNamedScheduledService.NAMED_RAN.await(5, TimeUnit.SECONDS),
                 "the schedule of the named method did not run");
@@ -109,7 +110,7 @@ class AroundTimeoutTest {
      */
     @Test
     void interposesThroughAroundTimeoutMethodsHoweverTheyAreDeclared() throws Exception {
-        try (ApplicationContext context = ApplicationContext.run()) {
+        try (ApplicationContext context = ScheduledFixtures.run()) {
             assertTrue(VariedScheduledService.RAN.await(5, TimeUnit.SECONDS), "the schedule did not run");
 
             List<String> calls = List.copyOf(VariedCalls.RECORDED);
@@ -134,7 +135,7 @@ class AroundTimeoutTest {
      */
     @Test
     void runsAnAroundTimeoutMethodInTheSameThreadAsTheTimeoutMethod() throws Exception {
-        try (ApplicationContext context = ApplicationContext.run()) {
+        try (ApplicationContext context = ScheduledFixtures.run()) {
             assertTrue(ThreadedScheduledService.RAN.await(5, TimeUnit.SECONDS), "the schedule did not run");
 
             Thread interceptor = ThreadedScheduledService.INTERCEPTOR_THREAD.get();

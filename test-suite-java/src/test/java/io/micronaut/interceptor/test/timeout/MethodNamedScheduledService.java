@@ -1,5 +1,7 @@
 package io.micronaut.interceptor.test.timeout;
 
+import io.micronaut.context.annotation.Requires;
+import io.micronaut.interceptor.test.ScheduledFixtures;
 import io.micronaut.scheduling.annotation.Scheduled;
 import jakarta.inject.Singleton;
 import jakarta.interceptor.Interceptors;
@@ -11,6 +13,7 @@ import java.util.concurrent.CountDownLatch;
  * none: what the specification associates with a method is the method's alone.
  */
 @Singleton
+@Requires(property = ScheduledFixtures.ENABLED, value = "true")
 public class MethodNamedScheduledService {
 
     static final CountDownLatch NAMED_RAN = new CountDownLatch(1);

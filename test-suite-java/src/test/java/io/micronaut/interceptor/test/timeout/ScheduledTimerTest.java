@@ -1,9 +1,11 @@
 package io.micronaut.interceptor.test.timeout;
 
 import io.micronaut.context.ApplicationContext;
+import io.micronaut.context.annotation.Requires;
 import io.micronaut.core.propagation.PropagatedContext;
 import io.micronaut.inject.ExecutableMethod;
 import io.micronaut.interceptor.ScheduledTimer;
+import io.micronaut.interceptor.test.ScheduledFixtures;
 import io.micronaut.scheduling.ScheduledExecution;
 import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.annotation.Scheduled;
@@ -58,7 +60,7 @@ class ScheduledTimerTest {
     void eachScheduleShowsItsOwnTimer() throws Exception {
         CALLS.clear();
         bothRan = new CountDownLatch(2);
-        try (ApplicationContext context = ApplicationContext.run()) {
+        try (ApplicationContext context = ScheduledFixtures.run()) {
             assertTrue(bothRan.await(5, TimeUnit.SECONDS), "both schedules ran");
 
             Set<String> timers = new TreeSet<>();
@@ -79,7 +81,7 @@ class ScheduledTimerTest {
     void theTimerNamesTheDefaultScheduler() throws Exception {
         TIMERS.clear();
         bothRan = new CountDownLatch(2);
-        try (ApplicationContext context = ApplicationContext.run()) {
+        try (ApplicationContext context = ScheduledFixtures.run()) {
             assertTrue(bothRan.await(5, TimeUnit.SECONDS), "both schedules ran");
 
             assertTrue(TIMERS.size() >= 2, "a timer per schedule: " + TIMERS);
@@ -91,7 +93,7 @@ class ScheduledTimerTest {
 
     @Test
     void aDirectCallIsABusinessMethodInvocation() {
-        try (ApplicationContext context = ApplicationContext.run()) {
+        try (ApplicationContext context = ScheduledFixtures.run()) {
             CALLS.clear();
             context.getBean(DirectlyCalledService.class).onSchedule();
 
@@ -108,7 +110,7 @@ class ScheduledTimerTest {
     void keepsTheTimeoutAndTheBusinessInvocationsOfOneMethodApart() throws Exception {
         CALLS.clear();
         laterRan = new CountDownLatch(2);
-        try (ApplicationContext context = ApplicationContext.run()) {
+        try (ApplicationContext context = ScheduledFixtures.run()) {
             LaterScheduledService service = context.getBean(LaterScheduledService.class);
             service.onSchedule();
             assertTrue(laterRan.await(5, TimeUnit.SECONDS), "the schedule ran");
@@ -134,7 +136,7 @@ class ScheduledTimerTest {
     void aCallTheScheduledMethodMakesToItselfIsABusinessMethodInvocation() throws Exception {
         CALLS.clear();
         recursionRan = new CountDownLatch(2);
-        try (ApplicationContext context = ApplicationContext.run()) {
+        try (ApplicationContext context = ScheduledFixtures.run()) {
             context.getBean(RecursiveScheduledService.class);
             assertTrue(recursionRan.await(5, TimeUnit.SECONDS), "the schedule ran twice");
 
@@ -159,7 +161,7 @@ class ScheduledTimerTest {
      */
     @Test
     void aScheduledInvocationThatThrowsClearsItsMark() {
-        try (ApplicationContext context = ApplicationContext.run()) {
+        try (ApplicationContext context = ScheduledFixtures.run()) {
             CALLS.clear();
             FailingScheduledService service = context.getBean(FailingScheduledService.class);
             ExecutableMethod<FailingScheduledService, ?> method =
@@ -195,7 +197,7 @@ class ScheduledTimerTest {
     void theExecutionAfterOneThatThrewIsATimeout() throws Exception {
         CALLS.clear();
         afterThrowRan = new CountDownLatch(1);
-        try (ApplicationContext context = ApplicationContext.run()) {
+        try (ApplicationContext context = ScheduledFixtures.run()) {
             ThrowingScheduledService service = context.getBean(ThrowingScheduledService.class);
             assertTrue(afterThrowRan.await(5, TimeUnit.SECONDS), "the schedule ran again after throwing");
             service.onSchedule();
@@ -220,7 +222,7 @@ class ScheduledTimerTest {
     void aCallHandedToAnotherThreadIsABusinessMethodInvocation() throws Exception {
         CALLS.clear();
         handedOffRan = new CountDownLatch(2);
-        try (ApplicationContext context = ApplicationContext.run()) {
+        try (ApplicationContext context = ScheduledFixtures.run()) {
             context.getBean(ExecutorHandingOffService.class);
             context.getBean(WrappingHandingOffService.class);
             assertTrue(handedOffRan.await(5, TimeUnit.SECONDS), "both schedules handed a call off");
@@ -278,6 +280,7 @@ class ScheduledTimerTest {
     }
 
     @Singleton
+    @Requires(property = ScheduledFixtures.ENABLED, value = "true")
     @TwiceTimed
     public static class TwiceScheduledService {
 
@@ -289,6 +292,7 @@ class ScheduledTimerTest {
     }
 
     @Singleton
+    @Requires(property = ScheduledFixtures.ENABLED, value = "true")
     @TwiceTimed
     public static class DirectlyCalledService {
 
@@ -298,6 +302,7 @@ class ScheduledTimerTest {
     }
 
     @Singleton
+    @Requires(property = ScheduledFixtures.ENABLED, value = "true")
     @TwiceTimed
     public static class LaterScheduledService {
 
@@ -308,6 +313,7 @@ class ScheduledTimerTest {
     }
 
     @Singleton
+    @Requires(property = ScheduledFixtures.ENABLED, value = "true")
     @TwiceTimed
     public static class RecursiveScheduledService {
 
@@ -328,6 +334,7 @@ class ScheduledTimerTest {
     }
 
     @Singleton
+    @Requires(property = ScheduledFixtures.ENABLED, value = "true")
     @TwiceTimed
     public static class FailingScheduledService {
 
@@ -342,6 +349,7 @@ class ScheduledTimerTest {
     }
 
     @Singleton
+    @Requires(property = ScheduledFixtures.ENABLED, value = "true")
     @TwiceTimed
     public static class ThrowingScheduledService {
 
@@ -357,6 +365,7 @@ class ScheduledTimerTest {
     }
 
     @Singleton
+    @Requires(property = ScheduledFixtures.ENABLED, value = "true")
     @TwiceTimed
     public static class ExecutorHandingOffService {
 
@@ -378,6 +387,7 @@ class ScheduledTimerTest {
     }
 
     @Singleton
+    @Requires(property = ScheduledFixtures.ENABLED, value = "true")
     @TwiceTimed
     public static class WrappingHandingOffService {
 

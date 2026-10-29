@@ -1,11 +1,14 @@
 package io.micronaut.interceptor.test.timeout;
 
+import io.micronaut.context.annotation.Requires;
+import io.micronaut.interceptor.test.ScheduledFixtures;
 import io.micronaut.scheduling.annotation.Scheduled;
 import jakarta.inject.Singleton;
 
 import java.util.concurrent.CountDownLatch;
 
 @Singleton
+@Requires(property = ScheduledFixtures.ENABLED, value = "true")
 @PrivatelyTimed
 public class PrivatelyTimedService {
 

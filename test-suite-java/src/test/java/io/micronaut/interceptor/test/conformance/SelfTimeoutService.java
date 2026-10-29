@@ -1,5 +1,7 @@
 package io.micronaut.interceptor.test.conformance;
 
+import io.micronaut.context.annotation.Requires;
+import io.micronaut.interceptor.test.ScheduledFixtures;
 import io.micronaut.scheduling.annotation.Scheduled;
 import jakarta.inject.Singleton;
 import jakarta.interceptor.AroundTimeout;
@@ -11,6 +13,7 @@ import java.util.concurrent.CountDownLatch;
  * Section 2.8 bb): an around-timeout method may be declared on the target class itself.
  */
 @Singleton
+@Requires(property = ScheduledFixtures.ENABLED, value = "true")
 public class SelfTimeoutService {
 
     static final CountDownLatch RAN = new CountDownLatch(1);

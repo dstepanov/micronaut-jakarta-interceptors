@@ -118,10 +118,11 @@ public class Service {
 <1> Invoked after `TracingInterceptor` and before `work`. It is not itself a business method, so it is not
 intercepted.
 
-A class declaring nothing but `@AroundInvoke` is read as an interceptor class, not as a class interposing on
-itself: that is what an interceptor class named by `@Interceptors` looks like, and the two cannot be told apart
-otherwise. Declaring an interceptor method on a class interposes on that class only when the class is intercepted
-for some other reason as well — a binding annotation, or `@Interceptors`, as above.
+Declaring an interceptor method on a class interposes on that class when the class is a bean of its own — it declares
+a scope or a bean annotation such as `@Singleton` — or when it is intercepted for some other reason, a binding
+annotation or `@Interceptors`, as above. A plain class declaring nothing but `@AroundInvoke` is read as an interceptor
+class instead, not as a class interposing on itself: that is what an interceptor class named by `@Interceptors` looks
+like.
 
 A class declaring `@AroundConstruct`, or a lifecycle interceptor method, is always an interceptor class:
 interposing on the construction or the lifecycle of another object is not something a class does to itself.

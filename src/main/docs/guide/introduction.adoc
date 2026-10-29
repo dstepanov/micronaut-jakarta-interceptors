@@ -38,5 +38,4 @@ followed assertion by assertion: all 166 of them are recorded under <<conformanc
 covers each. Everything that applies to a module of this kind is covered, apart from four deliberate
 differences.
 
-NOTE: The public API is marked `@Experimental`: it can change between minor versions until the first stable
-release.
+NOTE: Until the first stable release, the public API can change between minor versions.

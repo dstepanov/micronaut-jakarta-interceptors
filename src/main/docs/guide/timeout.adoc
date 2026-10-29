@@ -46,9 +46,10 @@ apart by the api:scheduling.ScheduledExecution[] the scheduler puts in the propa
 the one place the scheduler says it made the call - the invocation itself carries nothing that does. That context
 names the method the scheduler invoked, by its name, its parameter types and its declaring class, and only a method
 matching it is a timeout method: a method it calls, or work it propagates to another thread, sees the same
-propagated context and is still invoked as a business method unless it is that same method. The same method called
-again while the schedule runs - on the same object, on another object of its class or of a class related to it by
-inheritance - is matched too, and is interposed on as a timeout.
+propagated context and is still invoked as a business method unless it is that same method. Only the invocation the
+scheduler makes is a timeout: the same method called again while it runs - calling itself, or called on another
+object of its class or of a class related to it by inheritance - is a business method invocation, and its
+`@AroundInvoke` methods interpose on it. The next execution of the schedule is a timeout again.
 
 == The timer
 

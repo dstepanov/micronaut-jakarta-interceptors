@@ -26,11 +26,11 @@ Contexts and Dependency Injection are read as their Micronaut equivalents, so th
 created.
 
 Where the kit asks a bean manager which interceptors a set of bindings resolves to, the bridge answers: it walks the
-interceptor classes and compares their bindings with this module's own binding comparison. There is nothing of the
-module's to delegate that question to - it resolves an interception from the metadata of an element while the
-application is compiled, and never compares a binding against an interceptor at runtime - so that count holds the
-comparison to the specification rather than the module's resolution. The kit pairs each count with an invocation of
-the bean it was taken over, and that half holds the module itself; see `InterceptorBindingResolutionTest`.
+interceptor classes and compares their bindings with api:interceptor.spi.InterceptorBindings[], the comparison the
+module selects the interceptors of a chain by. That count holds the comparison to the specification; the order and
+the enablement of the interceptors a chain is resolved with are not part of it. The kit pairs each count with an
+invocation of the bean it was taken over, and that half holds the resolution of the chain itself; see
+`InterceptorBindingResolutionTest`.
 
 The kit also describes two deployments a container is required to reject rather than run. Nothing is deployed here,
 so each is handed to the compiler instead, with this module's annotation processor on it, and the compilation is

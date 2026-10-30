@@ -46,8 +46,7 @@ class ParameterSnapshotTest {
                 };
             });
         // The advice and chain are not used by parameter accessors.
-        BusinessMethodInvocationContext invocation = new BusinessMethodInvocationContext(micronaut, List.of(), null, null,
-            new JakartaInterceptorAdvice.MethodChain(List.of(), false));
+        BusinessMethodInvocationContext invocation = new BusinessMethodInvocationContext(micronaut, List.of(), null, null);
 
         invocation.setParameters(supplied);
 

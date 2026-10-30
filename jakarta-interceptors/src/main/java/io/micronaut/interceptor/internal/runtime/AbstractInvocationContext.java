@@ -30,7 +30,6 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -260,21 +259,9 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     public <T extends Annotation> @Nullable T getInterceptorBinding(Class<T> annotationType) {
         Set<Annotation> resolved = bindings;
         if (resolved != null) {
-            for (Annotation binding : resolved) {
-                if (binding.annotationType().equals(annotationType)) {
-                    return annotationType.cast(binding);
-                }
-            }
-            return null;
+            return BindingAnnotationAccess.first(resolved, annotationType);
         }
-        String name = annotationType.getName();
-        for (AnnotationValue<?> value : getInterceptorBindingValues()) {
-            if (value.getAnnotationName().equals(name)) {
-                // getInterceptorBinding returns the annotation itself, so one has to be built
-                return PlatformReflection.annotation(annotationType, value, "getInterceptorBinding(Class)");
-            }
-        }
-        return null;
+        return BindingAnnotationAccess.first(getInterceptorBindingValues(), annotationType);
     }
 
     /**
@@ -290,23 +277,9 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     public <T extends Annotation> Set<T> getInterceptorBindings(Class<T> annotationType) {
         Set<Annotation> resolved = bindings;
         if (resolved != null) {
-            Set<T> matching = new LinkedHashSet<>(1);
-            for (Annotation binding : resolved) {
-                if (binding.annotationType().equals(annotationType)) {
-                    matching.add(annotationType.cast(binding));
-                }
-            }
-            return Collections.unmodifiableSet(matching);
+            return BindingAnnotationAccess.all(resolved, annotationType);
         }
-        String name = annotationType.getName();
-        Set<T> matching = new LinkedHashSet<>(1);
-        for (AnnotationValue<?> value : getInterceptorBindingValues()) {
-            if (value.getAnnotationName().equals(name)) {
-                // the bindings are the annotations themselves, so they have to be built
-                matching.add(PlatformReflection.annotation(annotationType, value, "getInterceptorBindings(Class)"));
-            }
-        }
-        return Collections.unmodifiableSet(matching);
+        return BindingAnnotationAccess.all(getInterceptorBindingValues(), annotationType);
     }
 
     /**
@@ -341,12 +314,7 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
         if (values.isEmpty()) {
             return Collections.emptySet();
         }
-        AnnotationMetadata annotationMetadata = bindingMetadata();
-        Set<Annotation> resolved = new LinkedHashSet<>(values.size());
-        for (AnnotationValue<?> value : values) {
-            PlatformReflection.annotation(annotationMetadata, value, "getInterceptorBindings()").ifPresent(resolved::add);
-        }
-        return Collections.unmodifiableSet(resolved);
+        return BindingAnnotationAccess.build(bindingMetadata(), values);
     }
 
     /**

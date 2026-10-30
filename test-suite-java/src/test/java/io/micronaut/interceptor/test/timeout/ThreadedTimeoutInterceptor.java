@@ -1,5 +1,6 @@
 package io.micronaut.interceptor.test.timeout;
 
+import io.micronaut.interceptor.test.ScheduledRecords;
 import jakarta.interceptor.AroundTimeout;
 import jakarta.interceptor.Interceptor;
 import jakarta.interceptor.InvocationContext;
@@ -9,9 +10,15 @@ import jakarta.interceptor.InvocationContext;
 @Threaded
 public class ThreadedTimeoutInterceptor {
 
+    private final ScheduledRecords records;
+
+    public ThreadedTimeoutInterceptor(ScheduledRecords records) {
+        this.records = records;
+    }
+
     @AroundTimeout
     public Object aroundTimeout(InvocationContext context) throws Exception {
-        ThreadedScheduledService.INTERCEPTOR_THREAD.compareAndSet(null, Thread.currentThread());
+        records.firstThread(ThreadedScheduledService.INTERCEPTOR_THREAD);
         return context.proceed();
     }
 }

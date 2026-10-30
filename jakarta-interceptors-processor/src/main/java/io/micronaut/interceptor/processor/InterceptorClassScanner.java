@@ -15,17 +15,23 @@
  */
 package io.micronaut.interceptor.processor;
 
+import io.micronaut.core.annotation.AnnotationClassValue;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
+import io.micronaut.core.util.CollectionUtils;
 import io.micronaut.inject.ast.ClassElement;
 import io.micronaut.inject.ast.Element;
 import io.micronaut.inject.ast.ElementQuery;
 import io.micronaut.inject.ast.MethodElement;
 import io.micronaut.inject.ast.ParameterElement;
+import io.micronaut.inject.ast.PropertyElement;
 import io.micronaut.inject.processing.ProcessingException;
 import io.micronaut.interceptor.metadata.InterceptionKind;
+import io.micronaut.interceptor.internal.metadata.JakartaInterceptorMethods;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorSupport;
+
+import org.jspecify.annotations.Nullable;
 
 import java.lang.annotation.Annotation;
 import java.util.ArrayList;
@@ -218,7 +224,7 @@ public final class InterceptorClassScanner {
         // an @Inherited binding annotation asks for
         boolean isClass = element instanceof ClassElement;
         // a map keyed by name keeps the bindings distinct while preserving the declaration order
-        Map<String, AnnotationValue<?>> bindings = new LinkedHashMap<>(names.size());
+        Map<String, AnnotationValue<?>> bindings = CollectionUtils.newLinkedHashMap(names.size());
         for (String name : names) {
             if (JakartaInterceptorSupport.INTERCEPTOR_BINDING.equals(name)) {
                 // a binding annotation names itself among its bindings; it is not one of its own
@@ -271,6 +277,141 @@ public final class InterceptorClassScanner {
             return method.getMethodAnnotationMetadata();
         }
         return element.getAnnotationMetadata();
+    }
+
+    /**
+     * Tells whether a class can only be an interceptor class.
+     *
+     * <p>Interposing on the construction of an object, or on its lifecycle callbacks, is something only an
+     * interceptor class does; a class doing it is one, whether or not it says so with {@code @Interceptor}. What
+     * is left is a class declaring nothing but {@code @AroundInvoke}, which may be either an interceptor class
+     * named by {@code @Interceptors} or a class interposing on its own business methods, and which is read as the
+     * latter only when the class is intercepted for some other reason as well.</p>
+     *
+     * @param element The class
+     * @param model   What the class declares
+     * @return Whether it can only be an interceptor class
+     */
+    public static boolean isInterceptorClass(ClassElement element, InterceptorClassModel model) {
+        return element.hasDeclaredAnnotation(JakartaInterceptorSupport.INTERCEPTOR)
+            || interposesOnAnotherObject(model);
+    }
+
+    private static boolean interposesOnAnotherObject(InterceptorClassModel model) {
+        return model.methods().keySet().stream()
+            .anyMatch(kind -> kind != InterceptionKind.AROUND_INVOKE && kind != InterceptionKind.AROUND_TIMEOUT);
+    }
+
+    /**
+     * Every instance method of a class the interception may reach, the accessors of its properties included.
+     *
+     * <p>A method query answers the methods a class declares as methods. Kotlin declares a property rather than a
+     * pair of methods, and the accessors of that property are methods of the class on the virtual machine like any
+     * other - they can be bound, and class level advice reaches them - but the language model answers them only as
+     * the accessors of the property, so they are taken from the properties and added to the methods. A language that
+     * answers an accessor as a method as well, which Java and Groovy do, answers the same method twice, and the
+     * second answer is dropped.</p>
+     *
+     * @param element The class
+     * @return The methods
+     */
+    public static List<MethodElement> methodsOf(ClassElement element) {
+        List<MethodElement> methods = new ArrayList<>(
+            element.getEnclosedElements(ElementQuery.ALL_METHODS.onlyInstance()));
+        for (PropertyElement property : element.getSyntheticBeanProperties()) {
+            addAccessor(methods, property.getReadMethod().orElse(null));
+            addAccessor(methods, property.getWriteMethod().orElse(null));
+        }
+        return List.copyOf(methods);
+    }
+
+    /**
+     * Adds the accessor of a property to the methods of a class, unless the class answered it as a method already or
+     * it is no instance method.
+     */
+    private static void addAccessor(List<MethodElement> methods, @Nullable MethodElement accessor) {
+        if (accessor == null || accessor.isStatic()) {
+            return;
+        }
+        for (MethodElement method : methods) {
+            if (method.getName().equals(accessor.getName()) && sameParameters(method, accessor)) {
+                return;
+            }
+        }
+        methods.add(accessor);
+    }
+
+    private static boolean sameParameters(MethodElement one, MethodElement other) {
+        ParameterElement[] ours = one.getParameters();
+        ParameterElement[] theirs = other.getParameters();
+        if (ours.length != theirs.length) {
+            return false;
+        }
+        for (int i = 0; i < ours.length; i++) {
+            ClassElement ourType = ours[i].getType();
+            ClassElement theirType = theirs[i].getType();
+            if (!ourType.getName().equals(theirType.getName())
+                || ourType.getArrayDimensions() != theirType.getArrayDimensions()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Tells whether a class named by {@code @Interceptors} has an interceptor method to interpose with.
+     *
+     * <p>Reading the class again does not answer it on its own. An interceptor method that interposes on a
+     * lifecycle callback has the annotation that would make Micronaut invoke it as a callback of its own class
+     * taken off it once it has been recorded, and the metadata of a method is the same metadata wherever it is read
+     * from, so a class already visited in this compilation reads as declaring nothing. What it declared is recorded
+     * on it as {@code @JakartaInterceptorMethods} before that happens, which is what is read here: the descriptor
+     * of the class and of its superclasses, whether it was written while they were visited or while they were
+     * compiled before.</p>
+     *
+     * <p>A recorded method counts only while the class still has it. An interceptor method overridden by a method
+     * that is not one is no longer a method of the class - that is what the descriptor of its superclass records
+     * and the class itself no longer has - and a class left with nothing to interpose with is the one this filter
+     * is for.</p>
+     *
+     * @param named The class the element names
+     * @return Whether it declares an interceptor method
+     */
+    public static boolean declaresAnInterceptorMethod(ClassElement named) {
+        if (InterceptorClassScanner.scan(named).intercepts()) {
+            return true;
+        }
+        for (ClassElement type = named; type != null; type = type.getSuperType().orElse(null)) {
+            AnnotationValue<?> recorded = type.getAnnotationMetadata()
+                .getDeclaredAnnotation(JakartaInterceptorMethods.class);
+            if (recorded == null) {
+                continue;
+            }
+            for (InterceptionKind kind : InterceptionKind.values()) {
+                String[] recordedNames = recorded.stringValues(kind.member());
+                AnnotationClassValue<?>[] declaringTypes = recorded.annotationClassValues(kind.declaringTypesMember());
+                for (int i = 0; i < recordedNames.length && i < declaringTypes.length; i++) {
+                    if (stillDeclares(named, declaringTypes[i].getName(), recordedNames[i])) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Tells whether a class still has the method one of its classes declared, which it does not when a subclass
+     * overrides it: the methods of a class are the ones in effect on it, and an override takes the place of the
+     * method it overrides. The method is matched by its signature as well as its name, as an interceptor method
+     * accepts an {@code InvocationContext} and an overload of the same name left in effect is not one.
+     */
+    private static boolean stillDeclares(ClassElement element, String declaringType, String name) {
+        return element.getEnclosedElements(ElementQuery.ALL_METHODS)
+            .stream()
+            .anyMatch(method -> method.getName().equals(name)
+                && acceptsInvocationContext(method)
+                && method.getDeclaringType().getName().equals(declaringType));
     }
 
     /**

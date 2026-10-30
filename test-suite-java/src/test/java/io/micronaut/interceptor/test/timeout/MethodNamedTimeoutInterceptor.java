@@ -1,19 +1,23 @@
 package io.micronaut.interceptor.test.timeout;
 
+import io.micronaut.interceptor.test.ScheduledRecords;
 import jakarta.interceptor.AroundTimeout;
 import jakarta.interceptor.InvocationContext;
-
-import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 /** Named by a scheduled method rather than by its class. */
 public class MethodNamedTimeoutInterceptor {
 
-    static final List<String> CALLS = new CopyOnWriteArrayList<>();
+    static final String LOG = "MethodNamedTimeoutInterceptor";
+
+    private final ScheduledRecords records;
+
+    public MethodNamedTimeoutInterceptor(ScheduledRecords records) {
+        this.records = records;
+    }
 
     @AroundTimeout
     public Object aroundTimeout(InvocationContext context) throws Exception {
-        CALLS.add(context.getMethod().getName());
+        records.record(LOG, context.getMethod().getName());
         return context.proceed();
     }
 }

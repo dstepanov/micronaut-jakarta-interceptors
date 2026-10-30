@@ -69,27 +69,27 @@ class ConcurrentChainResolutionTest {
         long ofOneBean;
         try (ApplicationContext context = ApplicationContext.run()) {
             InterceptorChainResolver resolver = context.getBean(InterceptorChainResolver.class);
-            long before = settled(resolver);
+            long before = resolver.readInterceptions();
             RacedPrototype prototype = context.getBean(RacedPrototype.class);
             prototype.work();
             prototype.rest();
-            ofOneBean = settled(resolver) - before;
+            ofOneBean = resolver.readInterceptions() - before;
             assertTrue(ofOneBean > 0, "the first bean resolves its chains");
         }
 
         int threads = 8;
         try (ApplicationContext context = ApplicationContext.run()) {
             InterceptorChainResolver resolver = context.getBean(InterceptorChainResolver.class);
-            long before = settled(resolver);
+            long before = resolver.readInterceptions();
             createConcurrently(context, threads, 50);
-            long created = settled(resolver) - before;
+            long created = resolver.readInterceptions() - before;
             assertTrue(created >= ofOneBean && created <= ofOneBean * threads,
                 "at most one resolution for each thread racing to build a chain, " + created + " where one bean made "
                     + ofOneBean);
 
-            long settledCount = settled(resolver);
+            long resolved = resolver.readInterceptions();
             createConcurrently(context, threads, 200);
-            assertEquals(settledCount, settled(resolver), "built chains are looked up, not resolved again");
+            assertEquals(resolved, resolver.readInterceptions(), "built chains are looked up, not resolved again");
         }
     }
 
@@ -118,29 +118,5 @@ class ConcurrentChainResolutionTest {
         } finally {
             executor.shutdownNow();
         }
-    }
-
-    /**
-     * The count once the beans the scheduler creates on a thread of its own have been resolved, which is the count
-     * holding still across consecutive reads.
-     */
-    private static long settled(InterceptorChainResolver resolver) {
-        long previous = -1;
-        int stable = 0;
-        for (int attempt = 0; attempt < 100; attempt++) {
-            long current = resolver.readInterceptions();
-            stable = current == previous ? stable + 1 : 0;
-            if (stable == 5) {
-                return current;
-            }
-            previous = current;
-            try {
-                Thread.sleep(20);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new IllegalStateException("Interrupted while waiting for the count to settle", e);
-            }
-        }
-        throw new AssertionError("The count never settled, last seen " + previous);
     }
 }

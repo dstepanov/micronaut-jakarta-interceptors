@@ -41,28 +41,39 @@ final class BusinessMethodInvocationContext extends AbstractInvocationContext
     // read out of the schedule as the invocation is created rather than on the first getTimer(): only an invocation
     // the scheduler makes has one, and reading it then leaves the context nothing to fill in later
     private final @Nullable ScheduledTimer timer;
-    // the method the invocation is of, which remembers the bindings its invocations report
-    private final JakartaInterceptorAdvice.MethodChain method;
 
     BusinessMethodInvocationContext(MethodInvocationContext<Object, ?> context,
                                     List<InterceptorReference> chain,
                                     JakartaInterceptorAdvice advice,
-                                    @Nullable AnnotationValue<?> schedule,
-                                    JakartaInterceptorAdvice.MethodChain method) {
+                                    @Nullable AnnotationValue<?> schedule) {
         super(context, chain, advice);
         this.context = context;
         this.timer = schedule == null ? null : ScheduledTimer.of(schedule);
-        this.method = method;
     }
 
+    /**
+     * The bindings the invocations of the method report, which depend on nothing but its compiled metadata, kept by
+     * the method rather than read again for every invocation.
+     *
+     * @return The binding values
+     */
     @Override
     List<AnnotationValue<?>> elementBindingValues() {
-        return method.bindingValues(this::readBindingValues);
+        return context.getExecutableMethod()
+            .getCachedValue(DeclaredBindings.class, method -> new DeclaredBindings(readBindingValues()))
+            .values();
     }
 
+    /**
+     * The binding annotations the invocations of the method report, built once and kept by the method.
+     *
+     * @return The binding annotations
+     */
     @Override
     Set<Annotation> elementBindings() {
-        return method.bindings(this::resolveBindings);
+        return context.getExecutableMethod()
+            .getCachedValue(BindingAnnotations.class, method -> new BindingAnnotations(resolveBindings()))
+            .annotations();
     }
 
     @Override
@@ -87,6 +98,7 @@ final class BusinessMethodInvocationContext extends AbstractInvocationContext
     @Override
     public Method getMethod() {
         // getMethod returns a java.lang.reflect.Method, which only the platform can produce
+        ReflectionModule.require("getMethod()");
         return PlatformReflection.method(context.getExecutableMethod());
     }
 
@@ -128,5 +140,21 @@ final class BusinessMethodInvocationContext extends AbstractInvocationContext
     @Override
     String description() {
         return "method " + context.getDeclaringType().getName() + "." + context.getMethodName() + "(..)";
+    }
+
+    /**
+     * The binding values of a method, as the method keeps them.
+     *
+     * @param values The values
+     */
+    private record DeclaredBindings(List<AnnotationValue<?>> values) {
+    }
+
+    /**
+     * The binding annotations of a method, as the method keeps them.
+     *
+     * @param annotations The annotations
+     */
+    private record BindingAnnotations(Set<Annotation> annotations) {
     }
 }

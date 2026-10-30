@@ -59,18 +59,37 @@ class MethodInterceptionCacheTest {
         public String work() {
             return "worked";
         }
+    }
 
-        @Noted("#{1 + 1}")
-        public String noted() {
-            return "noted";
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target(METHOD)
+    public @interface Described {
+        String value();
+    }
+
+    @Prototype
+    @Kept
+    public static class EvaluatedPrototype {
+        @Described("#{ 'evaluated' }")
+        public String work() {
+            return "worked";
         }
     }
 
-    /** Holds an evaluated expression, which has nothing to do with the interception of the method it is on. */
-    @Retention(RetentionPolicy.RUNTIME)
-    @Target(METHOD)
-    public @interface Noted {
-        String value();
+    @Test
+    void aMethodWhoseMetadataHoldsAnEvaluatedExpressionKeepsWhatItRecordsAsWell() {
+        try (ApplicationContext context = ApplicationContext.run()) {
+            assertEquals("worked", context.getBean(EvaluatedPrototype.class).work());
+            assertEquals("worked", context.getBean(EvaluatedPrototype.class).work());
+
+            ExecutableMethod<EvaluatedPrototype, Object> work =
+                context.getBeanDefinition(EvaluatedPrototype.class).getRequiredMethod("work");
+            assertTrue(work.getAnnotationMetadata().hasEvaluatedExpressions());
+            MethodInterception kept = work.getCachedUnevaluatedValue(MethodInterception.class, method -> {
+                throw new AssertionError("the interception is read from the compiled metadata alone, and kept");
+            });
+            assertSame(kept, work.getCachedUnevaluatedValue(MethodInterception.class, MethodInterception::of));
+        }
     }
 
     @Test
@@ -79,13 +98,13 @@ class MethodInterceptionCacheTest {
             InterceptorChainResolver resolver = context.getBean(InterceptorChainResolver.class);
             CALLS.clear();
             assertEquals("worked", context.getBean(KeptPrototype.class).work());
-            long read = settled(resolver);
+            long read = resolver.readInterceptions();
 
             for (int i = 0; i < 100; i++) {
                 assertEquals("worked", context.getBean(KeptPrototype.class).work());
             }
 
-            assertEquals(read, settled(resolver), "no bean reads the interception again");
+            assertEquals(read, resolver.readInterceptions(), "no bean reads the interception again");
             assertEquals(202, CALLS.size(), "each bean is created and invoked through its chain");
             ExecutableMethod<KeptPrototype, Object> work =
                 context.getBeanDefinition(KeptPrototype.class).getRequiredMethod("work");
@@ -96,54 +115,5 @@ class MethodInterceptionCacheTest {
             assertEquals(List.of(KeptInterceptor.class), resolver.resolve(io.micronaut.aop.InterceptorKind.AROUND, work, false)
                 .stream().<Class<?>>map(InterceptorReference::interceptorClass).toList());
         }
-    }
-
-    /**
-     * An evaluated expression on another annotation of a method is computed for each invocation, and has Micronaut
-     * compute a value it keeps by the evaluated metadata again for every call. What the method records of its
-     * interception is read beneath it, and is kept all the same.
-     */
-    @Test
-    void aMethodWithAnEvaluatedExpressionKeepsWhatItRecordsAsWell() {
-        try (ApplicationContext context = ApplicationContext.run()) {
-            ExecutableMethod<KeptPrototype, Object> noted =
-                context.getBeanDefinition(KeptPrototype.class).getRequiredMethod("noted");
-            assertTrue(noted.getAnnotationMetadata().hasEvaluatedExpressions(), "the method has an expression");
-            CALLS.clear();
-            assertEquals("noted", context.getBean(KeptPrototype.class).noted());
-            assertEquals("noted", context.getBean(KeptPrototype.class).noted());
-
-            assertEquals(List.of("created", "invoke noted", "created", "invoke noted"), CALLS);
-            MethodInterception kept = noted.getCachedUnevaluatedValue(MethodInterception.class, method -> {
-                throw new AssertionError("the method keeps what it records although it has an expression");
-            });
-            assertSame(kept, noted.getCachedUnevaluatedValue(MethodInterception.class, method -> {
-                throw new AssertionError("the method keeps what it records although it has an expression");
-            }));
-        }
-    }
-
-    /**
-     * The count once the beans the scheduler creates on a thread of its own have been resolved, which is the count
-     * holding still across consecutive reads.
-     */
-    private static long settled(InterceptorChainResolver resolver) {
-        long previous = -1;
-        int stable = 0;
-        for (int attempt = 0; attempt < 100; attempt++) {
-            long current = resolver.readInterceptions();
-            stable = current == previous ? stable + 1 : 0;
-            if (stable == 5) {
-                return current;
-            }
-            previous = current;
-            try {
-                Thread.sleep(20);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new IllegalStateException("Interrupted while waiting for the count to settle", e);
-            }
-        }
-        throw new AssertionError("The count never settled, last seen " + previous);
     }
 }

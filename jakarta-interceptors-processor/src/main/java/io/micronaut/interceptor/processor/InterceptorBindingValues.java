@@ -20,6 +20,7 @@ import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationUtil;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
+import io.micronaut.core.util.CollectionUtils;
 import io.micronaut.inject.ast.AnnotationElement;
 import io.micronaut.inject.ast.ClassElement;
 import io.micronaut.inject.ast.Element;
@@ -33,7 +34,6 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -77,7 +77,7 @@ public final class InterceptorBindingValues {
         if (names.isEmpty()) {
             return Set.of();
         }
-        Set<BindingValue> bindings = new LinkedHashSet<>(names.size());
+        Set<BindingValue> bindings = CollectionUtils.newLinkedHashSet(names.size());
         for (String name : names) {
             // a repeatable binding binds by every occurrence of it the element carries, each of which is a binding
             // of its own: an interceptor declaring one of them is bound to the element, and one declaring an
@@ -179,8 +179,23 @@ public final class InterceptorBindingValues {
     }
 
     /**
+     * The bindings as they are written out: the value of each binding annotation, named by the annotation.
+     *
+     * @param bindings The bindings
+     * @return The values
+     */
+    public static AnnotationValue<?>[] written(List<BindingValue> bindings) {
+        return bindings.stream()
+            .map(BindingValue::toAnnotationValue)
+            .toArray(AnnotationValue<?>[]::new);
+    }
+
+    /**
      * Reads the members excluded from a binding annotation off the annotation type itself, remembering what it read:
      * the same annotation is reached as often as it is declared, and it is the same annotation every time.
+     *
+     * <p>The members are those Micronaut answers for the annotation type under every compiler alike: javac and the
+     * Groovy compiler answer them as methods, KSP as properties.</p>
      *
      * @param context The visitor context, which resolves the annotation types
      * @return The excluded members of any binding annotation the compilation can see

@@ -20,6 +20,7 @@ import io.micronaut.core.annotation.AnnotationUtil;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.core.expressions.EvaluatedExpressionReference;
+import io.micronaut.core.util.CollectionUtils;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -79,18 +80,28 @@ public final class BindingValue {
     private final Set<String> nonBinding;
     private final Map<String, Object> members;
     private final Map<String, Object> compared;
+    // the binding as Micronaut compares two annotations, see matches
+    private final AnnotationValue<?> matched;
 
     private BindingValue(String name, Set<String> nonBinding, Map<String, Object> members) {
         this.name = name;
         this.nonBinding = nonBinding;
         this.members = members;
-        Map<String, Object> normalized = new LinkedHashMap<>(members.size());
+        Map<String, Object> normalized = CollectionUtils.newLinkedHashMap(members.size());
+        Map<CharSequence, Object> matchedMembers = CollectionUtils.newLinkedHashMap(members.size() + 1);
         members.forEach((member, value) -> {
             if (!isEmptyString(value)) {
-                normalized.put(member, normalize(value));
+                Object normalizedValue = normalize(value);
+                normalized.put(member, normalizedValue);
+                matchedMembers.put(member, matchable(normalizedValue));
             }
         });
+        if (!nonBinding.isEmpty()) {
+            matchedMembers.put(AnnotationUtil.NON_BINDING_ATTRIBUTE, nonBinding.toArray(String[]::new));
+        }
         this.compared = Collections.unmodifiableMap(normalized);
+        // built directly, as the builder takes no list, and without defaults: every member that binds is there
+        this.matched = new AnnotationValue<>(name, matchedMembers, Collections.emptyMap());
     }
 
     /**
@@ -110,7 +121,7 @@ public final class BindingValue {
      * @return The binding
      */
     public static BindingValue reduce(AnnotationValue<?> annotation, Function<String, ? extends Collection<String>> excluded) {
-        return of(annotation, excluded, false, true, true);
+        return of(annotation, excluded, false, ReadMode.COMPILE);
     }
 
     /**
@@ -120,7 +131,7 @@ public final class BindingValue {
      * @return The binding
      */
     public static BindingValue ofRecorded(AnnotationValue<?> recorded) {
-        return of(recorded, NONE_EXCLUDED, false, false, false);
+        return of(recorded, NONE_EXCLUDED, false, ReadMode.RECORDED);
     }
 
     /**
@@ -131,20 +142,19 @@ public final class BindingValue {
      * @return The binding
      */
     public static BindingValue of(AnnotationValue<?> value) {
-        return of(value, NONE_EXCLUDED, false, true, false);
+        return of(value, NONE_EXCLUDED, false, ReadMode.VALUE);
     }
 
     private static BindingValue of(AnnotationValue<?> annotation,
                                    Function<String, ? extends Collection<String>> excluded,
                                    boolean nested,
-                                   boolean withDefaults,
-                                   boolean leaveOutUndefaultedEmptyStrings) {
+                                   ReadMode mode) {
         String name = annotation.getAnnotationName();
         // the keys are read as strings so that two bindings compare by the names of their members, which a
         // CharSequence does not promise to do
         Map<String, Object> members = new LinkedHashMap<>();
         Set<String> defaulted = new TreeSet<>();
-        Map<CharSequence, Object> defaults = withDefaults ? annotation.getDefaultValues() : null;
+        Map<CharSequence, Object> defaults = mode.withDefaults ? annotation.getDefaultValues() : null;
         if (defaults != null) {
             defaults.forEach((member, value) -> {
                 members.put(member.toString(), value);
@@ -152,7 +162,7 @@ public final class BindingValue {
             });
         }
         annotation.getValues().forEach((member, value) -> members.put(member.toString(), value));
-        if (leaveOutUndefaultedEmptyStrings) {
+        if (mode.leavesOutUndefaultedEmptyStrings) {
             members.entrySet().removeIf(entry -> !defaulted.contains(entry.getKey()) && isEmptyString(entry.getValue()));
         }
         Set<String> nonBinding = new TreeSet<>(Arrays.asList(annotation.stringValues(AnnotationUtil.NON_BINDING_ATTRIBUTE)));
@@ -165,9 +175,8 @@ public final class BindingValue {
         members.remove(AnnotationUtil.NON_BINDING_ATTRIBUTE);
         members.remove(AnnotationUtil.STEREOTYPES_MEMBER);
         members.keySet().removeAll(nonBinding);
-        Map<String, Object> written = new LinkedHashMap<>(members.size());
-        members.forEach((member, value) -> written.put(member, writable(value, excluded, withDefaults,
-            leaveOutUndefaultedEmptyStrings)));
+        Map<String, Object> written = CollectionUtils.newLinkedHashMap(members.size());
+        members.forEach((member, value) -> written.put(member, writable(value, excluded, mode)));
         return new BindingValue(name, Collections.unmodifiableSet(nonBinding), Collections.unmodifiableMap(written));
     }
 
@@ -189,7 +198,7 @@ public final class BindingValue {
      * @return The value
      */
     public AnnotationValue<?> toAnnotationValue() {
-        Map<CharSequence, Object> written = new LinkedHashMap<>(members.size() + 1);
+        Map<CharSequence, Object> written = CollectionUtils.newLinkedHashMap(members.size() + 1);
         members.forEach((member, value) -> written.put(member, copyOf(value)));
         // the excluded members are listed for whatever the binding is compared with, which may be the value of an
         // annotation instance that carries all of its members and says nothing of which bind
@@ -202,20 +211,24 @@ public final class BindingValue {
     /**
      * Whether this and another binding are the same binding, compared by the members neither of them excludes.
      *
+     * <p>Micronaut compares them, {@link AnnotationValue#matches(AnnotationValue)}, once each is in the shape it is
+     * compared in: that leaves out the members either of them lists as excluded, and compares an annotation a member
+     * holds the same way. What this binding still brings into shape first is what Micronaut compares as written - an
+     * empty string, an enum constant against its name, a class against its {@link AnnotationClassValue}.</p>
+     *
      * @param other The other binding
      * @return Whether the two are the same binding
      */
     public boolean matches(BindingValue other) {
-        if (!name.equals(other.name)) {
-            return false;
-        }
-        if (nonBinding.equals(other.nonBinding)) {
-            return compared.equals(other.compared);
-        }
-        // either side may know of an excluded member the other does not list, and it is excluded from both
-        Set<String> excluded = new TreeSet<>(nonBinding);
-        excluded.addAll(other.nonBinding);
-        return without(compared, excluded).equals(without(other.compared, excluded));
+        return matched.matches(other.matched);
+    }
+
+    /**
+     * @return The binding as a value of its annotation in the shape it is compared in, which
+     * {@link AnnotationValue#matches(AnnotationValue)} compares with another binding in that shape
+     */
+    public AnnotationValue<?> matched() {
+        return matched;
     }
 
     /**
@@ -240,10 +253,18 @@ public final class BindingValue {
         return "@" + name + compared;
     }
 
-    private static Map<String, Object> without(Map<String, Object> members, Set<String> excluded) {
-        Map<String, Object> kept = new LinkedHashMap<>(members);
-        kept.keySet().removeAll(excluded);
-        return kept;
+    /**
+     * A normalized member value as Micronaut compares it: an annotation it holds is the value of that binding in the
+     * shape it is compared in.
+     */
+    private static Object matchable(Object normalized) {
+        if (normalized instanceof BindingValue nested) {
+            return nested.matched;
+        }
+        if (normalized instanceof List<?> elements && elements.stream().anyMatch(BindingValue.class::isInstance)) {
+            return elements.stream().map(BindingValue::matchable).toList();
+        }
+        return normalized;
     }
 
     /**
@@ -277,7 +298,7 @@ public final class BindingValue {
 
     private static AnnotationValue<?> copyOf(AnnotationValue<?> annotation) {
         Map<CharSequence, Object> values = annotation.getValues();
-        Map<CharSequence, Object> copies = new LinkedHashMap<>(values.size());
+        Map<CharSequence, Object> copies = CollectionUtils.newLinkedHashMap(values.size());
         values.forEach((member, value) -> copies.put(member, copyOf(value)));
         return AnnotationValue.builder(annotation.getAnnotationName()).members(copies).build();
     }
@@ -296,16 +317,14 @@ public final class BindingValue {
      */
     private static Object writable(Object value,
                                    Function<String, ? extends Collection<String>> excluded,
-                                   boolean withDefaults,
-                                   boolean leaveOutUndefaultedEmptyStrings) {
+                                   ReadMode mode) {
         if (value instanceof AnnotationValue<?> annotation) {
-            return of(annotation, excluded, true, withDefaults, leaveOutUndefaultedEmptyStrings).toAnnotationValue();
+            return of(annotation, excluded, true, mode).toAnnotationValue();
         }
         if (value instanceof AnnotationValue<?>[] annotations) {
             AnnotationValue<?>[] written = new AnnotationValue<?>[annotations.length];
             for (int i = 0; i < annotations.length; i++) {
-                written[i] = of(annotations[i], excluded, true, withDefaults, leaveOutUndefaultedEmptyStrings)
-                    .toAnnotationValue();
+                written[i] = of(annotations[i], excluded, true, mode).toAnnotationValue();
             }
             return written;
         }
@@ -324,7 +343,7 @@ public final class BindingValue {
                 .toArray(AnnotationClassValue<?>[]::new);
         }
         if (value instanceof EvaluatedExpressionReference expression) {
-            return writable(expression.annotationValue(), excluded, withDefaults, leaveOutUndefaultedEmptyStrings);
+            return writable(expression.annotationValue(), excluded, mode);
         }
         // an array is copied, as the one the binding was read from stays the caller's
         return copyOf(value);
@@ -386,5 +405,36 @@ public final class BindingValue {
             }
             default -> value;
         };
+    }
+
+    /**
+     * How a binding is read, which an annotation its members hold is read the same way as.
+     */
+    private enum ReadMode {
+
+        /**
+         * A binding annotation as the processor reduces it before recording it: the defaults the value carries are
+         * filled in, and an empty string it carries no default for is left out, see {@link BindingValue#reduce}.
+         */
+        COMPILE(true, true),
+
+        /**
+         * Any value of a binding annotation: the defaults the value carries are filled in, see {@link BindingValue#of}.
+         */
+        VALUE(true, false),
+
+        /**
+         * A binding the processor recorded, which has its defaults filled in already and is read without them, see
+         * {@link BindingValue#ofRecorded}.
+         */
+        RECORDED(false, false);
+
+        private final boolean withDefaults;
+        private final boolean leavesOutUndefaultedEmptyStrings;
+
+        ReadMode(boolean withDefaults, boolean leavesOutUndefaultedEmptyStrings) {
+            this.withDefaults = withDefaults;
+            this.leavesOutUndefaultedEmptyStrings = leavesOutUndefaultedEmptyStrings;
+        }
     }
 }

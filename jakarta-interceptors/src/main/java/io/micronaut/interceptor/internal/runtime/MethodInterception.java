@@ -36,6 +36,10 @@ import org.jspecify.annotations.Nullable;
  * unevaluated metadata, beneath the wrapper an evaluated expression puts around it, so it is kept even for a method
  * another of whose annotations holds an expression.</p>
  *
+ * <p>It is kept through {@link ExecutableMethod#getCachedUnevaluatedValue}, as the interception holds no evaluated
+ * expression and is read beneath the wrapper one puts around the metadata: a method an annotation of which holds one
+ * keeps it as well.</p>
+ *
  * @param interception The interception as recorded, or {@code null} where the method records none
  * @param timeout      Whether the method is a timeout method when the scheduler invokes it
  * @param keys         The key of the interception for each kind, by the ordinal of the kind

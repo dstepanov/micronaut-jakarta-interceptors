@@ -22,7 +22,8 @@ import io.micronaut.interceptor.internal.metadata.BindingValue;
 
 /**
  * One interceptor binding compared with another, exactly as {@link InterceptorBindings} compares the bindings of an
- * interceptor with those of an interception point.
+ * interceptor with those of an interception point: by Micronaut, {@link AnnotationValue#matches(AnnotationValue)},
+ * once each is read as a binding.
  *
  * <p>It is for a module that compares bindings one at a time rather than as the sets an interceptor and an
  * interception point declare - as Contexts and Dependency Injection does, telling whether two interceptor bindings
@@ -36,17 +37,20 @@ import io.micronaut.interceptor.internal.metadata.BindingValue;
  *     {@link AnnotationValue#getDefaultValues()}, and from nothing else;</li>
  *     <li>the members it lists as excluded from the binding under {@value AnnotationUtil#NON_BINDING_ATTRIBUTE} are
  *     left out, and two values are compared without the members either of them lists;</li>
- *     <li>a member that is an empty string is compared as if it were left out, once the defaults are filled in.
- *     Micronaut records no default of an empty string for an annotation compiled from Java or Kotlin, so
- *     {@code @Region("")} and {@code @Region} are the same binding where the member defaults to {@code ""}; where it
- *     defaults to another value, {@code @Region("")} is not {@code @Region}, which has that default filled in;</li>
+ *     <li>a value carries no defaults beyond its own, so that a value lacking them is not completed from the other
+ *     side, as {@link AnnotationValue#matches(AnnotationValue)} alone would do;</li>
  *     <li>the two members Micronaut reserves, {@value AnnotationUtil#NON_BINDING_ATTRIBUTE} and
  *     {@value AnnotationUtil#STEREOTYPES_MEMBER}, are left out. Any other member binds, whatever its name: a member
  *     of an annotation may be named with a {@code $} as any other identifier may;</li>
- *     <li>an enum constant is its name, a class is an {@link AnnotationClassValue}, an array is compared by its
- *     elements in order, an annotation held by a member is compared as a binding is, and an evaluated expression is
- *     the expression it was written as.</li>
+ *     <li>an enum constant is spelt by its name, a class as an {@link AnnotationClassValue}, an annotation held by
+ *     a member as a binding is, and an evaluated expression as the expression it was written as.</li>
  * </ul>
+ *
+ * <p>Micronaut then compares an empty string with a member left out with no default, so {@code @Region("")} and
+ * {@code @Region} are the same binding where the member defaults to {@code ""}, while {@code @Region("")} is not
+ * {@code @Region} where it defaults to another value; an enum constant with its name, a class with its class value,
+ * an array by its elements in order, a primitive one by its boxed elements, and an annotation held by a member as a
+ * binding.</p>
  *
  * <p>{@link AnnotationValue#equals(Object)} compares none of this: it passes over a member the other value does not
  * have, so two values declaring different members of the same count compare equal.</p>
@@ -99,7 +103,9 @@ public final class BindingValues {
      * <p>It is the hash code of the name of the annotation alone. Two values are compared without the members either
      * of them lists as excluded, so a member one of them binds by may take no part in the comparison; and a value
      * built from an annotation instance, or held by a member of another annotation, lists no excluded member at all.
-     * No member is therefore hashed, as none is certain to take part.</p>
+     * No member is therefore hashed, as none is certain to take part. Micronaut's
+     * {@link AnnotationValue#bindingHashCode()} hashes the members a value does not exclude itself, so two values
+     * that match, one excluding a member the other holds, hash differently by it.</p>
      *
      * @param value The value of a binding annotation
      * @return The hash code

@@ -54,7 +54,8 @@ import java.util.function.Function;
  * same question, as Contexts and Dependency Injection does when its bean manager is asked for the interceptors of a
  * set of bindings. Comparing them here rather than again there is what keeps the two answers the same.</p>
  *
- * <p>Two bindings are compared by every member that binds, once each of them has been brought into one shape:</p>
+ * <p>Two bindings are compared by Micronaut, {@link AnnotationValue#matches(AnnotationValue)}, by every member that
+ * binds, once each of them has been read as a binding:</p>
  * <ul>
  *     <li>the members the annotation defaults to are filled in from the defaults the value carries, so that
  *     {@code @Logged} and {@code @Logged(level = "INFO")} are the same binding where {@code "INFO"} is the default.
@@ -62,12 +63,14 @@ import java.util.function.Function;
  *     the same however the defaults Micronaut registers for its annotation change while the application runs;</li>
  *     <li>the members a binding lists as excluded from it under {@value AnnotationUtil#NON_BINDING_ATTRIBUTE} are
  *     left out of both sides, whichever of the two lists them;</li>
- *     <li>a member that is an empty string is compared as if it were left out, which is the one default Micronaut
- *     does not record for an annotation compiled from Java or Kotlin;</li>
- *     <li>an enum constant is its name, a class is an {@link AnnotationClassValue}, an array is the list of its
- *     elements and an annotation held by a member is compared exactly as a binding is, so that a value read from
- *     compiled metadata and one built from an annotation instance compare alike.</li>
+ *     <li>an enum constant is spelt by its name, a class as an {@link AnnotationClassValue} and an annotation held
+ *     by a member as a binding is.</li>
  * </ul>
+ *
+ * <p>Micronaut compares an empty string with a member left out with no default, which is the one default it does not
+ * record for an annotation compiled from Java or Kotlin; and an enum constant with its name, a class with its class
+ * value and a primitive array with its boxed elements, so that a value read from compiled metadata and one built from
+ * an annotation instance compare alike.</p>
  *
  * <p>{@link AnnotationValue#equals(Object)} is not used: it passes over a member the other value does not have.</p>
  *

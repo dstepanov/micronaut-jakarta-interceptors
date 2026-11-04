@@ -3,12 +3,10 @@ package io.micronaut.interceptor.test.binding;
 import io.micronaut.aop.ExactInterceptorBindingQualifier;
 import io.micronaut.aop.InterceptorKind;
 import io.micronaut.context.ApplicationContext;
-import io.micronaut.core.annotation.AnnotationClassValue;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.order.OrderUtil;
 import io.micronaut.inject.BeanDefinition;
-import io.micronaut.interceptor.spi.BindingValues;
 import io.micronaut.interceptor.spi.InterceptorBindings;
 import io.micronaut.interceptor.spi.InterceptorMethods;
 import jakarta.annotation.Priority;
@@ -23,8 +21,6 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.util.Arrays;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 import static java.lang.annotation.ElementType.METHOD;
 import static java.lang.annotation.ElementType.TYPE;
@@ -33,14 +29,16 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * What Micronaut's own comparison of interceptor bindings, {@link AnnotationValue#matches(AnnotationValue)} and
- * {@link ExactInterceptorBindingQualifier}, still answers differently from the specification, and so what this module
- * keeps doing itself. Each test asserts Micronaut's answer as it is today beside the module's: once Micronaut answers
- * as the specification does, the test fails, and the module code it stands for can go.
+ * What Micronaut's own selection of interceptors, {@link ExactInterceptorBindingQualifier} and the order it gives
+ * them, still answers differently from the specification, and so what this module keeps doing itself. Each test
+ * asserts Micronaut's answer as it is today beside the module's: once Micronaut answers as the specification does,
+ * the test fails, and the module code it stands for can go.
+ *
+ * <p>Two bindings are compared with {@link AnnotationValue#matches(AnnotationValue)} itself, which compares an empty
+ * string, an enum constant, a class and a primitive array as the specification does; {@code BindingValuesTest}
+ * covers it.</p>
  */
 class MicronautBindingGapsTest {
-
-    private static final String REGION = "test.Region";
 
     @InterceptorBinding
     @Retention(RetentionPolicy.RUNTIME)
@@ -75,33 +73,6 @@ class MicronautBindingGapsTest {
         public String work() {
             return "worked";
         }
-    }
-
-    @Test
-    void anEmptyStringIsTheMemberLeftOut() {
-        // Micronaut records no default of an empty string for an annotation compiled from Java, and compares the
-        // empty string as a value: @Gap("") does not match @Gap, which the specification binds alike
-        AnnotationValue<?> declared = new AnnotationValue<>(REGION, Map.of("value", ""), Map.of());
-        AnnotationValue<?> leftOut = new AnnotationValue<>(REGION, Map.of(), Map.of());
-
-        assertFalse(declared.matches(leftOut), "Micronaut");
-        assertTrue(BindingValues.matches(declared, leftOut), "module");
-    }
-
-    @Test
-    void anEnumConstantIsItsNameAndAClassItsClassValue() {
-        // compiled metadata spells an enum constant by its name and a class as an AnnotationClassValue, a value built
-        // from an annotation instance may hold the constant and the class; Micronaut compares them with equals
-        AnnotationValue<?> built = new AnnotationValue<>(REGION, Map.of("unit", TimeUnit.SECONDS, "type", String.class), Map.of());
-        AnnotationValue<?> compiled = new AnnotationValue<>(REGION,
-            Map.of("unit", "SECONDS", "type", new AnnotationClassValue<>(String.class.getName())), Map.of());
-
-        assertFalse(built.matches(compiled), "Micronaut");
-        assertTrue(BindingValues.matches(built, compiled), "module");
-        AnnotationValue<?> builtArray = new AnnotationValue<>(REGION, Map.of("units", new TimeUnit[]{TimeUnit.SECONDS}), Map.of());
-        AnnotationValue<?> compiledArray = new AnnotationValue<>(REGION, Map.of("units", new String[]{"SECONDS"}), Map.of());
-        assertFalse(builtArray.matches(compiledArray), "Micronaut");
-        assertTrue(BindingValues.matches(builtArray, compiledArray), "module");
     }
 
     @Test

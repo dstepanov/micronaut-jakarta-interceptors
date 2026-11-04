@@ -109,6 +109,30 @@ class InterceptorBindingValuesTest {
     }
 
     /**
+     * Two bindings that are equal hash alike, however their values spell the same members: the processor keeps them
+     * in sets and maps.
+     */
+    @Test
+    void equalBindingsHashAlike() {
+        List<List<BindingValue>> alike = List.of(
+            List.of(binding(Map.of("value", String.class)),
+                binding(Map.of("value", new AnnotationClassValue<>("java.lang.String")))),
+            List.of(binding(Map.of("value", TimeUnit.SECONDS)), binding(Map.of("value", "SECONDS"))),
+            List.of(binding(Map.of("value", new TimeUnit[]{TimeUnit.SECONDS})),
+                binding(Map.of("value", new String[]{"SECONDS"}))),
+            List.of(binding(Map.of("value", new int[]{1, 2})), InterceptorBindingValues.of(
+                new AnnotationValue<>(BINDING, Map.of("value", new Integer[]{1, 2}), Map.of()), name -> List.of())),
+            List.of(binding(Map.of()), binding(Map.of("value", ""))),
+            List.of(binding(Map.of("value", AnnotationValue.builder("test.Inner").member("value", "a").build())),
+                binding(Map.of("value", AnnotationValue.builder("test.Inner").member("value", "a").build()))));
+        for (List<BindingValue> pair : alike) {
+            assertEquals(pair.get(0), pair.get(1));
+            assertEquals(pair.get(0).hashCode(), pair.get(1).hashCode(), pair.toString());
+        }
+        assertNotEquals(binding(Map.of("value", new int[]{1, 2})), binding(Map.of("value", new int[]{2, 1})));
+    }
+
+    /**
      * A member excluded from the binding is left out of the value written out, and listed under
      * {@code $nonBinding}. The ones an occurrence records are read off it, which Micronaut lists along with the
      * member it lists them under; the type's are not asked for, as Micronaut records every one of them.

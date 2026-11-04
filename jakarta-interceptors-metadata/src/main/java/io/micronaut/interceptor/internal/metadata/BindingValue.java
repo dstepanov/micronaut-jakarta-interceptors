@@ -23,7 +23,6 @@ import io.micronaut.core.expressions.EvaluatedExpressionReference;
 import io.micronaut.core.util.CollectionUtils;
 import org.jspecify.annotations.Nullable;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -47,25 +46,26 @@ import java.util.function.Function;
  *     the reflection module adds to the first time it builds an instance of the annotation, so reading the
  *     defaults again would make the same recorded value read differently before and after;</li>
  *     <li>the members excluded from the binding, which is what {@code jakarta.enterprise.util.Nonbinding} does, are
- *     left out and listed under {@value AnnotationUtil#NON_BINDING_ATTRIBUTE}, and two bindings are compared without
- *     the members either of them lists;</li>
- *     <li>a member that is an empty string is compared as if it were left out, once the defaults are filled in.
- *     Micronaut records no default of an empty string for an annotation compiled from Java or Kotlin, so
- *     {@code @Region("")} carries a member that {@code @Region} does not, although the two are the same binding; and
- *     a member without a default is declared by every declaration of the binding, so leaving out an empty string on
- *     both sides changes nothing about whether two of them are equal. Where the annotation defaults the member to
- *     another value, an empty string still differs from it: the declaration that leaves the member out has the
- *     default filled in, and the one that declares the empty string has nothing there;</li>
- *     <li>an enum constant is its name and a class an {@link AnnotationClassValue}, which is how Micronaut records
- *     them in some places and not in others; an array is the list of its elements, compared by its contents; an
- *     annotation held by a member is reduced as a binding is; and an evaluated expression is the expression it
- *     was written as.</li>
+ *     left out and listed under {@value AnnotationUtil#NON_BINDING_ATTRIBUTE};</li>
+ *     <li>an empty string the processor finds no default for is left out of what it records, as Micronaut records
+ *     no default of an empty string for an annotation compiled from Java or Kotlin, so that {@code @Region("")} and
+ *     {@code @Region} are recorded alike;</li>
+ *     <li>an enum constant is spelt by its name and a class as an {@link AnnotationClassValue}, as Micronaut records
+ *     them; an annotation held by a member is reduced as a binding is; and an evaluated expression is the
+ *     expression it was written as.</li>
  * </ul>
+ *
+ * <p>Two bindings so reduced are compared, and hashed, by Micronaut: {@link AnnotationValue#matches(AnnotationValue)}
+ * and {@link AnnotationValue#bindingHashCode()}, of the binding as a value of its annotation with the members it
+ * excludes listed and no defaults of its own, since every member that binds is there. Micronaut compares an empty
+ * string with a member left out with no default, an enum constant with its name, a class with its class value, a
+ * primitive array with its boxed elements, and an annotation a member holds as a binding, leaving out the members
+ * either side excludes.</p>
  *
  * <p>{@link AnnotationValue#equals(Object)} compares none of this. It passes over a member the other value does
  * not have, so two values that declare different members of the same count compare equal.</p>
  *
- * <p>The array types are listed out rather than read through {@code java.lang.reflect.Array}, so that comparing
+ * <p>The array types are listed out rather than read through {@code java.lang.reflect.Array}, so that copying
  * bindings stays as free of the reflection of the platform as the rest of the interception.</p>
  *
  * @author Denis Stepanov
@@ -79,29 +79,21 @@ public final class BindingValue {
     private final String name;
     private final Set<String> nonBinding;
     private final Map<String, Object> members;
-    private final Map<String, Object> compared;
-    // the binding as Micronaut compares two annotations, see matches
+    // the binding as Micronaut compares and hashes two annotations, see matches
     private final AnnotationValue<?> matched;
 
     private BindingValue(String name, Set<String> nonBinding, Map<String, Object> members) {
         this.name = name;
         this.nonBinding = nonBinding;
         this.members = members;
-        Map<String, Object> normalized = CollectionUtils.newLinkedHashMap(members.size());
         Map<CharSequence, Object> matchedMembers = CollectionUtils.newLinkedHashMap(members.size() + 1);
-        members.forEach((member, value) -> {
-            if (!isEmptyString(value)) {
-                Object normalizedValue = normalize(value);
-                normalized.put(member, normalizedValue);
-                matchedMembers.put(member, matchable(normalizedValue));
-            }
-        });
+        matchedMembers.putAll(members);
         if (!nonBinding.isEmpty()) {
             matchedMembers.put(AnnotationUtil.NON_BINDING_ATTRIBUTE, nonBinding.toArray(String[]::new));
         }
-        this.compared = Collections.unmodifiableMap(normalized);
-        // built directly, as the builder takes no list, and without defaults: every member that binds is there
-        this.matched = new AnnotationValue<>(name, matchedMembers, Collections.emptyMap());
+        // the value toAnnotationValue writes out, sharing the arrays of the binding, and with no defaults of its own:
+        // every member that binds is there
+        this.matched = new AnnotationValue<>(name, Collections.unmodifiableMap(matchedMembers), Collections.emptyMap());
     }
 
     /**
@@ -113,8 +105,8 @@ public final class BindingValue {
      * processor reads off the type.</p>
      *
      * <p>An empty string the value carries no default for is left out of what is recorded, which reads the same
-     * whether it was declared or not. An empty string where a default was recorded is recorded: compared, it is the
-     * member left out, as every empty string is, and that differs from the default the other side has filled in.</p>
+     * whether it was declared or not. An empty string where a default was recorded is recorded, and differs from the
+     * default the other side has filled in.</p>
      *
      * @param annotation The binding annotation, as declared on an element
      * @param excluded   The members excluded from an annotation a member holds, by the name of the annotation
@@ -209,12 +201,8 @@ public final class BindingValue {
     }
 
     /**
-     * Whether this and another binding are the same binding, compared by the members neither of them excludes.
-     *
-     * <p>Micronaut compares them, {@link AnnotationValue#matches(AnnotationValue)}, once each is in the shape it is
-     * compared in: that leaves out the members either of them lists as excluded, and compares an annotation a member
-     * holds the same way. What this binding still brings into shape first is what Micronaut compares as written - an
-     * empty string, an enum constant against its name, a class against its {@link AnnotationClassValue}.</p>
+     * Whether this and another binding are the same binding, compared by Micronaut,
+     * {@link AnnotationValue#matches(AnnotationValue)}, without the members either of them lists as excluded.
      *
      * @param other The other binding
      * @return Whether the two are the same binding
@@ -232,39 +220,31 @@ public final class BindingValue {
     }
 
     /**
-     * Two bindings are equal when their names and the members they are compared by are, which is what the processor
-     * tells two declarations of a binding apart by. The members excluded take no part.
+     * Two bindings are equal when they {@link #matches(BindingValue) match}, which is what the processor tells two
+     * declarations of a binding apart by. The members excluded take no part.
      *
      * @param o The other object
      * @return Whether the two are equal
      */
     @Override
     public boolean equals(@Nullable Object o) {
-        return this == o || (o instanceof BindingValue other && name.equals(other.name) && compared.equals(other.compared));
+        return this == o || (o instanceof BindingValue other && matches(other));
     }
 
+    /**
+     * Micronaut's hash code of the binding, {@link AnnotationValue#bindingHashCode()}, which agrees with
+     * {@link #matches(BindingValue)}: the binding declares every member that binds and lists the ones it excludes.
+     *
+     * @return The hash code
+     */
     @Override
     public int hashCode() {
-        return 31 * name.hashCode() + compared.hashCode();
+        return matched.bindingHashCode();
     }
 
     @Override
     public String toString() {
-        return "@" + name + compared;
-    }
-
-    /**
-     * A normalized member value as Micronaut compares it: an annotation it holds is the value of that binding in the
-     * shape it is compared in.
-     */
-    private static Object matchable(Object normalized) {
-        if (normalized instanceof BindingValue nested) {
-            return nested.matched;
-        }
-        if (normalized instanceof List<?> elements && elements.stream().anyMatch(BindingValue.class::isInstance)) {
-            return elements.stream().map(BindingValue::matchable).toList();
-        }
-        return normalized;
+        return matched.toString();
     }
 
     /**
@@ -304,7 +284,7 @@ public final class BindingValue {
     }
 
     /**
-     * Tells whether a member value is the empty string, which is compared as the member left out.
+     * Tells whether a member value is the empty string, which the processor leaves out where no default is recorded.
      */
     private static boolean isEmptyString(@Nullable Object value) {
         return value instanceof String string && string.isEmpty();
@@ -347,64 +327,6 @@ public final class BindingValue {
         }
         // an array is copied, as the one the binding was read from stays the caller's
         return copyOf(value);
-    }
-
-    /**
-     * Brings a member value, spelt as it is recorded, into the one shape it is compared in. An annotation it holds
-     * was reduced already, and is read as recorded.
-     */
-    private static Object normalize(Object value) {
-        return switch (value) {
-            case AnnotationValue<?> annotation -> ofRecorded(annotation);
-            case Enum<?> constant -> constant.name();
-            case Class<?> type -> new AnnotationClassValue<>(type.getName());
-            case Object[] array -> {
-                List<Object> elements = new ArrayList<>(array.length);
-                for (Object element : array) {
-                    elements.add(normalize(element));
-                }
-                yield Collections.unmodifiableList(elements);
-            }
-            case int[] array -> Arrays.stream(array).boxed().toList();
-            case long[] array -> Arrays.stream(array).boxed().toList();
-            case double[] array -> Arrays.stream(array).boxed().toList();
-            case boolean[] array -> {
-                List<Object> elements = new ArrayList<>(array.length);
-                for (boolean element : array) {
-                    elements.add(element);
-                }
-                yield elements;
-            }
-            case byte[] array -> {
-                List<Object> elements = new ArrayList<>(array.length);
-                for (byte element : array) {
-                    elements.add(element);
-                }
-                yield elements;
-            }
-            case short[] array -> {
-                List<Object> elements = new ArrayList<>(array.length);
-                for (short element : array) {
-                    elements.add(element);
-                }
-                yield elements;
-            }
-            case char[] array -> {
-                List<Object> elements = new ArrayList<>(array.length);
-                for (char element : array) {
-                    elements.add(element);
-                }
-                yield elements;
-            }
-            case float[] array -> {
-                List<Object> elements = new ArrayList<>(array.length);
-                for (float element : array) {
-                    elements.add(element);
-                }
-                yield elements;
-            }
-            default -> value;
-        };
     }
 
     /**

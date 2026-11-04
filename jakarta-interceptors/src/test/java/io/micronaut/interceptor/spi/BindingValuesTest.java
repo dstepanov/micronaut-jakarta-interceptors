@@ -47,9 +47,28 @@ class BindingValuesTest {
         assertEquals("eu", BindingValues.normalize(defaulted).stringValue().orElse(null));
     }
 
+    /**
+     * A value is read with the defaults it carries and no others, as a recorded binding is read without the registry
+     * of defaults; Micronaut's {@link AnnotationValue#matches(AnnotationValue)} alone completes a value carrying none
+     * with the defaults of the other.
+     */
+    @Test
+    void aValueIsNotCompletedWithTheDefaultsOfTheOther() {
+        AnnotationValue<?> withoutDefaults = value(Map.of(), Map.of());
+        AnnotationValue<?> defaulted = value(Map.of(), Map.of("value", "eu"));
+
+        assertFalse(BindingValues.matches(withoutDefaults, defaulted));
+        assertTrue(withoutDefaults.matches(defaulted), "Micronaut");
+    }
+
     @Test
     void anEmptyStringIsTheMemberLeftOutOnceTheDefaultsAreFilledIn() {
-        assertTrue(BindingValues.matches(value(Map.of("value", ""), Map.of()), value(Map.of(), Map.of())));
+        AnnotationValue<?> empty = value(Map.of("value", ""), Map.of());
+        AnnotationValue<?> leftOut = value(Map.of(), Map.of());
+        assertTrue(BindingValues.matches(empty, leftOut));
+        assertTrue(BindingValues.matches(leftOut, empty));
+        assertTrue(empty.matches(leftOut), "Micronaut");
+        assertEquals(BindingValues.hashCode(empty), BindingValues.hashCode(leftOut));
         assertFalse(BindingValues.matches(value(Map.of("value", ""), Map.of("value", "eu")),
             value(Map.of(), Map.of("value", "eu"))));
     }
@@ -64,6 +83,39 @@ class BindingValuesTest {
         AnnotationValue<?> normalized = BindingValues.normalize(excluding);
         assertFalse(normalized.contains("note"));
         assertArrayEquals(new String[]{"note"}, normalized.stringValues(AnnotationUtil.NON_BINDING_ATTRIBUTE));
+    }
+
+    @Test
+    void comparesEnumConstantsClassesAndPrimitiveArraysAsCompiledMetadataRecordsThem() {
+        AnnotationValue<?> built = value(Map.of("unit", TimeUnit.SECONDS, "type", String.class,
+            "units", new TimeUnit[]{TimeUnit.SECONDS}, "sizes", new int[]{1, 2}), Map.of());
+        AnnotationValue<?> compiled = value(Map.of("unit", "SECONDS",
+            "type", new AnnotationClassValue<>(String.class.getName()),
+            "units", new String[]{"SECONDS"}, "sizes", new Integer[]{1, 2}), Map.of());
+
+        assertTrue(built.matches(compiled), "Micronaut");
+        assertTrue(BindingValues.matches(built, compiled), "module");
+        assertFalse(BindingValues.matches(built, value(Map.of("unit", "MINUTES",
+            "type", new AnnotationClassValue<>(String.class.getName()),
+            "units", new String[]{"SECONDS"}, "sizes", new Integer[]{1, 2}), Map.of())));
+    }
+
+    /**
+     * Two values are compared without the members either of them lists as excluded, so a member one of them binds
+     * by takes no part where the other lists it. A hash code of one value cannot know that, which is why the hash
+     * code is the name of the annotation alone: Micronaut's {@link AnnotationValue#bindingHashCode()} hashes the
+     * member, and so differs for the two values that match.
+     */
+    @Test
+    void aMemberOnlyTheOtherSideExcludesTakesNoPartInTheHashCode() {
+        AnnotationValue<?> excluding = value(Map.of("value", "eu", "note", "a",
+            AnnotationUtil.NON_BINDING_ATTRIBUTE, new String[]{"note"}), Map.of());
+        AnnotationValue<?> listingNone = value(Map.of("value", "eu", "note", "b"), Map.of());
+
+        assertTrue(BindingValues.matches(excluding, listingNone));
+        assertEquals(BindingValues.hashCode(excluding), BindingValues.hashCode(listingNone));
+        assertTrue(excluding.matches(listingNone), "Micronaut");
+        assertFalse(excluding.bindingHashCode() == listingNone.bindingHashCode(), "Micronaut");
     }
 
     @Test

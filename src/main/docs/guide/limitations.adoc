@@ -177,10 +177,6 @@ candidate from Micronaut's own `@InterceptorBinding`, with the occurrences on a 
 Binding types are not meta-annotated with it, since that would have Micronaut proxy every class carrying a binding,
 interceptor classes included, so the processor records the bindings, a method's replacing its class's, and a
 qualifier of this module hands them to the rule;
-* each binding is brought into one shape first. Micronaut compares an empty string as a value, although it records
-no default of an empty string, so `@Region("")` would not match `@Region`; and it compares an enum constant with
-its name, and a class with the class value compiled metadata holds, by `equals`, as a binding built from an
-annotation instance holds them;
 * the interceptor classes are ordered by `@Priority`, and one that declares none at
 `Interceptor.Priority.APPLICATION`, where Micronaut orders it at 0, and a `BoundInterceptorEnablement` decides which
 are enabled, which Micronaut has nothing of. An interceptor class must declare `@Interceptor` to be bound, which

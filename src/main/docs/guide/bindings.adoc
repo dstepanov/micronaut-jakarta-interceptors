@@ -75,9 +75,10 @@ What is compared is worked out while the application compiles. The processor rec
 interceptor class and of each element it may intercept as the values of the binding annotations, with the members
 they default to filled in and the members excluded from the binding left out, and the runtime compares those
 values member by member as it resolves the chain of an element. Nothing is built from the annotations and nothing
-reflects to compare them. The comparison itself is Micronaut's: each binding, once brought into one shape - an
-empty string left out, an enum constant spelt by its name and a class by its class value - is compared with
-`AnnotationValue.matches`, and an interceptor class is bound to an element by Micronaut's
+reflects to compare them. The comparison itself is Micronaut's: two bindings are compared with
+`AnnotationValue.matches`, which compares an empty string with a member left out with no default, an enum constant
+with its name, a class with its class value and a primitive array with its boxed elements, so that a binding built
+from an annotation instance compares alike with the recorded one; and an interceptor class is bound to an element by Micronaut's
 `ExactInterceptorBindingQualifier` rule, applied to the bindings the processor recorded. The recorded values are read as they were recorded, without looking their defaults up
 again: Micronaut keeps the defaults of an annotation in a registry the whole application shares, which the
 reflection module adds to the first time it builds an instance of the annotation, and the bindings of an element
@@ -97,8 +98,10 @@ interceptor describes them from. A module comparing bindings one at a time - tel
 whether two are equivalent, or comparing qualifiers that leave out their `@Nonbinding` members as bindings do - asks
 api:interceptor.spi.BindingValues[], whose `normalize`, `matches` and `hashCode` compare one binding exactly as
 `InterceptorBindings` compares a set of them: the defaults a value carries filled in, the members either side lists
-as excluded left out, an empty string compared as the member left out, and of the members whose names start with
-`$` only the two Micronaut reserves, `$nonBinding` and `$stereotypes`, left out.
+as excluded left out, and of the members whose names start with `$` only the two Micronaut reserves, `$nonBinding`
+and `$stereotypes`, left out, before `AnnotationValue.matches` compares them. Its `hashCode` is the name of the
+annotation alone rather than `AnnotationValue.bindingHashCode`, since a member one value excludes may be one the
+other value holds.
 
 == Bindings that come from elsewhere
 

@@ -61,22 +61,6 @@ record RecordedKey(InterceptionKind kind, @Nullable AnnotationValue<?> intercept
         return new RecordedKey(kind, interception, hash(kind, hashOf(interception)));
     }
 
-    /**
-     * Reads the key of an interception as it was recorded for every kind of interception, hashing its members once.
-     *
-     * @param interception The interception as recorded, or {@code null} where the element records none
-     * @return The keys, by the ordinal of their kind
-     */
-    static RecordedKey[] ofEveryKind(@Nullable AnnotationValue<?> interception) {
-        int membersHash = hashOf(interception);
-        InterceptionKind[] kinds = InterceptionKind.values();
-        RecordedKey[] keys = new RecordedKey[kinds.length];
-        for (InterceptionKind kind : kinds) {
-            keys[kind.ordinal()] = new RecordedKey(kind, interception, hash(kind, membersHash));
-        }
-        return keys;
-    }
-
     private static int hashOf(@Nullable AnnotationValue<?> interception) {
         return interception == null ? 0 : AnnotationUtil.calculateHashCode(interception.getValues());
     }

@@ -18,7 +18,6 @@ package io.micronaut.interceptor.internal.runtime;
 import io.micronaut.interceptor.spi.BoundInterceptorEnablement;
 import io.micronaut.interceptor.spi.InterceptorBindings;
 import io.micronaut.interceptor.spi.InterceptorMethods;
-import io.micronaut.aop.InterceptorKind;
 import io.micronaut.context.BeanContext;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
@@ -78,80 +77,58 @@ public final class InterceptorChainResolver {
     }
 
     /**
-     * Resolves the chain of an intercepted element.
+     * Resolves the chain of the construction of a bean, read from its constructor.
      *
      * <p>A chain is remembered under the interception exactly as the processor recorded it on the element, and the
      * kind of interception, see {@link RecordedKey}. Two elements recorded alike share one chain, and the same
-     * element declared differently by two beans - a method two beans inherit from one superclass, or a class two
-     * factory methods produce - has a chain for each declaration. The bindings of an element are brought into the
-     * shape they are compared in once, when its chain is first resolved, rather than every time a bean is created
-     * or an invocation looks it up.</p>
+     * element declared differently by two beans - a class two factory methods produce - has a chain for each
+     * declaration.</p>
      *
-     * @param interceptorKind The kind Micronaut intercepts the element as
-     * @param metadata        The annotation metadata of the element
+     * @param metadata The annotation metadata of the constructor
      * @return The interceptors, in the order they are invoked in
      */
-    List<InterceptorReference> resolve(InterceptorKind interceptorKind, AnnotationMetadata metadata) {
-        return resolve(interceptorKind, metadata, true);
+    List<InterceptorReference> resolveConstruction(AnnotationMetadata metadata) {
+        return resolve(InterceptionKind.AROUND_CONSTRUCT, recordedInterception(metadata));
     }
 
     /**
-     * Resolves the chain of an intercepted element, telling whether the scheduler invoked it.
-     *
-     * @param interceptorKind The kind Micronaut intercepts the element as
-     * @param metadata        The annotation metadata of the element
-     * @param scheduled       Whether the scheduler is invoking the element, without which a timeout method is
-     *                        interposed on as a business method
-     * @return The interceptors, in the order they are invoked in
-     */
-    List<InterceptorReference> resolve(InterceptorKind interceptorKind, AnnotationMetadata metadata, boolean scheduled) {
-        AnnotationValue<JakartaInterception> interception = recordedInterception(metadata);
-        boolean timeout = scheduled && interception != null && interception.booleanValue(JakartaInterception.TIMEOUT).orElse(false);
-        InterceptionKind kind = InterceptionKind.of(interceptorKind, timeout);
-        if (kind == null) {
-            return List.of();
-        }
-        return resolve(RecordedKey.of(kind, interception), kind, interception);
-    }
-
-    /**
-     * Resolves the chain of a method, invoked as a business method or running a lifecycle event of its bean.
-     *
-     * <p>The interception is read from what the method keeps of it, see {@link MethodInterception}: the method's
-     * metadata is the metadata of every invocation of it, beneath the wrapper an evaluated expression puts around
-     * it, and what it records is read once for the method rather than once for every bean created that invokes
-     * it.</p>
-     *
-     * @param interceptorKind The kind Micronaut intercepts the method as
-     * @param method          The method
-     * @param scheduled       Whether the scheduler is invoking the method, without which a timeout method is
-     *                        interposed on as a business method
-     * @return The interceptors, in the order they are invoked in
-     */
-    List<InterceptorReference> resolve(InterceptorKind interceptorKind, ExecutableMethod<?, ?> method, boolean scheduled) {
-        MethodInterception recorded = interceptionOf(method);
-        InterceptionKind kind = InterceptionKind.of(interceptorKind, scheduled && recorded.timeout());
-        if (kind == null) {
-            return List.of();
-        }
-        return resolve(recorded.key(kind), kind, recorded.interception());
-    }
-
-    /**
-     * Whether a method is a timeout method when the scheduler invokes it.
+     * The chains of a method invoked as a business method, or by the scheduler, which the method keeps, see
+     * {@link MethodChains}.
      *
      * @param method The method
-     * @return Whether it is
+     * @return Its chains
      */
-    boolean isTimeout(ExecutableMethod<?, ?> method) {
-        return interceptionOf(method).timeout();
+    MethodChains chainsOf(ExecutableMethod<?, ?> method) {
+        return method.getCachedUnevaluatedValue(MethodChains.class, this::readChains);
     }
 
-    private static MethodInterception interceptionOf(ExecutableMethod<?, ?> method) {
-        // the interception holds no evaluated expression and is read beneath the wrapper one puts around the
-        // metadata, so it is kept for a method whose other annotations have one as well, which getCachedValue would
-        // compute again on every call
-        return method.getCachedUnevaluatedValue(MethodInterception.class, MethodInterception::of);
+    /**
+     * The chains of the lifecycle events a method runs, which the method keeps, see {@link MethodChains}.
+     *
+     * @param method The method Micronaut runs the lifecycle events of a bean through
+     * @return Its chains
+     */
+    MethodChains.Lifecycle lifecycleChainsOf(ExecutableMethod<?, ?> method) {
+        return method.getCachedUnevaluatedValue(MethodChains.Lifecycle.class, m -> {
+            AnnotationValue<JakartaInterception> interception = recordedInterception(m.getAnnotationMetadata());
+            return new MethodChains.Lifecycle(
+                resolve(InterceptionKind.POST_CONSTRUCT, interception),
+                resolve(InterceptionKind.PRE_DESTROY, interception));
+        });
+    }
+
+    private MethodChains readChains(ExecutableMethod<?, ?> method) {
+        AnnotationValue<JakartaInterception> interception = recordedInterception(method.getAnnotationMetadata());
+        boolean timeout = interception != null && interception.booleanValue(JakartaInterception.TIMEOUT).orElse(false);
+        List<InterceptorReference> business = resolve(InterceptionKind.AROUND_INVOKE, interception);
+        return new MethodChains(business,
+            timeout ? resolve(InterceptionKind.AROUND_TIMEOUT, interception) : business,
+            timeout);
+    }
+
+    private List<InterceptorReference> resolve(InterceptionKind kind,
+                                               @Nullable AnnotationValue<JakartaInterception> interception) {
+        return resolve(RecordedKey.of(kind, interception), kind, interception);
     }
 
     private List<InterceptorReference> resolve(RecordedKey recordedKey,
@@ -210,18 +187,18 @@ public final class InterceptorChainResolver {
             Set<Class<?>> classes = new LinkedHashSet<>();
             AnnotationMetadata constructorMetadata = definition.getConstructor().getAnnotationMetadata();
             if (constructorMetadata.hasAnnotation(JakartaInterception.class)) {
-                addInterceptorClasses(resolve(InterceptorKind.AROUND_CONSTRUCT, constructorMetadata), classes);
+                addInterceptorClasses(resolveConstruction(constructorMetadata), classes);
             }
             AnnotationValue<JakartaInterception> classInterception =
                 recordedInterception(definition.getAnnotationMetadata());
             if (classInterception != null) {
                 for (InterceptionKind kind : InterceptionKind.values()) {
-                    addInterceptorClasses(resolve(RecordedKey.of(kind, classInterception), kind, classInterception), classes);
+                    addInterceptorClasses(resolve(kind, classInterception), classes);
                 }
             }
             for (ExecutableMethod<?, ?> method : definition.getExecutableMethods()) {
                 if (method.getAnnotationMetadata().hasAnnotation(JakartaInterception.class)) {
-                    addInterceptorClasses(resolve(InterceptorKind.AROUND, method, true), classes);
+                    addInterceptorClasses(chainsOf(method).scheduled(), classes);
                 }
             }
             resolved = List.copyOf(classes);

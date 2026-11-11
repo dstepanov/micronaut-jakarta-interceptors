@@ -32,13 +32,11 @@ import io.micronaut.core.beans.BeanConstructor;
 import io.micronaut.core.type.Argument;
 import io.micronaut.inject.BeanDefinition;
 import io.micronaut.inject.BeanType;
-import io.micronaut.inject.ExecutableMethod;
 import io.micronaut.interceptor.internal.metadata.JakartaInterception;
 import jakarta.interceptor.Interceptor;
 import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
-import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -77,14 +75,6 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      */
     private final BeanDependencyResolver dependencies;
     private final Map<Class<?>, Object> instances = new HashMap<>(4);
-    /**
-     * The business method chain of each method of the object, by the identity of the method, so that a call reads
-     * neither the interception of the method nor the resolver's map. Copied on write: a method is added once, and
-     * two calls adding at once only cost the one that loses resolving again on its next call. A call the scheduler
-     * makes to a timeout method resolves its own chain, see {@link #intercept(MethodInvocationContext)}.
-     */
-    private volatile IdentityHashMap<ExecutableMethod<?, ?>, MethodChain> businessChains = new IdentityHashMap<>(0);
-
     /**
      * Creates the advice of one object.
      *
@@ -141,15 +131,15 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         if (kind == InterceptorKind.POST_CONSTRUCT || kind == InterceptorKind.PRE_DESTROY) {
             return interceptLifecycle(context, kind);
         }
-        MethodChain business = businessChainOf(context, kind);
+        MethodChains chains = resolver.chainsOf(context.getExecutableMethod());
         // a method declaring @Scheduled is a timeout method only while the scheduler invokes it: a direct call by
         // the application is a business method invocation, and so is a call the method makes to itself
-        ScheduledInvocation.Entry entry = business.timeout() ? ScheduledInvocation.enter(context) : null;
+        ScheduledInvocation.Entry entry = chains.timeout() ? ScheduledInvocation.enter(context) : null;
         if (entry == null) {
-            return proceed(context, business.chain(), null);
+            return proceed(context, chains.business(), null);
         }
         try (entry) {
-            return proceed(context, resolver.resolve(kind, context.getExecutableMethod(), true), entry.schedule());
+            return proceed(context, chains.scheduled(), entry.schedule());
         }
     }
 
@@ -167,26 +157,6 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
     }
 
     /**
-     * The chain of a business method invocation of a method, resolved on its first call.
-     *
-     * @param context The invocation
-     * @param kind    The kind Micronaut intercepts the method as
-     * @return The chain, and whether the method is a timeout method when the scheduler invokes it
-     */
-    private MethodChain businessChainOf(MethodInvocationContext<Object, Object> context, InterceptorKind kind) {
-        ExecutableMethod<?, ?> method = context.getExecutableMethod();
-        MethodChain cached = businessChains.get(method);
-        if (cached != null) {
-            return cached;
-        }
-        MethodChain resolved = new MethodChain(resolver.resolve(kind, method, false), resolver.isTimeout(method));
-        IdentityHashMap<ExecutableMethod<?, ?>, MethodChain> added = new IdentityHashMap<>(businessChains);
-        added.put(method, resolved);
-        businessChains = added;
-        return resolved;
-    }
-
-    /**
      * Interposes on a {@code @PostConstruct} or {@code @PreDestroy} event of the object this advice was created for.
      *
      * <p>Micronaut invokes this once for the event, and proceeding the chain runs every callback of the bean in
@@ -194,7 +164,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      * not proceed keeps all of them from running.</p>
      */
     private @Nullable Object interceptLifecycle(MethodInvocationContext<Object, Object> context, InterceptorKind kind) {
-        List<InterceptorReference> chain = resolver.resolve(kind, context.getExecutableMethod(), true);
+        List<InterceptorReference> chain = resolver.lifecycleChainsOf(context.getExecutableMethod()).of(kind);
         if (chain.isEmpty()) {
             context.proceed();
             return context.getTarget();
@@ -215,8 +185,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         BeanConstructor<Object> constructor = context.getConstructor();
         // the annotation metadata of a constructor invocation is carried by the constructor rather than by the
         // context, which has none of its own
-        List<InterceptorReference> chain =
-            resolver.resolve(InterceptorKind.AROUND_CONSTRUCT, constructor.getAnnotationMetadata());
+        List<InterceptorReference> chain = resolver.resolveConstruction(constructor.getAnnotationMetadata());
         if (chain.isEmpty()) {
             return context.proceed();
         }
@@ -348,18 +317,6 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
     @SuppressWarnings("unchecked")
     private static <E extends Throwable> RuntimeException sneakyThrow(Throwable e) throws E {
         throw (E) e;
-    }
-
-    /**
-     * The chain of the business method invocations of a method of the object, as the resolver of the context
-     * resolved it. The bindings its invocations report depend on the compiled metadata of the method alone, and the
-     * method keeps them itself.
-     *
-     * @param chain   The interceptors, in the order they are invoked in
-     * @param timeout Whether the method is a timeout method when the scheduler invokes it, which then has a chain of
-     *                its own
-     */
-    private record MethodChain(List<InterceptorReference> chain, boolean timeout) {
     }
 
     /**

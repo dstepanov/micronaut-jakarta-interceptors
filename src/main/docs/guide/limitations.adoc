@@ -183,21 +183,15 @@ are enabled, which Micronaut has nothing of. An interceptor class must declare `
 Micronaut's rule, comparing bindings alone, leaves to the caller; and Micronaut has no kind of interception for an
 `@AroundTimeout` method.
 
-A method keeps what its compiled metadata alone gives - the interception the processor recorded, the key of its chain
-for each kind of interception, and the bindings its invocations report - through Micronaut's experimental
-`ExecutableMethod.getCachedValue`, and the interception through `getCachedUnevaluatedValue`, which keeps it for a
-method an annotation of which holds an evaluated expression as well. Micronaut gives the objects of a proxied class
-one method per definition, but the chains depend on the interceptor classes a context holds and enables, so they
-stay with the resolver of each context, under the key the method keeps, and each object keeps the chains of the
-methods it is called through. Resolving the chain again for each new object instead, without the resolver's map,
-makes creating a bean and calling each of its methods half as slow again; and without the chains each object keeps,
-a call takes about five times as long. Micronaut offers no such value for a constructor or a bean definition, where
-the resolver reads the interception again.
-
-The map `InvocationContext.getContextData()` returns is created the first time an interceptor of the invocation asks
-for it, and kept among the attributes of the Micronaut invocation, which every advice of that invocation shares.
-Those attributes offer a way to put a value and to read one, but none to put a value only where there is none yet,
-so the map is created under a lock on the attributes and looked for again once the lock is held.
+A method keeps its chains - for a business method invocation and for the scheduler - and the bindings its
+invocations report, through Micronaut's experimental
+`ExecutableMethod.getCachedUnevaluatedValue`, which keeps them for a method an annotation of which holds an evaluated
+expression as well. Micronaut documents the methods of a definition, and of the proxies a context creates, as
+belonging to that context, so the chains, which depend on the interceptor classes the context holds and enables,
+belong on the method that every object of the context is called through. Micronaut offers no such value for a
+constructor or a bean definition, and the method object Micronaut runs a lifecycle event through is created for the
+event and keeps none, so for those the resolver keeps the chains in a map of its own, under the interception the
+processor recorded; a method whose metadata Micronaut does not keep values for finds its chains there as well.
 
 == Languages
 

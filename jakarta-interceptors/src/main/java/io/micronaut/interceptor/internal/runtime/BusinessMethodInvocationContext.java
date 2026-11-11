@@ -17,8 +17,10 @@ package io.micronaut.interceptor.internal.runtime;
 
 import io.micronaut.interceptor.ScheduledTimer;
 import io.micronaut.aop.MethodInvocationContext;
+import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
+import io.micronaut.inject.ExecutableMethod;
 import io.micronaut.interceptor.MicronautMethodInvocationContext;
 import org.jspecify.annotations.Nullable;
 
@@ -53,14 +55,16 @@ final class BusinessMethodInvocationContext extends AbstractInvocationContext
 
     /**
      * The bindings the invocations of the method report, which depend on nothing but its compiled metadata, kept by
-     * the method rather than read again for every invocation.
+     * the method rather than read again for every invocation. They are read beneath the wrapper an evaluated
+     * expression puts around the metadata, so a method another annotation of which holds one keeps them as well.
      *
      * @return The binding values
      */
     @Override
     List<AnnotationValue<?>> elementBindingValues() {
         return context.getExecutableMethod()
-            .getCachedValue(DeclaredBindings.class, method -> new DeclaredBindings(readBindingValues()))
+            .getCachedUnevaluatedValue(DeclaredBindings.class,
+                method -> new DeclaredBindings(bindingValuesOf(compiledMetadataOf(method))))
             .values();
     }
 
@@ -72,8 +76,15 @@ final class BusinessMethodInvocationContext extends AbstractInvocationContext
     @Override
     Set<Annotation> elementBindings() {
         return context.getExecutableMethod()
-            .getCachedValue(BindingAnnotations.class, method -> new BindingAnnotations(resolveBindings()))
+            .getCachedUnevaluatedValue(BindingAnnotations.class, method -> {
+                AnnotationMetadata metadata = compiledMetadataOf(method);
+                return new BindingAnnotations(bindingsOf(metadata, bindingValuesOf(metadata)));
+            })
             .annotations();
+    }
+
+    private static AnnotationMetadata compiledMetadataOf(ExecutableMethod<?, ?> method) {
+        return method.getAnnotationMetadata().getTargetAnnotationMetadata();
     }
 
     @Override

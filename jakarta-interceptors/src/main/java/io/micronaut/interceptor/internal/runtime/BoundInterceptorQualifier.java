@@ -23,7 +23,6 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.function.Function;
 import java.util.stream.Stream;
 
 /**
@@ -43,26 +42,15 @@ import java.util.stream.Stream;
  * @since 1.0
  */
 @Internal
-public final class BoundInterceptorQualifier<T> implements Qualifier<T> {
+final class BoundInterceptorQualifier<T> implements Qualifier<T> {
 
     private final InterceptorBindings point;
-    private final Function<BeanType<?>, InterceptorBindings> bindingsOf;
 
     /**
      * @param point The bindings of the interception point
      */
-    public BoundInterceptorQualifier(InterceptorBindings point) {
-        this(point, InterceptorBindings::of);
-    }
-
-    /**
-     * @param point      The bindings of the interception point
-     * @param bindingsOf Reads the bindings of an interceptor class, which the chain resolver remembers for each
-     *                   interceptor class rather than reading them again for every chain
-     */
-    BoundInterceptorQualifier(InterceptorBindings point, Function<BeanType<?>, InterceptorBindings> bindingsOf) {
+    BoundInterceptorQualifier(InterceptorBindings point) {
         this.point = point;
-        this.bindingsOf = bindingsOf;
     }
 
     @Override
@@ -72,7 +60,7 @@ public final class BoundInterceptorQualifier<T> implements Qualifier<T> {
 
     @Override
     public boolean doesQualify(Class<T> beanType, BeanType<T> candidate) {
-        return bindingsOf.apply(candidate).isBoundBy(point);
+        return InterceptorBindings.of(candidate).isBoundBy(point);
     }
 
     @Override

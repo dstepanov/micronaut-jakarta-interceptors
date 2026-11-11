@@ -19,16 +19,16 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.LongAdder;
 
 import static java.lang.annotation.ElementType.CONSTRUCTOR;
 import static java.lang.annotation.ElementType.METHOD;
 import static java.lang.annotation.ElementType.TYPE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The chains of a bean many threads create at once are each resolved at most once for every thread racing to build
- * it, and never again once they are built, however many more of the beans are created.
+ * The beans many threads create at once, racing to build the same chains, are each constructed and invoked through
+ * the whole of their chains.
  */
 class ConcurrentChainResolutionTest {
 
@@ -41,13 +41,18 @@ class ConcurrentChainResolutionTest {
     @Interceptor
     @Raced
     public static class RacedInterceptor {
+        static final LongAdder INVOKED = new LongAdder();
+        static final LongAdder CONSTRUCTED = new LongAdder();
+
         @AroundInvoke
         public Object invoke(InvocationContext context) throws Exception {
+            INVOKED.increment();
             return context.proceed();
         }
 
         @AroundConstruct
         public Object construct(InvocationContext context) throws Exception {
+            CONSTRUCTED.increment();
             return context.proceed();
         }
     }
@@ -65,31 +70,16 @@ class ConcurrentChainResolutionTest {
     }
 
     @Test
-    void theChainsOfConcurrentlyCreatedPrototypesAreNotResolvedAgain() throws Exception {
-        long ofOneBean;
-        try (ApplicationContext context = ApplicationContext.run()) {
-            InterceptorChainResolver resolver = context.getBean(InterceptorChainResolver.class);
-            long before = resolver.readInterceptions();
-            RacedPrototype prototype = context.getBean(RacedPrototype.class);
-            prototype.work();
-            prototype.rest();
-            ofOneBean = resolver.readInterceptions() - before;
-            assertTrue(ofOneBean > 0, "the first bean resolves its chains");
-        }
-
+    void concurrentlyCreatedPrototypesRunTheirWholeChains() throws Exception {
         int threads = 8;
+        int beansPerThread = 50;
         try (ApplicationContext context = ApplicationContext.run()) {
-            InterceptorChainResolver resolver = context.getBean(InterceptorChainResolver.class);
-            long before = resolver.readInterceptions();
-            createConcurrently(context, threads, 50);
-            long created = resolver.readInterceptions() - before;
-            assertTrue(created >= ofOneBean && created <= ofOneBean * threads,
-                "at most one resolution for each thread racing to build a chain, " + created + " where one bean made "
-                    + ofOneBean);
+            RacedInterceptor.INVOKED.reset();
+            RacedInterceptor.CONSTRUCTED.reset();
+            createConcurrently(context, threads, beansPerThread);
 
-            long resolved = resolver.readInterceptions();
-            createConcurrently(context, threads, 200);
-            assertEquals(resolved, resolver.readInterceptions(), "built chains are looked up, not resolved again");
+            assertEquals(threads * beansPerThread, RacedInterceptor.CONSTRUCTED.sum());
+            assertEquals(2L * threads * beansPerThread, RacedInterceptor.INVOKED.sum());
         }
     }
 

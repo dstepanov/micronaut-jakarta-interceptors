@@ -18,30 +18,22 @@ package io.micronaut.interceptor.spi;
 import io.micronaut.aop.ExactInterceptorBindingQualifier;
 import io.micronaut.aop.InterceptorKind;
 import io.micronaut.context.BeanContext;
-import io.micronaut.context.Qualifier;
-import io.micronaut.core.annotation.AnnotationClassValue;
-import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationUtil;
 import io.micronaut.core.annotation.AnnotationValue;
-import io.micronaut.core.annotation.Internal;
 import io.micronaut.inject.BeanDefinition;
 import io.micronaut.inject.BeanType;
-import io.micronaut.inject.annotation.AnnotationMetadataHierarchy;
-import io.micronaut.interceptor.internal.metadata.BindingValue;
-import io.micronaut.interceptor.internal.metadata.JakartaInterception;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorMethods;
-import io.micronaut.interceptor.internal.runtime.BoundInterceptorQualifier;
 import io.micronaut.interceptor.internal.runtime.InterceptorChainResolver;
 import org.jspecify.annotations.Nullable;
 
-import java.lang.annotation.Annotation;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
 
 /**
  * The interceptor bindings of an interceptor class or of an interception point, as what they are compared by.
@@ -54,23 +46,14 @@ import java.util.function.Function;
  * same question, as Contexts and Dependency Injection does when its bean manager is asked for the interceptors of a
  * set of bindings. Comparing them here rather than again there is what keeps the two answers the same.</p>
  *
- * <p>Two bindings are compared by Micronaut, {@link AnnotationValue#matches(AnnotationValue)}, by every member that
- * binds, once each of them has been read as a binding:</p>
- * <ul>
- *     <li>the members the annotation defaults to are filled in from the defaults the value carries, so that
- *     {@code @Logged} and {@code @Logged(level = "INFO")} are the same binding where {@code "INFO"} is the default.
- *     A value the processor recorded is read as it was recorded, with its defaults filled in already, and so reads
- *     the same however the defaults Micronaut registers for its annotation change while the application runs;</li>
- *     <li>the members a binding lists as excluded from it under {@value AnnotationUtil#NON_BINDING_ATTRIBUTE} are
- *     left out of both sides, whichever of the two lists them;</li>
- *     <li>an enum constant is spelt by its name, a class as an {@link AnnotationClassValue} and an annotation held
- *     by a member as a binding is.</li>
- * </ul>
- *
- * <p>Micronaut compares an empty string with a member left out with no default, which is the one default it does not
- * record for an annotation compiled from Java or Kotlin; and an enum constant with its name, a class with its class
- * value and a primitive array with its boxed elements, so that a value read from compiled metadata and one built from
- * an annotation instance compare alike.</p>
+ * <p>Two bindings are compared by Micronaut, {@link AnnotationValue#matches(AnnotationValue)}, on the values as they
+ * were read: it fills in the members the annotation defaults to, so that {@code @Logged} and
+ * {@code @Logged(level = "INFO")} are the same binding where {@code "INFO"} is the default; leaves out the members
+ * either side lists under {@value AnnotationUtil#NON_BINDING_ATTRIBUTE}; compares an empty string with a member left
+ * out with no default; and compares an enum constant with its name, a class with its class value and a primitive
+ * array with its boxed elements, so that a value read from compiled metadata and one built from an annotation instance
+ * compare alike. The processor records every member that binds, so the defaults Micronaut registers for an
+ * annotation while the application runs change nothing of what a recorded binding is.</p>
  *
  * <p>{@link AnnotationValue#equals(Object)} is not used: it passes over a member the other value does not have.</p>
  *
@@ -81,25 +64,21 @@ public final class InterceptorBindings {
 
     private static final InterceptorBindings NONE = new InterceptorBindings(List.of());
 
-    private final List<BindingValue> bindings;
+    private final List<AnnotationValue<?>> bindings;
     private final int hash;
-    // the bindings in the shape they are compared in, and as an interception point Micronaut selects the
-    // interceptors of with its exact rule: every binding of an interceptor applies at the point
-    private final List<AnnotationValue<?>> matched;
+    // the bindings as an interception point Micronaut selects the interceptors of with its exact rule: every binding
+    // of an interceptor applies at the point
     private final ExactInterceptorBindingQualifier<?> point;
 
-    private InterceptorBindings(List<BindingValue> bindings) {
+    private InterceptorBindings(List<AnnotationValue<?>> bindings) {
         this.bindings = bindings;
         Set<String> names = new HashSet<>();
-        List<AnnotationValue<?>> values = new ArrayList<>(bindings.size());
-        for (BindingValue binding : bindings) {
-            names.add(binding.name());
-            values.add(binding.matched());
+        for (AnnotationValue<?> binding : bindings) {
+            names.add(binding.getAnnotationName());
         }
         this.hash = names.hashCode();
-        this.matched = values;
         // the kind takes no part in comparing occurrences, which carry no kind of their own
-        this.point = ExactInterceptorBindingQualifier.ofOccurrences(values, InterceptorKind.AROUND);
+        this.point = ExactInterceptorBindingQualifier.ofOccurrences(bindings, InterceptorKind.AROUND);
     }
 
     /**
@@ -111,130 +90,20 @@ public final class InterceptorBindings {
     public static InterceptorBindings of(BeanType<?> interceptor) {
         AnnotationValue<JakartaInterceptorMethods> recorded =
             interceptor.getAnnotation(JakartaInterceptorMethods.class);
-        return recorded == null ? NONE : ofRecorded(recorded.getAnnotations(JakartaInterceptorMethods.BINDINGS));
-    }
-
-    /**
-     * Reads the bindings of an intercepted element - a class, a constructor, a method or the member of a factory -
-     * as the processor recorded them on it.
-     *
-     * @param metadata The annotation metadata of the element
-     * @return The bindings, none where the element is bound by none
-     */
-    public static InterceptorBindings ofInterceptionPoint(AnnotationMetadata metadata) {
-        AnnotationValue<JakartaInterception> interception = metadata.getAnnotation(JakartaInterception.class);
-        return interception == null ? NONE : ofRecorded(interception.getAnnotations(JakartaInterception.BINDINGS));
-    }
-
-    /**
-     * The declarations of the bindings the processor recorded on an intercepted element, with the members that do
-     * not bind kept: what {@code getInterceptorBindingValues()} of an invocation of the element reports.
-     *
-     * <p>Which bindings they are, and how many occurrences of a repeatable one, is what the processor recorded on the
-     * element: a binding only the method an element overrides declares, or that only the factory producing a bean
-     * declares, is not one of them, although the metadata of the element holds it, and occurrences that differ only
-     * in a member that does not bind are one binding. What was recorded holds only the members that bind, so each
-     * binding is answered with the declaration it was reduced from: the nearest declaration of it that is the same
-     * binding, the element's before its class's, and what was recorded where there is none.</p>
-     *
-     * @param metadata The annotation metadata of the element, as Micronaut compiled it
-     * @return The declarations, empty where the element is bound by none
-     */
-    public static List<AnnotationValue<?>> declarations(AnnotationMetadata metadata) {
-        AnnotationValue<JakartaInterception> interception = metadata.getAnnotation(JakartaInterception.class);
-        List<AnnotationValue<Annotation>> recorded = interception == null
-            ? List.of()
-            : interception.getAnnotations(JakartaInterception.BINDINGS);
-        if (recorded.isEmpty()) {
-            return List.of();
-        }
-        List<AnnotationValue<?>> values = new ArrayList<>(recorded.size());
-        for (AnnotationValue<Annotation> binding : recorded) {
-            values.add(declarationOf(metadata, binding));
-        }
-        return Collections.unmodifiableList(values);
-    }
-
-    /**
-     * The declaration a recorded binding was reduced from: the nearest occurrence of its annotation that is the same
-     * binding, read one layer of the metadata at a time and, within a layer, what the element declares itself before
-     * what it carries otherwise.
-     *
-     * <p>The metadata of a method is a hierarchy of the metadata of its class and its own, and asked as a whole it
-     * merges the members of a binding both declare, where the declaration of the method replaces the one of its
-     * class whole; so the layers are read apart. The layer of a method also holds the annotations of the method it
-     * overrides, which are not declarations of the method, so there an occurrence is taken only where the method
-     * declares it, or an annotation the method declares carries it - as the processor reads the bindings of the
-     * method. Within the layer of the class, an occurrence is taken only where it is the binding recorded.</p>
-     */
-    private static AnnotationValue<?> declarationOf(AnnotationMetadata metadata, AnnotationValue<?> recorded) {
-        String name = recorded.getAnnotationName();
-        BindingValue binding = BindingValue.ofRecorded(recorded);
-        List<AnnotationMetadata> layers = nearestFirst(metadata);
-        for (int i = 0; i < layers.size(); i++) {
-            // the last layer is the class, and every one before it is the element's own
-            boolean own = i < layers.size() - 1;
-            for (AnnotationValue<?> occurrence : occurrencesOf(layers.get(i), name, own)) {
-                if (BindingValue.of(occurrence).matches(binding)) {
-                    return occurrence;
-                }
-            }
-        }
-        return recorded;
-    }
-
-    /**
-     * The occurrences of an annotation one layer of the metadata holds, the ones the element declares itself first.
-     * In a layer of the element's own, the occurrences of the method it overrides are left out: only what the layer
-     * declares, and what an annotation it declares carries, is read.
-     */
-    private static List<AnnotationValue<?>> occurrencesOf(AnnotationMetadata layer, String name, boolean own) {
-        List<AnnotationValue<?>> occurrences = new ArrayList<>(2);
-        boolean carried = !own || layer.getDeclaredStereotypeAnnotationNames().contains(name);
-        if (layer.findRepeatableAnnotation(name).isPresent()) {
-            occurrences.addAll(layer.getDeclaredAnnotationValuesByName(name));
-            if (carried) {
-                occurrences.addAll(layer.getAnnotationValuesByName(name));
-            }
-        } else {
-            layer.findDeclaredAnnotation(name).ifPresent(occurrences::add);
-            if (carried) {
-                layer.findAnnotation(name).ifPresent(occurrences::add);
-            }
-        }
-        return occurrences;
-    }
-
-    /**
-     * The layers of the metadata from the element itself to the root, its class.
-     */
-    private static List<AnnotationMetadata> nearestFirst(AnnotationMetadata metadata) {
-        if (!(metadata instanceof AnnotationMetadataHierarchy hierarchy)) {
-            return List.of(metadata);
-        }
-        List<AnnotationMetadata> layers = new ArrayList<>(2);
-        // the hierarchy iterates from the root, the class, to the element itself
-        for (AnnotationMetadata layer : hierarchy) {
-            layers.addAll(0, nearestFirst(layer));
-        }
-        return layers;
+        return recorded == null ? NONE : ofValues(recorded.getAnnotations(JakartaInterceptorMethods.BINDINGS));
     }
 
     /**
      * Reads a set of bindings from the values of the binding annotations, which may have been read from the
-     * metadata of an element or built from annotation instances. The members a value leaves out are filled in from
-     * the defaults it carries, {@link AnnotationValue#getDefaultValues()}, and from nothing else: the registry of
-     * defaults Micronaut shares across the application is not asked again. A value read from metadata carries the
-     * defaults that registry held when it was read, and the reflection module adds to the registry as it builds an
-     * instance of an annotation - an empty string, which is compared as the member left out, and the defaults it
-     * reads in the shapes it reads them in, which are compared as one - so a value read before and one read after
-     * are the same bindings.
+     * metadata of an element, as the processor recorded them, or built from annotation instances. The values are
+     * kept as they are, but for the arrays their members hold, which are copied so that the caller's arrays stay the
+     * caller's; they are compared by {@link AnnotationValue#matches(AnnotationValue)}.
      *
-     * <p>A value lists the members excluded from its binding under
-     * {@value AnnotationUtil#NON_BINDING_ATTRIBUTE}. Those are left out wherever it is compared, and so are the
-     * ones the other side of the comparison lists. Micronaut lists every member the annotation type excludes on each
-     * occurrence it records, and so does the processor on each binding it records, so a value that lists none, one
-     * built from an annotation instance, still compares by the members that bind.</p>
+     * <p>A value lists the members excluded from its binding under {@value AnnotationUtil#NON_BINDING_ATTRIBUTE}.
+     * Those are left out wherever it is compared, and so are the ones the other side of the comparison lists.
+     * Micronaut lists every member the annotation type excludes on each occurrence it records, and so does the
+     * processor on each binding it records, so a value that lists none, one built from an annotation instance, still
+     * compares by the members that bind.</p>
      *
      * <p>A repeatable binding is as many values as it has occurrences; two values that are the same binding are
      * one.</p>
@@ -243,49 +112,66 @@ public final class InterceptorBindings {
      * @return The bindings
      */
     public static InterceptorBindings ofValues(Collection<? extends AnnotationValue<?>> values) {
-        return read(values, BindingValue::of);
-    }
-
-    /**
-     * Reads a set of bindings the processor recorded, as they were recorded: their defaults were filled in when they
-     * were, and are not read again.
-     *
-     * @param recorded The bindings as recorded
-     * @return The bindings
-     */
-    @Internal
-    public static InterceptorBindings ofRecorded(Collection<? extends AnnotationValue<?>> recorded) {
-        return read(recorded, BindingValue::ofRecorded);
-    }
-
-    private static InterceptorBindings read(Collection<? extends AnnotationValue<?>> values,
-                                            Function<AnnotationValue<?>, BindingValue> reader) {
         if (values.isEmpty()) {
             return NONE;
         }
-        List<BindingValue> read = new ArrayList<>(values.size());
+        List<AnnotationValue<?>> read = new ArrayList<>(values.size());
         for (AnnotationValue<?> value : values) {
-            BindingValue binding = reader.apply(value);
-            if (read.stream().noneMatch(binding::matches)) {
-                read.add(binding);
+            if (read.stream().noneMatch(value::matches)) {
+                read.add(snapshot(value));
             }
         }
         return new InterceptorBindings(Collections.unmodifiableList(read));
     }
 
     /**
-     * A qualifier that selects, among the beans of interceptor classes, the ones bound to an interception point.
-     *
-     * <p>It compares the bindings and nothing else: which interceptor classes are enabled, and the order they are
-     * invoked in, are left to whatever uses it. {@link #boundInterceptors(BeanContext, InterceptorBindings)} is the
-     * selection the chains make, those included.</p>
-     *
-     * @param point The bindings of the interception point
-     * @param <T>   The type the beans are looked up by
-     * @return The qualifier, which compares by the bindings of the point
+     * The value with every array a member holds copied, at any depth, and everything else as it is: an
+     * {@link AnnotationValue} keeps the arrays it is built with, and an array the caller changes afterwards must not
+     * change which interceptors these bindings select. A value holding no array is kept itself.
      */
-    public static <T> Qualifier<T> boundTo(InterceptorBindings point) {
-        return new BoundInterceptorQualifier<>(point);
+    private static AnnotationValue<?> snapshot(AnnotationValue<?> value) {
+        Map<CharSequence, Object> members = value.getValues();
+        Map<CharSequence, Object> copied = null;
+        for (Map.Entry<CharSequence, Object> member : members.entrySet()) {
+            Object snapshot = snapshotMember(member.getValue());
+            if (snapshot != member.getValue()) {
+                if (copied == null) {
+                    copied = new LinkedHashMap<>(members);
+                }
+                copied.put(member.getKey(), snapshot);
+            }
+        }
+        return copied == null
+            ? value
+            : new AnnotationValue<>(value.getAnnotationName(), copied, value.getDefaultValues());
+    }
+
+    /**
+     * A member value with its arrays copied; listed out rather than read through {@code java.lang.reflect.Array}, so
+     * that the interception stays free of the reflection of the platform.
+     */
+    private static Object snapshotMember(Object value) {
+        return switch (value) {
+            case AnnotationValue<?> annotation -> snapshot(annotation);
+            case Object[] array -> {
+                Object[] copy = array.clone();
+                for (int i = 0; i < copy.length; i++) {
+                    if (copy[i] instanceof AnnotationValue<?> annotation) {
+                        copy[i] = snapshot(annotation);
+                    }
+                }
+                yield copy;
+            }
+            case int[] array -> array.clone();
+            case long[] array -> array.clone();
+            case double[] array -> array.clone();
+            case boolean[] array -> array.clone();
+            case byte[] array -> array.clone();
+            case short[] array -> array.clone();
+            case char[] array -> array.clone();
+            case float[] array -> array.clone();
+            default -> value;
+        };
     }
 
     /**
@@ -332,28 +218,16 @@ public final class InterceptorBindings {
     /**
      * The bindings as values of their binding annotations, one for each binding, in the order they were read.
      *
-     * <p>Each holds the members that bind, with the ones the annotation defaults to filled in and an enum constant or
-     * a class spelt as Micronaut records it, and lists the members excluded from the binding under
-     * {@value AnnotationUtil#NON_BINDING_ATTRIBUTE}, as the processor records a binding. The excluded members
-     * themselves are not held: they take no part in what the binding is. Two values that are the same binding are
-     * one, so a binding declared twice is here once.</p>
-     *
-     * <p>This is what a module that describes the bindings of an interceptor - as Contexts and Dependency Injection
-     * does, answering {@code Interceptor.getInterceptorBindings()} - reads them from, so that what it describes is
-     * what the interceptor is bound by. Read back through {@link #ofValues(Collection)}, the values are these
-     * bindings again.</p>
-     *
-     * <p>Every call builds the values anew, and an array a value holds is the caller's: what is done to it changes
-     * nothing of these bindings, nor of the values another call returns.</p>
+     * <p>Each is the value as it was read: for the bindings of an interceptor class or an element, as the processor
+     * recorded it, with the members that bind and the members excluded from the binding listed under
+     * {@value AnnotationUtil#NON_BINDING_ATTRIBUTE}. Two values that are the same binding are one, so a binding
+     * declared twice is here once. Read back through {@link #ofValues(Collection)}, the values are these bindings
+     * again.</p>
      *
      * @return The values, unmodifiable
      */
     public List<AnnotationValue<?>> values() {
-        List<AnnotationValue<?>> built = new ArrayList<>(bindings.size());
-        for (BindingValue binding : bindings) {
-            built.add(binding.toAnnotationValue());
-        }
-        return Collections.unmodifiableList(built);
+        return bindings;
     }
 
     /**
@@ -362,14 +236,13 @@ public final class InterceptorBindings {
      *
      * <p>An interceptor declaring no binding is bound to nothing: it applies only where an element names it.</p>
      *
-     * <p>It is Micronaut's exact interceptor binding rule, {@link ExactInterceptorBindingQualifier#matches(Collection)},
-     * applied to the bindings in the shape they are compared in.</p>
+     * <p>It is Micronaut's exact interceptor binding rule, {@link ExactInterceptorBindingQualifier#matches(Collection)}.</p>
      *
      * @param point The bindings of the interception point
      * @return Whether the interceptor is bound to the point
      */
     public boolean isBoundBy(InterceptorBindings point) {
-        return point.point.matches(matched);
+        return point.point.matches(bindings);
     }
 
     /**

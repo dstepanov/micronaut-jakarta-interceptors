@@ -15,7 +15,6 @@
  */
 package io.micronaut.interceptor.internal.runtime;
 
-import io.micronaut.core.annotation.AnnotationUtil;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.interceptor.metadata.InterceptionKind;
@@ -25,10 +24,9 @@ import org.jspecify.annotations.Nullable;
  * An interception as the processor recorded it on an element, used to find the chain of the element again without
  * reading the interception a second time.
  *
- * <p>Reading an interception into what its chain is built from brings each of its bindings into the shape bindings are
- * compared in, which copies the members and compares them pairwise. That is too much to do every time a bean is
- * created or an invocation looks its chain up, so the chain is remembered under the interception the processor
- * wrote, and that is read into a chain only the first time it is met. Two elements recorded alike share the entry;
+ * <p>Building a chain looks the interceptor classes bound to the interception up among the beans of the context. That
+ * is too much to do every time a bean is created, so the chain of a constructor or a lifecycle event is remembered
+ * under the interception the processor wrote, and built only the first time it is met. Two elements recorded alike share the entry;
  * two recorded differently but equal once read are two entries holding equal chains, which costs one more build when
  * the second is first met and nothing else.</p>
  *
@@ -42,8 +40,9 @@ import org.jspecify.annotations.Nullable;
  *
  * @param kind         The kind of interception
  * @param interception The interception as recorded, or {@code null} where the element records none
- * @param hash         The hash of the two, computed once. The members are hashed as Micronaut hashes the values of
- *                     an annotation; two interceptions that match yet hash apart are merely two entries
+ * @param hash         The hash of the two, computed once. The interception is hashed with
+ *                     {@link AnnotationValue#bindingHashCode()}, which agrees with
+ *                     {@link AnnotationValue#matches(AnnotationValue)}
  * @author Denis Stepanov
  * @since 1.0
  */
@@ -61,24 +60,8 @@ record RecordedKey(InterceptionKind kind, @Nullable AnnotationValue<?> intercept
         return new RecordedKey(kind, interception, hash(kind, hashOf(interception)));
     }
 
-    /**
-     * Reads the key of an interception as it was recorded for every kind of interception, hashing its members once.
-     *
-     * @param interception The interception as recorded, or {@code null} where the element records none
-     * @return The keys, by the ordinal of their kind
-     */
-    static RecordedKey[] ofEveryKind(@Nullable AnnotationValue<?> interception) {
-        int membersHash = hashOf(interception);
-        InterceptionKind[] kinds = InterceptionKind.values();
-        RecordedKey[] keys = new RecordedKey[kinds.length];
-        for (InterceptionKind kind : kinds) {
-            keys[kind.ordinal()] = new RecordedKey(kind, interception, hash(kind, membersHash));
-        }
-        return keys;
-    }
-
     private static int hashOf(@Nullable AnnotationValue<?> interception) {
-        return interception == null ? 0 : AnnotationUtil.calculateHashCode(interception.getValues());
+        return interception == null ? 0 : interception.bindingHashCode();
     }
 
     private static int hash(InterceptionKind kind, int membersHash) {

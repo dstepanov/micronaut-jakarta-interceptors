@@ -384,7 +384,7 @@ final class BeanInterceptionWriter {
             || method.hasDeclaredAnnotation(JakartaInterceptors.SCHEDULES);
         List<BindingValue> methodBindings = InterceptorBindingValues.ofMember(method, classBindings, excluded);
         // a binding the method declares replaces the one of the class, so the method carries a declaration of its
-        // own as soon as what it is bound by differs from what its class is bound by
+        // own as soon as what it is bound by, or the declaration of it, differs from what its class declares
         boolean replacesBindings = !sameBindings(classBindings, methodBindings);
         // Micronaut applies the advice a class declares to the public and package private methods of the class, and
         // leaves a protected one alone, although it is able to override it: the proxy is a subclass. The
@@ -406,11 +406,14 @@ final class BeanInterceptionWriter {
     }
 
     /**
-     * Whether two elements are bound by the same bindings, whatever order either of them declares them in.
+     * Whether two elements are bound by the same declarations of the same bindings, whatever order either of them
+     * declares them in: what an invocation reports is the declaration, the members excluded from a binding included.
      */
     private static boolean sameBindings(List<BindingValue> one,
                                         List<BindingValue> other) {
-        return Set.copyOf(one).equals(Set.copyOf(other));
+        return one.size() == other.size()
+            && one.stream().allMatch(binding -> other.stream().anyMatch(binding::isSameDeclaration))
+            && other.stream().allMatch(binding -> one.stream().anyMatch(binding::isSameDeclaration));
     }
 
     private static void bindingsMember(AnnotationValueBuilder<JakartaInterception> builder,

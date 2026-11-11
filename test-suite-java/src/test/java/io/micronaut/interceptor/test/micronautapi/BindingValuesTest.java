@@ -24,7 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * The bindings an interceptor was selected by, read as values through the Micronaut view of the context: the nearest
- * declaration of each, the members that do not bind included, with nothing built and nothing reflected on.
+ * declaration of each, the members that do not bind included and the ones that bind filled in with their defaults,
+ * with nothing built and nothing reflected on.
  *
  * <p>The annotation metadata of the element is ordinary Micronaut metadata, which merges the members a method leaves
  * out of a binding with the ones its class declares; the values do not, since the method's declaration is the
@@ -39,7 +40,7 @@ class BindingValuesTest {
             assertEquals("replaced", context.getBean(BandedService.class).replaced());
 
             assertEquals(List.of(
-                    "default value=(default) note=the method's",
+                    "default value=default note=the method's",
                     "default metadata value=class"),
                 BandedInterceptors.RECORDED);
         }

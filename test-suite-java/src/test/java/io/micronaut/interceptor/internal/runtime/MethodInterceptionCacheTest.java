@@ -3,7 +3,6 @@ package io.micronaut.interceptor.internal.runtime;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.context.annotation.Prototype;
 import io.micronaut.inject.ExecutableMethod;
-import io.micronaut.interceptor.metadata.InterceptionKind;
 import jakarta.annotation.PostConstruct;
 import jakarta.interceptor.AroundInvoke;
 import jakarta.interceptor.Interceptor;
@@ -24,8 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The interception a method records is read once and kept by the method, and the chain of every bean created of a
- * prototype is found under the key kept there.
+ * The chains of a method are kept by the method itself, which every bean of a prototype created in the context
+ * shares, also where another annotation of the method holds an evaluated expression.
  */
 class MethodInterceptionCacheTest {
 
@@ -85,10 +84,11 @@ class MethodInterceptionCacheTest {
             ExecutableMethod<EvaluatedPrototype, Object> work =
                 context.getBeanDefinition(EvaluatedPrototype.class).getRequiredMethod("work");
             assertTrue(work.getAnnotationMetadata().hasEvaluatedExpressions());
-            MethodInterception kept = work.getCachedUnevaluatedValue(MethodInterception.class, method -> {
-                throw new AssertionError("the interception is read from the compiled metadata alone, and kept");
+            MethodChains kept = work.getCachedUnevaluatedValue(MethodChains.class, method -> {
+                throw new AssertionError("the chains are built from the compiled metadata alone, and kept");
             });
-            assertSame(kept, work.getCachedUnevaluatedValue(MethodInterception.class, MethodInterception::of));
+            assertEquals(List.of(KeptInterceptor.class), kept.business()
+                .stream().<Class<?>>map(InterceptorReference::interceptorClass).toList());
         }
     }
 
@@ -97,22 +97,18 @@ class MethodInterceptionCacheTest {
         try (ApplicationContext context = ApplicationContext.run()) {
             InterceptorChainResolver resolver = context.getBean(InterceptorChainResolver.class);
             CALLS.clear();
-            assertEquals("worked", context.getBean(KeptPrototype.class).work());
-            long read = resolver.readInterceptions();
-
-            for (int i = 0; i < 100; i++) {
+            for (int i = 0; i < 101; i++) {
                 assertEquals("worked", context.getBean(KeptPrototype.class).work());
             }
 
-            assertEquals(read, resolver.readInterceptions(), "no bean reads the interception again");
             assertEquals(202, CALLS.size(), "each bean is created and invoked through its chain");
             ExecutableMethod<KeptPrototype, Object> work =
                 context.getBeanDefinition(KeptPrototype.class).getRequiredMethod("work");
-            MethodInterception kept = work.getCachedUnevaluatedValue(MethodInterception.class, method -> {
-                throw new AssertionError("the method keeps what it records once it has been invoked");
+            MethodChains kept = work.getCachedUnevaluatedValue(MethodChains.class, method -> {
+                throw new AssertionError("the method keeps its chains once it has been invoked");
             });
-            assertSame(kept.key(InterceptionKind.AROUND_INVOKE), kept.key(InterceptionKind.AROUND_INVOKE));
-            assertEquals(List.of(KeptInterceptor.class), resolver.resolve(io.micronaut.aop.InterceptorKind.AROUND, work, false)
+            assertSame(kept, resolver.chainsOf(work));
+            assertEquals(List.of(KeptInterceptor.class), kept.business()
                 .stream().<Class<?>>map(InterceptorReference::interceptorClass).toList());
         }
     }

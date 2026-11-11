@@ -136,6 +136,21 @@ class InterceptorBindingsTest {
     }
 
     /**
+     * An array held by an annotation a member holds stays the caller's as well.
+     */
+    @Test
+    void aNestedArrayTheBindingsWereReadFromStaysTheCallers() {
+        String[] tags = {"a"};
+        AnnotationValue<?> inner = value("test.Inner", Map.of("value", tags));
+        InterceptorBindings bindings = bindings(value(LOGGED, Map.of("inner", new AnnotationValue<?>[]{inner})));
+
+        tags[0] = "b";
+
+        assertTrue(bindings.isBoundBy(bindings(value(LOGGED, Map.of("inner",
+            new AnnotationValue<?>[]{value("test.Inner", Map.of("value", new String[]{"a"}))})))));
+    }
+
+    /**
      * An annotation held by a member compares by every member of it, the ones it defaults to included: an
      * annotation value's own {@code equals} would pass over a member the other one does not declare.
      */
@@ -171,41 +186,24 @@ class InterceptorBindingsTest {
     }
 
     /**
-     * The values read back are the bindings again, spelt as the processor records them, with the excluded members
-     * listed rather than held, and a binding declared twice there once.
+     * The values read back are the values the bindings were read from, a binding declared twice there once, and
+     * read again they are the same bindings.
      */
     @Test
-    void theValuesAreTheBindingsSpeltAsRecorded() {
+    void theValuesAreTheValuesTheBindingsWereReadFrom() {
         AnnotationValue<?> logged = AnnotationValue.builder(LOGGED)
             .member("unit", TimeUnit.SECONDS)
             .member("comment", "anything")
             .member(AnnotationUtil.NON_BINDING_ATTRIBUTE, new String[]{"comment"})
             .defaultValues(Map.of("level", "INFO"))
             .build();
-        InterceptorBindings bindings = bindings(logged, value(AUDITED, Map.of()), logged);
+        AnnotationValue<?> audited = value(AUDITED, Map.of());
+        InterceptorBindings bindings = bindings(logged, audited, logged);
 
-        List<AnnotationValue<?>> values = bindings.values();
-        assertEquals(2, values.size());
-        AnnotationValue<?> read = values.get(0);
-        assertEquals(LOGGED, read.getAnnotationName());
-        assertEquals("SECONDS", read.stringValue("unit").orElse(null));
-        assertEquals("INFO", read.stringValue("level").orElse(null));
-        assertFalse(read.contains("comment"));
-        assertEquals(List.of("comment"), List.of(read.stringValues(AnnotationUtil.NON_BINDING_ATTRIBUTE)));
-        assertEquals(bindings, InterceptorBindings.ofValues(values));
+        assertEquals(2, bindings.values().size());
+        assertTrue(bindings.values().get(0).matches(logged));
+        assertEquals(audited, bindings.values().get(1));
+        assertEquals(bindings, InterceptorBindings.ofValues(bindings.values()));
         assertEquals(List.of(), InterceptorBindings.ofValues(List.of()).values());
-    }
-
-    @Test
-    void theQualifierComparesByThePoint() {
-        InterceptorBindings point = bindings(value(LOGGED, Map.of("level", "INFO")));
-
-        assertEquals(InterceptorBindings.boundTo(point),
-            InterceptorBindings.boundTo(bindings(AnnotationValue.builder(LOGGED)
-                .defaultValues(Map.of("level", "INFO")).build())));
-        assertEquals(InterceptorBindings.boundTo(point).hashCode(),
-            InterceptorBindings.boundTo(bindings(value(LOGGED, Map.of("level", "INFO")))).hashCode());
-        assertNotEquals(InterceptorBindings.boundTo(point),
-            InterceptorBindings.boundTo(bindings(value(LOGGED, Map.of("level", "DEBUG")))));
     }
 }

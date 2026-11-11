@@ -26,7 +26,8 @@ anything else. See <<timeout,Timeout Methods>>.
 the types are checked.
 
 | `getContextData()`
-| A map shared by every interceptor of one invocation, and by any other Micronaut advice on the same invocation.
+| A map shared by every interceptor of one invocation. A Micronaut advice on the same invocation shares the
+attributes of `getMicronautInvocation()` instead.
 
 | `proceed()`
 | Continues to the next interceptor of the chain and finally to the intercepted element.

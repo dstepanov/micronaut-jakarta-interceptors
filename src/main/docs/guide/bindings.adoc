@@ -73,16 +73,18 @@ replaces all of the class's occurrences of it, as a single binding declared twic
 
 What is compared is worked out while the application compiles. The processor records the bindings of an
 interceptor class and of each element it may intercept as the values of the binding annotations, with the members
-they default to filled in and the members excluded from the binding left out, and the runtime compares those
+they default to filled in, the members excluded from the binding as declared and listed under `$nonBinding`, which
+leaves them out of every comparison, and the runtime compares those
 values member by member as it resolves the chain of an element. Nothing is built from the annotations and nothing
 reflects to compare them. The comparison itself is Micronaut's: two bindings are compared with
 `AnnotationValue.matches`, which compares an empty string with a member left out with no default, an enum constant
 with its name, a class with its class value and a primitive array with its boxed elements, so that a binding built
 from an annotation instance compares alike with the recorded one; and an interceptor class is bound to an element by Micronaut's
-`ExactInterceptorBindingQualifier` rule, applied to the bindings the processor recorded. The recorded values are read as they were recorded, without looking their defaults up
-again: Micronaut keeps the defaults of an annotation in a registry the whole application shares, which the
-reflection module adds to the first time it builds an instance of the annotation, and the bindings of an element
-read the same before and after that.
+`ExactInterceptorBindingQualifier` rule, applied to the bindings the processor recorded. `AnnotationValue.matches`
+fills in the defaults a value carries, which for a value read from metadata come from the registry of defaults the
+whole application shares, and which the reflection module adds to the first time it builds an instance of the
+annotation. A recorded binding already holds every member that binds, so what the registry gains - an empty string,
+or a default in another shape - changes nothing, and the bindings of an element read the same before and after.
 
 A module that has to answer the same question - which interceptors apply to these bindings? - asks
 api:interceptor.spi.InterceptorBindings[], which is the comparison the chains use. Its static
@@ -94,14 +96,9 @@ asked for the interceptors of a set of bindings, and the resolver of the chains 
 the same. Each definition it returns is the one `InterceptorMethods.of` reads the interceptor methods from and
 `InterceptorBindings.of` reads the bindings from. The `values()` of those bindings read them back as the values of
 their annotations, as the processor recorded them, which is what a module describing the bindings of an
-interceptor describes them from. A module comparing bindings one at a time - telling
-whether two are equivalent, or comparing qualifiers that leave out their `@Nonbinding` members as bindings do - asks
-api:interceptor.spi.BindingValues[], whose `normalize`, `matches` and `hashCode` compare one binding exactly as
-`InterceptorBindings` compares a set of them: the defaults a value carries filled in, the members either side lists
-as excluded left out, and of the members whose names start with `$` only the two Micronaut reserves, `$nonBinding`
-and `$stereotypes`, left out, before `AnnotationValue.matches` compares them. Its `hashCode` is the name of the
-annotation alone rather than `AnnotationValue.bindingHashCode`, since a member one value excludes may be one the
-other value holds.
+interceptor describes them from. A module comparing bindings one at a time compares them with Micronaut's
+`AnnotationValue.matches`, which is what `InterceptorBindings` compares them with: the defaults filled in and the
+members either side lists under `$nonBinding` left out.
 
 == Bindings that come from elsewhere
 

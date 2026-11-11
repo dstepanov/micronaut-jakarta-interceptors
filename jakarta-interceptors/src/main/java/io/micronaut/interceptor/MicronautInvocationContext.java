@@ -111,11 +111,13 @@ public interface MicronautInvocationContext extends InvocationContext {
      * only inherits from the method it overrides is not one of them, nor is a binding of the factory that produced
      * the bean, although the metadata of the element holds both; and occurrences of a repeatable binding that differ
      * only in a member that does not bind are one binding, reported once. Each is reported as the nearest
-     * declaration of it - the method's where it declares one, its class's otherwise. A member a declaration leaves to
-     * its default is not filled in from the declaration of the class; it is left out, and
-     * {@link AnnotationValue#getDefaultValues()} holds its default. The members that do not bind are reported as
-     * declared, since an interceptor may read them, and an evaluated expression is reported as the expression, as
-     * the comparison that bound the interceptor read it.</p>
+     * declaration of it - the method's where it declares one, its class's otherwise. A member that binds is always
+     * there: the processor records the declaration with the default of every binding member it leaves out filled in
+     * - the default of the annotation, never the value the class gave it - so {@code contains(member)} does not tell
+     * a declared member from a defaulted one. The members that do not bind are reported as declared, since an
+     * interceptor may read them, and listed under {@value io.micronaut.core.annotation.AnnotationUtil#NON_BINDING_ATTRIBUTE};
+     * an evaluated expression is reported as the expression, as the comparison that bound the interceptor read
+     * it.</p>
      *
      * <pre>{@code
      * for (AnnotationValue<?> binding : context.getInterceptorBindingValues()) {

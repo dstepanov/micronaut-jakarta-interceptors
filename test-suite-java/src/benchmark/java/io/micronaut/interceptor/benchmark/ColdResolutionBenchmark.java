@@ -3,7 +3,6 @@ package io.micronaut.interceptor.benchmark;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.interceptor.benchmark.generated.GeneratedBeans;
 import io.micronaut.interceptor.benchmark.generated.Invocations;
-import io.micronaut.interceptor.internal.runtime.InterceptorChainResolver;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -45,7 +44,6 @@ class ColdResolutionBenchmark {
         long[] firstResolution = new long[ITERATIONS];
         long[] cold = new long[ITERATIONS];
         long firstJvmIteration = -1;
-        int chains = 0;
         for (int i = -WARMUP; i < ITERATIONS; i++) {
             System.gc();
             long t0 = System.nanoTime();
@@ -53,7 +51,6 @@ class ColdResolutionBenchmark {
                 long t1 = System.nanoTime();
                 createAll(context);
                 long t2 = System.nanoTime();
-                chains = context.getBean(InterceptorChainResolver.class).cachedChains();
                 if (i == -WARMUP) {
                     firstJvmIteration = t2 - t0;
                 }
@@ -78,10 +75,10 @@ class ColdResolutionBenchmark {
         }
 
         String report = String.format(Locale.ROOT,
-            "%s beans=%d chains=%d | start median %.2f ms | first resolution median %.2f ms (p25 %.2f, p75 %.2f) "
+            "%s beans=%d | start median %.2f ms | first resolution median %.2f ms (p25 %.2f, p75 %.2f) "
                 + "| cold total median %.2f ms (p25 %.2f, p75 %.2f) | repeated creation of all median %.1f us "
                 + "(p25 %.1f, p75 %.1f) | first JVM iteration %.1f ms",
-            LABEL, GeneratedBeans.ALL.size(), chains,
+            LABEL, GeneratedBeans.ALL.size(),
             ms(percentile(start, 50)),
             ms(percentile(firstResolution, 50)), ms(percentile(firstResolution, 25)), ms(percentile(firstResolution, 75)),
             ms(percentile(cold, 50)), ms(percentile(cold, 25)), ms(percentile(cold, 75)),

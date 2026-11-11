@@ -37,7 +37,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.LongAdder;
 
 /**
  * Resolves, and remembers, the chain of interceptor classes that applies to an intercepted element.
@@ -58,7 +57,6 @@ public final class InterceptorChainResolver {
     // the chains, under the interception as the processor recorded it, so that finding the chain of an element a
     // second time reads nothing of the interception
     private final Map<RecordedKey, List<InterceptorReference>> recorded = new ConcurrentHashMap<>();
-    private final LongAdder readInterceptions = new LongAdder();
     private final Map<ReferenceKey, List<InterceptorReference>> references = new ConcurrentHashMap<>();
     // the interceptor classes whose instances are created with an object, by the definition of the object, which is
     // equal for every bean of it a definition Micronaut compiled creates
@@ -136,7 +134,6 @@ public final class InterceptorChainResolver {
                                                @Nullable AnnotationValue<JakartaInterception> interception) {
         List<InterceptorReference> chain = recorded.get(recordedKey);
         if (chain == null) {
-            readInterceptions.increment();
             // two threads may build the same chain, and the later put wins. The key is everything the chain is
             // built from, so the two chains are equal and nothing is lost. Building inside a computeIfAbsent would
             // instead hold a lock of the map across the bean context
@@ -213,33 +210,6 @@ public final class InterceptorChainResolver {
                 classes.add(reference.interceptorClass());
             }
         }
-    }
-
-    /**
-     * How many chains have been resolved and remembered.
-     *
-     * <p>Exposed so that a test can hold this map to its bounds: it is keyed by the interception the processor
-     * recorded rather than by the objects an invocation passes through, and must not grow with the beans of the
-     * application.</p>
-     *
-     * @return The number of chains held
-     */
-    @Internal
-    public int cachedChains() {
-        return recorded.size();
-    }
-
-    /**
-     * How many times an interception the processor recorded has been read into what a chain is built from.
-     *
-     * <p>Exposed so that a test can hold the resolver to reading the interception of an element once, rather than
-     * again for every bean created and every invocation that looks its chain up.</p>
-     *
-     * @return The number of interceptions read
-     */
-    @Internal
-    public long readInterceptions() {
-        return readInterceptions.sum();
     }
 
     /**

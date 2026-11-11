@@ -15,7 +15,6 @@
  */
 package io.micronaut.interceptor.internal.runtime;
 
-import io.micronaut.core.annotation.AnnotationUtil;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.interceptor.metadata.InterceptionKind;
@@ -41,8 +40,9 @@ import org.jspecify.annotations.Nullable;
  *
  * @param kind         The kind of interception
  * @param interception The interception as recorded, or {@code null} where the element records none
- * @param hash         The hash of the two, computed once. The members are hashed as Micronaut hashes the values of
- *                     an annotation; two interceptions that match yet hash apart are merely two entries
+ * @param hash         The hash of the two, computed once. The interception is hashed with
+ *                     {@link AnnotationValue#bindingHashCode()}, which agrees with
+ *                     {@link AnnotationValue#matches(AnnotationValue)}
  * @author Denis Stepanov
  * @since 1.0
  */
@@ -61,7 +61,7 @@ record RecordedKey(InterceptionKind kind, @Nullable AnnotationValue<?> intercept
     }
 
     private static int hashOf(@Nullable AnnotationValue<?> interception) {
-        return interception == null ? 0 : AnnotationUtil.calculateHashCode(interception.getValues());
+        return interception == null ? 0 : interception.bindingHashCode();
     }
 
     private static int hash(InterceptionKind kind, int membersHash) {

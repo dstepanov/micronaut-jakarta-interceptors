@@ -31,7 +31,7 @@ class InterceptorBindingValuesTest {
     }
 
     private static InterceptorBindings written(BindingValue binding) {
-        return InterceptorBindings.ofRecorded(List.of(binding.toAnnotationValue()));
+        return InterceptorBindings.ofValues(List.of(binding.toAnnotationValue()));
     }
 
     @Test

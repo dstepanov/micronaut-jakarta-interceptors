@@ -27,24 +27,21 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Function;
 
 /**
- * One interceptor binding, reduced to what it binds by. The processor reduces a binding with it before it records
- * it, and the runtime reads what was recorded with it, so that the two decide alike whether two bindings are one.
+ * One interceptor binding, reduced to what it binds by, as the processor records it. The runtime compares what was
+ * recorded with {@link AnnotationValue#matches(AnnotationValue)} as it was read, and so does this class, so that
+ * the two decide alike whether two bindings are one.
  *
  * <p>A binding is reduced to the members that take part in it:</p>
  * <ul>
  *     <li>the members the annotation defaults to are filled in, so that {@code @Logged} and
- *     {@code @Logged(level = "INFO")} are the same binding where {@code "INFO"} is the default. The defaults are
- *     those the value carries. A value the processor recorded has every default filled in already, and is read
- *     without them: Micronaut keeps the defaults of an annotation in a registry the whole application shares, which
- *     the reflection module adds to the first time it builds an instance of the annotation, so reading the
- *     defaults again would make the same recorded value read differently before and after;</li>
+ *     {@code @Logged(level = "INFO")} are the same binding where {@code "INFO"} is the default, and what is recorded
+ *     reads the same whatever defaults Micronaut registers for the annotation later;</li>
  *     <li>the members excluded from the binding, which is what {@code jakarta.enterprise.util.Nonbinding} does, are
  *     left out and listed under {@value AnnotationUtil#NON_BINDING_ATTRIBUTE};</li>
  *     <li>an empty string the processor finds no default for is left out of what it records, as Micronaut records
@@ -73,8 +70,6 @@ import java.util.function.Function;
  */
 @Internal
 public final class BindingValue {
-
-    private static final Function<String, Collection<String>> NONE_EXCLUDED = name -> List.of();
 
     private final String name;
     private final Set<String> nonBinding;
@@ -113,40 +108,18 @@ public final class BindingValue {
      * @return The binding
      */
     public static BindingValue reduce(AnnotationValue<?> annotation, Function<String, ? extends Collection<String>> excluded) {
-        return of(annotation, excluded, false, ReadMode.COMPILE);
-    }
-
-    /**
-     * Reads a binding the processor recorded, which has its defaults filled in already and is read without them.
-     *
-     * @param recorded The binding as recorded
-     * @return The binding
-     */
-    public static BindingValue ofRecorded(AnnotationValue<?> recorded) {
-        return of(recorded, NONE_EXCLUDED, false, ReadMode.RECORDED);
-    }
-
-    /**
-     * Reads a binding from any value of its annotation - one read from the metadata of an element, or one built from
-     * an annotation instance - with the defaults the value carries filled in.
-     *
-     * @param value The value of the binding annotation
-     * @return The binding
-     */
-    public static BindingValue of(AnnotationValue<?> value) {
-        return of(value, NONE_EXCLUDED, false, ReadMode.VALUE);
+        return of(annotation, excluded, false);
     }
 
     private static BindingValue of(AnnotationValue<?> annotation,
                                    Function<String, ? extends Collection<String>> excluded,
-                                   boolean nested,
-                                   ReadMode mode) {
+                                   boolean nested) {
         String name = annotation.getAnnotationName();
         // the keys are read as strings so that two bindings compare by the names of their members, which a
         // CharSequence does not promise to do
         Map<String, Object> members = new LinkedHashMap<>();
         Set<String> defaulted = new TreeSet<>();
-        Map<CharSequence, Object> defaults = mode.withDefaults ? annotation.getDefaultValues() : null;
+        Map<CharSequence, Object> defaults = annotation.getDefaultValues();
         if (defaults != null) {
             defaults.forEach((member, value) -> {
                 members.put(member.toString(), value);
@@ -154,9 +127,7 @@ public final class BindingValue {
             });
         }
         annotation.getValues().forEach((member, value) -> members.put(member.toString(), value));
-        if (mode.leavesOutUndefaultedEmptyStrings) {
-            members.entrySet().removeIf(entry -> !defaulted.contains(entry.getKey()) && isEmptyString(entry.getValue()));
-        }
+        members.entrySet().removeIf(entry -> !defaulted.contains(entry.getKey()) && isEmptyString(entry.getValue()));
         Set<String> nonBinding = new TreeSet<>(Arrays.asList(annotation.stringValues(AnnotationUtil.NON_BINDING_ATTRIBUTE)));
         // Micronaut lists the member it records them under among them, which is no member of the annotation; kept,
         // it would set a binding read from the metadata apart from the same binding as recorded
@@ -168,7 +139,7 @@ public final class BindingValue {
         members.remove(AnnotationUtil.STEREOTYPES_MEMBER);
         members.keySet().removeAll(nonBinding);
         Map<String, Object> written = CollectionUtils.newLinkedHashMap(members.size());
-        members.forEach((member, value) -> written.put(member, writable(value, excluded, mode)));
+        members.forEach((member, value) -> written.put(member, writable(value, excluded)));
         return new BindingValue(name, Collections.unmodifiableSet(nonBinding), Collections.unmodifiableMap(written));
     }
 
@@ -209,14 +180,6 @@ public final class BindingValue {
      */
     public boolean matches(BindingValue other) {
         return matched.matches(other.matched);
-    }
-
-    /**
-     * @return The binding as a value of its annotation in the shape it is compared in, which
-     * {@link AnnotationValue#matches(AnnotationValue)} compares with another binding in that shape
-     */
-    public AnnotationValue<?> matched() {
-        return matched;
     }
 
     /**
@@ -295,16 +258,14 @@ public final class BindingValue {
      * a class as an {@link AnnotationClassValue}, with an annotation it holds reduced as a binding is. An array keeps
      * its type, which is what Micronaut writes the metadata of an annotation from.
      */
-    private static Object writable(Object value,
-                                   Function<String, ? extends Collection<String>> excluded,
-                                   ReadMode mode) {
+    private static Object writable(Object value, Function<String, ? extends Collection<String>> excluded) {
         if (value instanceof AnnotationValue<?> annotation) {
-            return of(annotation, excluded, true, mode).toAnnotationValue();
+            return of(annotation, excluded, true).toAnnotationValue();
         }
         if (value instanceof AnnotationValue<?>[] annotations) {
             AnnotationValue<?>[] written = new AnnotationValue<?>[annotations.length];
             for (int i = 0; i < annotations.length; i++) {
-                written[i] = of(annotations[i], excluded, true, mode).toAnnotationValue();
+                written[i] = of(annotations[i], excluded, true).toAnnotationValue();
             }
             return written;
         }
@@ -323,40 +284,9 @@ public final class BindingValue {
                 .toArray(AnnotationClassValue<?>[]::new);
         }
         if (value instanceof EvaluatedExpressionReference expression) {
-            return writable(expression.annotationValue(), excluded, mode);
+            return writable(expression.annotationValue(), excluded);
         }
         // an array is copied, as the one the binding was read from stays the caller's
         return copyOf(value);
-    }
-
-    /**
-     * How a binding is read, which an annotation its members hold is read the same way as.
-     */
-    private enum ReadMode {
-
-        /**
-         * A binding annotation as the processor reduces it before recording it: the defaults the value carries are
-         * filled in, and an empty string it carries no default for is left out, see {@link BindingValue#reduce}.
-         */
-        COMPILE(true, true),
-
-        /**
-         * Any value of a binding annotation: the defaults the value carries are filled in, see {@link BindingValue#of}.
-         */
-        VALUE(true, false),
-
-        /**
-         * A binding the processor recorded, which has its defaults filled in already and is read without them, see
-         * {@link BindingValue#ofRecorded}.
-         */
-        RECORDED(false, false);
-
-        private final boolean withDefaults;
-        private final boolean leavesOutUndefaultedEmptyStrings;
-
-        ReadMode(boolean withDefaults, boolean leavesOutUndefaultedEmptyStrings) {
-            this.withDefaults = withDefaults;
-            this.leavesOutUndefaultedEmptyStrings = leavesOutUndefaultedEmptyStrings;
-        }
     }
 }

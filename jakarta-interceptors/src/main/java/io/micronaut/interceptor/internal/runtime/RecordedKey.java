@@ -25,10 +25,9 @@ import org.jspecify.annotations.Nullable;
  * An interception as the processor recorded it on an element, used to find the chain of the element again without
  * reading the interception a second time.
  *
- * <p>Reading an interception into what its chain is built from brings each of its bindings into the shape bindings are
- * compared in, which copies the members and compares them pairwise. That is too much to do every time a bean is
- * created or an invocation looks its chain up, so the chain is remembered under the interception the processor
- * wrote, and that is read into a chain only the first time it is met. Two elements recorded alike share the entry;
+ * <p>Building a chain looks the interceptor classes bound to the interception up among the beans of the context. That
+ * is too much to do every time a bean is created, so the chain of a constructor or a lifecycle event is remembered
+ * under the interception the processor wrote, and built only the first time it is met. Two elements recorded alike share the entry;
  * two recorded differently but equal once read are two entries holding equal chains, which costs one more build when
  * the second is first met and nothing else.</p>
  *

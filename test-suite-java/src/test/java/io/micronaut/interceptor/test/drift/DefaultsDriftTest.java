@@ -39,13 +39,14 @@ class DefaultsDriftTest {
             InterceptorBindings interceptorBefore = InterceptorBindings.of(interceptor);
             InterceptorBindings declaredBefore = InterceptorBindings.ofValues(List.of(declared));
 
+            // a value keeps the defaults it was first asked for: asked now, before the instance is built
+            assertFalse(declared.getDefaultValues().containsKey("value"));
             Drifting instance = ReflectionAnnotations.synthesize(Drifting.class, declared);
             assertEquals("", instance.value());
             // a value keeps the defaults it was first asked for, so the declaration is read again to be read with
             // the defaults the registry holds now - which are not the ones it held before
             AnnotationValue<Drifting> redeclared = service.getAnnotationMetadata().getAnnotation(Drifting.class);
             assertNotNull(redeclared);
-            assertFalse(declared.getDefaultValues().containsKey("value"));
             assertEquals("", redeclared.getDefaultValues().get("value"));
 
             InterceptorBindings pointAfter = recordedOn(service.getAnnotationMetadata());

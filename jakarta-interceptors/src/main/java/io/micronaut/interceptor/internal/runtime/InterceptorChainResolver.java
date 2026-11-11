@@ -254,7 +254,7 @@ public final class InterceptorChainResolver {
         }
         Collection<BeanDefinition<?>> ordered = ordered(
             List.of(interception.classValues(JakartaInterception.INTERCEPTORS)),
-            InterceptorBindings.ofRecorded(interception.getAnnotations(JakartaInterception.BINDINGS)));
+            InterceptorBindings.ofValues(interception.getAnnotations(JakartaInterception.BINDINGS)));
         // the interceptor methods a class declares on itself are invoked after every interceptor class
         Class<?> self = interception.classValue(JakartaInterception.SELF).filter(type -> type != void.class).orElse(null);
         List<InterceptorReference> chain = new ArrayList<>(ordered.size() + 1);

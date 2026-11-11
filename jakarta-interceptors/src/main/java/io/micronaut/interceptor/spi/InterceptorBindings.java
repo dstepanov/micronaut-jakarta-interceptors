@@ -18,7 +18,6 @@ package io.micronaut.interceptor.spi;
 import io.micronaut.aop.ExactInterceptorBindingQualifier;
 import io.micronaut.aop.InterceptorKind;
 import io.micronaut.context.BeanContext;
-import io.micronaut.context.Qualifier;
 import io.micronaut.core.annotation.AnnotationClassValue;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationUtil;
@@ -30,7 +29,6 @@ import io.micronaut.inject.annotation.AnnotationMetadataHierarchy;
 import io.micronaut.interceptor.internal.metadata.BindingValue;
 import io.micronaut.interceptor.internal.metadata.JakartaInterception;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorMethods;
-import io.micronaut.interceptor.internal.runtime.BoundInterceptorQualifier;
 import io.micronaut.interceptor.internal.runtime.InterceptorChainResolver;
 import org.jspecify.annotations.Nullable;
 
@@ -112,18 +110,6 @@ public final class InterceptorBindings {
         AnnotationValue<JakartaInterceptorMethods> recorded =
             interceptor.getAnnotation(JakartaInterceptorMethods.class);
         return recorded == null ? NONE : ofRecorded(recorded.getAnnotations(JakartaInterceptorMethods.BINDINGS));
-    }
-
-    /**
-     * Reads the bindings of an intercepted element - a class, a constructor, a method or the member of a factory -
-     * as the processor recorded them on it.
-     *
-     * @param metadata The annotation metadata of the element
-     * @return The bindings, none where the element is bound by none
-     */
-    public static InterceptorBindings ofInterceptionPoint(AnnotationMetadata metadata) {
-        AnnotationValue<JakartaInterception> interception = metadata.getAnnotation(JakartaInterception.class);
-        return interception == null ? NONE : ofRecorded(interception.getAnnotations(JakartaInterception.BINDINGS));
     }
 
     /**
@@ -271,21 +257,6 @@ public final class InterceptorBindings {
             }
         }
         return new InterceptorBindings(Collections.unmodifiableList(read));
-    }
-
-    /**
-     * A qualifier that selects, among the beans of interceptor classes, the ones bound to an interception point.
-     *
-     * <p>It compares the bindings and nothing else: which interceptor classes are enabled, and the order they are
-     * invoked in, are left to whatever uses it. {@link #boundInterceptors(BeanContext, InterceptorBindings)} is the
-     * selection the chains make, those included.</p>
-     *
-     * @param point The bindings of the interception point
-     * @param <T>   The type the beans are looked up by
-     * @return The qualifier, which compares by the bindings of the point
-     */
-    public static <T> Qualifier<T> boundTo(InterceptorBindings point) {
-        return new BoundInterceptorQualifier<>(point);
     }
 
     /**

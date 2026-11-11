@@ -94,14 +94,9 @@ asked for the interceptors of a set of bindings, and the resolver of the chains 
 the same. Each definition it returns is the one `InterceptorMethods.of` reads the interceptor methods from and
 `InterceptorBindings.of` reads the bindings from. The `values()` of those bindings read them back as the values of
 their annotations, as the processor recorded them, which is what a module describing the bindings of an
-interceptor describes them from. A module comparing bindings one at a time - telling
-whether two are equivalent, or comparing qualifiers that leave out their `@Nonbinding` members as bindings do - asks
-api:interceptor.spi.BindingValues[], whose `normalize`, `matches` and `hashCode` compare one binding exactly as
-`InterceptorBindings` compares a set of them: the defaults a value carries filled in, the members either side lists
-as excluded left out, and of the members whose names start with `$` only the two Micronaut reserves, `$nonBinding`
-and `$stereotypes`, left out, before `AnnotationValue.matches` compares them. Its `hashCode` is the name of the
-annotation alone rather than `AnnotationValue.bindingHashCode`, since a member one value excludes may be one the
-other value holds.
+interceptor describes them from. A module comparing bindings one at a time compares them with Micronaut's
+`AnnotationValue.matches`, which is what `InterceptorBindings` compares them with: the defaults filled in and the
+members either side lists under `$nonBinding` left out.
 
 == Bindings that come from elsewhere
 

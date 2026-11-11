@@ -195,17 +195,4 @@ class InterceptorBindingsTest {
         assertEquals(bindings, InterceptorBindings.ofValues(values));
         assertEquals(List.of(), InterceptorBindings.ofValues(List.of()).values());
     }
-
-    @Test
-    void theQualifierComparesByThePoint() {
-        InterceptorBindings point = bindings(value(LOGGED, Map.of("level", "INFO")));
-
-        assertEquals(InterceptorBindings.boundTo(point),
-            InterceptorBindings.boundTo(bindings(AnnotationValue.builder(LOGGED)
-                .defaultValues(Map.of("level", "INFO")).build())));
-        assertEquals(InterceptorBindings.boundTo(point).hashCode(),
-            InterceptorBindings.boundTo(bindings(value(LOGGED, Map.of("level", "INFO")))).hashCode());
-        assertNotEquals(InterceptorBindings.boundTo(point),
-            InterceptorBindings.boundTo(bindings(value(LOGGED, Map.of("level", "DEBUG")))));
-    }
 }

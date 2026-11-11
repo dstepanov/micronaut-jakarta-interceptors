@@ -7,6 +7,7 @@ import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.order.OrderUtil;
 import io.micronaut.inject.BeanDefinition;
+import io.micronaut.interceptor.internal.metadata.JakartaInterception;
 import io.micronaut.interceptor.spi.InterceptorBindings;
 import io.micronaut.interceptor.spi.InterceptorMethods;
 import jakarta.annotation.Priority;
@@ -21,6 +22,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.util.Arrays;
+import java.util.List;
 
 import static java.lang.annotation.ElementType.METHOD;
 import static java.lang.annotation.ElementType.TYPE;
@@ -87,7 +89,7 @@ class MicronautBindingGapsTest {
 
             assertFalse(ExactInterceptorBindingQualifier.of(work, InterceptorKind.AROUND).matches(interceptor.getAnnotationMetadata()),
                 "Micronaut");
-            assertTrue(InterceptorBindings.of(interceptor).isBoundBy(InterceptorBindings.ofInterceptionPoint(work)), "module");
+            assertTrue(InterceptorBindings.of(interceptor).isBoundBy(recordedOn(work)), "module");
         }
     }
 
@@ -112,5 +114,15 @@ class MicronautBindingGapsTest {
         // Micronaut has a kind for a method, a constructor and the two lifecycle events, but none for an
         // @AroundTimeout method, which the module intercepts a scheduled method with
         assertTrue(Arrays.stream(InterceptorKind.values()).noneMatch(kind -> kind.name().contains("TIMEOUT")), "Micronaut");
+    }
+
+    /**
+     * The bindings the processor recorded on an intercepted element.
+     */
+    private static InterceptorBindings recordedOn(AnnotationMetadata metadata) {
+        AnnotationValue<JakartaInterception> interception = metadata.getAnnotation(JakartaInterception.class);
+        return InterceptorBindings.ofValues(interception == null
+            ? List.of()
+            : interception.getAnnotations(JakartaInterception.BINDINGS));
     }
 }

@@ -1,8 +1,10 @@
 package io.micronaut.interceptor.test.drift;
 
 import io.micronaut.context.ApplicationContext;
+import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.inject.BeanDefinition;
+import io.micronaut.interceptor.internal.metadata.JakartaInterception;
 import io.micronaut.interceptor.spi.InterceptorBindings;
 import io.micronaut.reflection.ReflectionAnnotations;
 import org.junit.jupiter.api.Test;
@@ -33,7 +35,7 @@ class DefaultsDriftTest {
             AnnotationValue<Drifting> declared = service.getAnnotationMetadata().getAnnotation(Drifting.class);
             assertNotNull(declared);
 
-            InterceptorBindings pointBefore = InterceptorBindings.ofInterceptionPoint(service.getAnnotationMetadata());
+            InterceptorBindings pointBefore = recordedOn(service.getAnnotationMetadata());
             InterceptorBindings interceptorBefore = InterceptorBindings.of(interceptor);
             InterceptorBindings declaredBefore = InterceptorBindings.ofValues(List.of(declared));
 
@@ -46,7 +48,7 @@ class DefaultsDriftTest {
             assertFalse(declared.getDefaultValues().containsKey("value"));
             assertEquals("", redeclared.getDefaultValues().get("value"));
 
-            InterceptorBindings pointAfter = InterceptorBindings.ofInterceptionPoint(service.getAnnotationMetadata());
+            InterceptorBindings pointAfter = recordedOn(service.getAnnotationMetadata());
             InterceptorBindings interceptorAfter = InterceptorBindings.of(interceptor);
             InterceptorBindings declaredAfter = InterceptorBindings.ofValues(List.of(redeclared));
 
@@ -88,5 +90,15 @@ class DefaultsDriftTest {
             assertEquals("INFO", value.stringValue("level").orElse(null));
             assertEquals(bindings, InterceptorBindings.ofValues(values));
         }
+    }
+
+    /**
+     * The bindings the processor recorded on an intercepted element.
+     */
+    private static InterceptorBindings recordedOn(AnnotationMetadata metadata) {
+        AnnotationValue<JakartaInterception> interception = metadata.getAnnotation(JakartaInterception.class);
+        return InterceptorBindings.ofValues(interception == null
+            ? List.of()
+            : interception.getAnnotations(JakartaInterception.BINDINGS));
     }
 }

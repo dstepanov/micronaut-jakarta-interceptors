@@ -43,17 +43,10 @@ import java.util.stream.Stream;
  * @since 1.0
  */
 @Internal
-public final class BoundInterceptorQualifier<T> implements Qualifier<T> {
+final class BoundInterceptorQualifier<T> implements Qualifier<T> {
 
     private final InterceptorBindings point;
     private final Function<BeanType<?>, InterceptorBindings> bindingsOf;
-
-    /**
-     * @param point The bindings of the interception point
-     */
-    public BoundInterceptorQualifier(InterceptorBindings point) {
-        this(point, InterceptorBindings::of);
-    }
 
     /**
      * @param point      The bindings of the interception point

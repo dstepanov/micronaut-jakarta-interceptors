@@ -21,7 +21,7 @@ import io.micronaut.core.annotation.Internal;
 import io.micronaut.core.convert.value.MutableConvertibleValues;
 import io.micronaut.core.type.Argument;
 import io.micronaut.interceptor.MicronautInvocationContext;
-import io.micronaut.interceptor.spi.InterceptorBindings;
+import io.micronaut.interceptor.internal.metadata.JakartaInterception;
 import jakarta.interceptor.InvocationContext;
 import org.jspecify.annotations.Nullable;
 
@@ -288,10 +288,9 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
      * <p>Which bindings they are, and how many occurrences of a repeatable one, is what the processor recorded on the
      * element, which is what resolving the chain read: a binding only the method an element overrides declares, or
      * that only the factory producing a bean declares, is not one of them, although the metadata of the element
-     * holds it, and occurrences that differ only in a member that does not bind are one binding. What was recorded
-     * holds only the members that bind, so each binding is reported as the declaration it was reduced from, which
-     * holds the members that do not bind as well: the nearest declaration of it that is the same binding, the
-     * element's before its class's.</p>
+     * holds it, and occurrences that differ only in a member that does not bind are one binding. The processor
+     * records the nearest declaration of each, the element's before its class's, with the members that do not bind
+     * as it declares them and the defaults of the others filled in.</p>
      *
      * @return The values of the bindings
      */
@@ -306,7 +305,11 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     }
 
     final List<AnnotationValue<?>> readBindingValues() {
-        return InterceptorBindings.declarations(bindingMetadata());
+        AnnotationValue<JakartaInterception> interception = bindingMetadata().getAnnotation(JakartaInterception.class);
+        if (interception == null) {
+            return List.of();
+        }
+        return Collections.unmodifiableList(interception.getAnnotations(JakartaInterception.BINDINGS));
     }
 
     final Set<Annotation> resolveBindings() {

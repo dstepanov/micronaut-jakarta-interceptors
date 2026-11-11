@@ -138,7 +138,7 @@ class InterceptorBindingValuesTest {
      * member it lists them under; the type's are not asked for, as Micronaut records every one of them.
      */
     @Test
-    void theExcludedMembersAreLeftOutAndListed() {
+    void theExcludedMembersAreKeptAsDeclaredAndListed() {
         AnnotationValue<?> declared = AnnotationValue.builder(BINDING)
             .member("value", "a")
             .member("comment", "x")
@@ -152,9 +152,13 @@ class InterceptorBindingValuesTest {
 
         AnnotationValue<?> written = binding.toAnnotationValue();
         assertEquals("a", written.stringValue().orElse(null));
-        assertFalse(written.contains("comment"));
-        assertFalse(written.contains("note"));
+        assertEquals("x", written.stringValue("comment").orElse(null));
+        assertEquals("y", written.stringValue("note").orElse(null));
         assertArrayEquals(new String[]{"comment", "note"}, written.stringValues(AnnotationUtil.NON_BINDING_ATTRIBUTE));
+        assertEquals(binding, InterceptorBindingValues.of(AnnotationValue.builder(BINDING)
+            .member("value", "a")
+            .member(AnnotationUtil.NON_BINDING_ATTRIBUTE, new String[]{"comment", "note"})
+            .build(), name -> List.of()));
         assertTrue(InterceptorBindings.ofValues(List.of(written)).isBoundBy(InterceptorBindings.ofValues(List.of(
             AnnotationValue.builder(BINDING).member("value", "a").member("comment", "z").member("note", "w").build()))));
     }
@@ -164,7 +168,7 @@ class InterceptorBindingValuesTest {
      * supplied off the type.
      */
     @Test
-    void anAnnotationAMemberHoldsHasTheMembersItsTypeExcludesLeftOut() {
+    void anAnnotationAMemberHoldsListsTheMembersItsTypeExcludes() {
         AnnotationValue<?> held = AnnotationValue.builder("test.Held").member("value", "a").member("note", "y").build();
         AnnotationValue<?> declared = AnnotationValue.builder(BINDING).member("value", held).build();
 
@@ -173,7 +177,7 @@ class InterceptorBindingValuesTest {
 
         AnnotationValue<?> written = binding.toAnnotationValue().getAnnotation("value").orElseThrow();
         assertEquals("a", written.stringValue().orElse(null));
-        assertFalse(written.contains("note"));
+        assertEquals("y", written.stringValue("note").orElse(null));
         assertArrayEquals(new String[]{"note"}, written.stringValues(AnnotationUtil.NON_BINDING_ATTRIBUTE));
     }
 

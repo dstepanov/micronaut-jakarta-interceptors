@@ -73,7 +73,8 @@ replaces all of the class's occurrences of it, as a single binding declared twic
 
 What is compared is worked out while the application compiles. The processor records the bindings of an
 interceptor class and of each element it may intercept as the values of the binding annotations, with the members
-they default to filled in and the members excluded from the binding left out, and the runtime compares those
+they default to filled in, the members excluded from the binding as declared and listed under `$nonBinding`, which
+leaves them out of every comparison, and the runtime compares those
 values member by member as it resolves the chain of an element. Nothing is built from the annotations and nothing
 reflects to compare them. The comparison itself is Micronaut's: two bindings are compared with
 `AnnotationValue.matches`, which compares an empty string with a member left out with no default, an enum constant

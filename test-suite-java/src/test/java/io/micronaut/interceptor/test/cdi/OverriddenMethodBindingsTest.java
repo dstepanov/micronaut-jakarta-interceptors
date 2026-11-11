@@ -3,7 +3,7 @@ package io.micronaut.interceptor.test.cdi;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.interceptor.MicronautInvocationContext;
-import io.micronaut.interceptor.spi.InterceptorBindings;
+import io.micronaut.interceptor.internal.metadata.JakartaInterception;
 import jakarta.enterprise.util.Nonbinding;
 import jakarta.inject.Singleton;
 import jakarta.interceptor.AroundInvoke;
@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
@@ -156,14 +157,16 @@ class OverriddenMethodBindingsTest {
     }
 
     /**
-     * Another module asks for the declarations of the bindings of an element as its invocations report them.
+     * The processor records the declarations of the bindings of an element, which its invocations report.
      */
     @Test
-    void anotherModuleIsAnsweredWithTheDeclarationsTheInvocationsReport() {
+    void theProcessorRecordsTheDeclarationsTheInvocationsReport() {
         try (ApplicationContext context = ApplicationContext.run()) {
             List<String> remarks = new ArrayList<>();
-            for (AnnotationValue<?> declaration : InterceptorBindings.declarations(context
-                .getBeanDefinition(RemarkedOverridingService.class).getRequiredMethod("remarked").getAnnotationMetadata())) {
+            AnnotationValue<JakartaInterception> interception = context.getBeanDefinition(RemarkedOverridingService.class)
+                .getRequiredMethod("remarked").getAnnotationMetadata().getAnnotation(JakartaInterception.class);
+            assertNotNull(interception);
+            for (AnnotationValue<?> declaration : interception.getAnnotations(JakartaInterception.BINDINGS)) {
                 if (declaration.getAnnotationName().equals(Remarked.class.getName())) {
                     remarks.add(declaration.stringValue().orElse(""));
                 }

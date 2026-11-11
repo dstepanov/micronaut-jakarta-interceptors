@@ -28,6 +28,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Function;
@@ -74,13 +75,18 @@ public final class BindingValue {
     private final String name;
     private final Set<String> nonBinding;
     private final Map<String, Object> members;
+    // the members excluded from the binding, as the declaration gives them: recorded so that the bindings an
+    // invocation reports are the declaration, and left out of every comparison by the list of excluded members
+    private final Map<String, Object> excludedMembers;
     // the binding as Micronaut compares and hashes two annotations, see matches
     private final AnnotationValue<?> matched;
 
-    private BindingValue(String name, Set<String> nonBinding, Map<String, Object> members) {
+    private BindingValue(String name, Set<String> nonBinding, Map<String, Object> members,
+                         Map<String, Object> excludedMembers) {
         this.name = name;
         this.nonBinding = nonBinding;
         this.members = members;
+        this.excludedMembers = excludedMembers;
         Map<CharSequence, Object> matchedMembers = CollectionUtils.newLinkedHashMap(members.size() + 1);
         matchedMembers.putAll(members);
         if (!nonBinding.isEmpty()) {
@@ -137,10 +143,17 @@ public final class BindingValue {
         }
         members.remove(AnnotationUtil.NON_BINDING_ATTRIBUTE);
         members.remove(AnnotationUtil.STEREOTYPES_MEMBER);
+        Map<String, Object> excludedMembers = new LinkedHashMap<>();
+        annotation.getValues().forEach((member, value) -> {
+            if (nonBinding.contains(member.toString())) {
+                excludedMembers.put(member.toString(), writable(value, excluded));
+            }
+        });
         members.keySet().removeAll(nonBinding);
         Map<String, Object> written = CollectionUtils.newLinkedHashMap(members.size());
         members.forEach((member, value) -> written.put(member, writable(value, excluded)));
-        return new BindingValue(name, Collections.unmodifiableSet(nonBinding), Collections.unmodifiableMap(written));
+        return new BindingValue(name, Collections.unmodifiableSet(nonBinding), Collections.unmodifiableMap(written),
+            Collections.unmodifiableMap(excludedMembers));
     }
 
     /**
@@ -152,8 +165,8 @@ public final class BindingValue {
 
     /**
      * The binding as a value of its annotation, as the processor records it: the members that bind, spelt as
-     * Micronaut records them, and the members excluded from it listed under
-     * {@value AnnotationUtil#NON_BINDING_ATTRIBUTE}.
+     * Micronaut records them, the members excluded from it as the declaration gives them, and the excluded members
+     * listed under {@value AnnotationUtil#NON_BINDING_ATTRIBUTE}, which leaves them out of every comparison.
      *
      * <p>Every call builds a value of its own, whose arrays are copies: what is done to them changes nothing of the
      * binding.</p>
@@ -161,8 +174,9 @@ public final class BindingValue {
      * @return The value
      */
     public AnnotationValue<?> toAnnotationValue() {
-        Map<CharSequence, Object> written = CollectionUtils.newLinkedHashMap(members.size() + 1);
+        Map<CharSequence, Object> written = CollectionUtils.newLinkedHashMap(members.size() + excludedMembers.size() + 1);
         members.forEach((member, value) -> written.put(member, copyOf(value)));
+        excludedMembers.forEach((member, value) -> written.put(member, copyOf(value)));
         // the excluded members are listed for whatever the binding is compared with, which may be the value of an
         // annotation instance that carries all of its members and says nothing of which bind
         if (!nonBinding.isEmpty()) {
@@ -180,6 +194,26 @@ public final class BindingValue {
      */
     public boolean matches(BindingValue other) {
         return matched.matches(other.matched);
+    }
+
+    /**
+     * Whether this and another binding are the same declaration: the same binding, whose excluded members the
+     * declarations give alike as well. An element declaring a binding that differs from the one of its class only in
+     * a member excluded from it is bound alike, but reports its own declaration.
+     *
+     * @param other The other binding
+     * @return Whether the two are the same declaration
+     */
+    public boolean isSameDeclaration(BindingValue other) {
+        if (!matches(other) || !excludedMembers.keySet().equals(other.excludedMembers.keySet())) {
+            return false;
+        }
+        for (Map.Entry<String, Object> member : excludedMembers.entrySet()) {
+            if (!Objects.deepEquals(member.getValue(), other.excludedMembers.get(member.getKey()))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

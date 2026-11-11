@@ -18,7 +18,6 @@ package io.micronaut.interceptor.internal.runtime;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
-import io.micronaut.core.convert.value.MutableConvertibleValues;
 import io.micronaut.core.type.Argument;
 import io.micronaut.interceptor.MicronautInvocationContext;
 import io.micronaut.interceptor.internal.metadata.JakartaInterception;
@@ -30,6 +29,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -49,19 +49,15 @@ import java.util.Set;
 abstract sealed class AbstractInvocationContext implements MicronautInvocationContext
     permits BusinessMethodInvocationContext, ConstructorInvocationContextAdapter, LifecycleInvocationContext {
 
-    /**
-     * The attribute the context data is shared under. The Micronaut interceptor chain owns one attribute map for
-     * the whole chain, so the context data is visible not only to the interceptor classes of this chain but also
-     * to any other advice of the same invocation.
-     */
-    private static final String CONTEXT_DATA = "io.micronaut.interceptor.contextData";
-
     private final io.micronaut.aop.InvocationContext<Object, ?> context;
     private final List<InterceptorReference> chain;
     private final JakartaInterceptorAdvice advice;
     private int index;
     private @Nullable List<AnnotationValue<?>> bindingValues;
     private @Nullable Set<Annotation> bindings;
+    // one context drives the whole chain of an invocation and is handed to every interceptor of it, which is what the
+    // specification shares the context data between
+    private @Nullable Map<String, Object> contextData;
 
     AbstractInvocationContext(io.micronaut.aop.InvocationContext<Object, ?> context,
                               List<InterceptorReference> chain,
@@ -152,26 +148,12 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
 
     @Override
     public Map<String, Object> getContextData() {
-        MutableConvertibleValues<Object> attributes = context.getAttributes();
-        // the attribute is read as it was stored: asking for it as a map would convert it into a copy, which the
-        // interceptors of the chain would then no longer share
-        ContextData data = contextDataOf(attributes);
+        Map<String, Object> data = contextData;
         if (data == null) {
-            // the attributes cannot put a value only where there is none, so the map is created under their lock
-            // and looked for again once it is held. See the guide, "Waiting on Micronaut core"
-            synchronized (attributes) {
-                data = contextDataOf(attributes);
-                if (data == null) {
-                    data = new ContextData();
-                    attributes.put(CONTEXT_DATA, data);
-                }
-            }
+            data = new HashMap<>(4);
+            contextData = data;
         }
         return data;
-    }
-
-    private static @Nullable ContextData contextDataOf(MutableConvertibleValues<Object> attributes) {
-        return attributes.getValue(CONTEXT_DATA) instanceof ContextData data ? data : null;
     }
 
     /**

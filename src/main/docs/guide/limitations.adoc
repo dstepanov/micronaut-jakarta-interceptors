@@ -192,11 +192,6 @@ belong on the method that every object of the context is called through. Microna
 constructor or a bean definition, where the resolver keeps the chains in a map of its own, under the interception
 the processor recorded; a method whose metadata Micronaut does not keep values for finds its chains there as well.
 
-The map `InvocationContext.getContextData()` returns is created the first time an interceptor of the invocation asks
-for it, and kept among the attributes of the Micronaut invocation, which every advice of that invocation shares.
-Those attributes offer a way to put a value and to read one, but none to put a value only where there is none yet,
-so the map is created under a lock on the attributes and looked for again once the lock is held.
-
 == Languages
 
 Java, Groovy and Kotlin are supported, and each has a test suite of its own in this repository. The processor only

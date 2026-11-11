@@ -38,9 +38,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Selects the definitions of the interceptor classes a chain is built from: the definition that describes the
@@ -57,9 +55,6 @@ import java.util.concurrent.ConcurrentHashMap;
 final class InterceptorDefinitions {
 
     private final BeanContext beanContext;
-    // an interceptor class describes itself the same way whichever element its chain was resolved for, so what is
-    // read of it is read once rather than once for every element it intercepts
-    private final Map<Class<?>, Optional<BeanDefinition<?>>> describing = new ConcurrentHashMap<>();
     // what decides whether an interceptor class a binding binds is enabled: none on its own. Injected rather than
     // looked up on the first chain, so that the resolver holds no state it fills in after it is created
     private final List<BoundInterceptorEnablement> enablements;
@@ -175,18 +170,29 @@ final class InterceptorDefinitions {
      * Micronaut generated from the class carries the executable methods the interceptor methods are invoked
      * through, and it is the one read here; which of them provides the instance is a separate question, answered
      * by the bean context.</p>
+     *
+     * <p>It is looked up every time a chain is built rather than remembered: the chains are kept, by the method and
+     * by the resolver, so this runs once for each of them, and a class looked up before its definition was known is
+     * found once it is.</p>
      */
     @Nullable BeanDefinition<?> describing(Class<?> interceptorClass) {
-        Optional<BeanDefinition<?>> described = describing.get(interceptorClass);
-        if (described == null) {
-            // looking the definitions of the class up evaluates their conditions, and a condition may create a bean
-            // that is intercepted, which resolves a chain and asks this again. Doing it inside a computeIfAbsent
-            // would hold a lock of the map across the bean context and fail that second ask as a recursive update;
-            // two threads describing one class find the same definition, so the later put loses nothing
-            described = Optional.ofNullable(describe(interceptorClass));
-            describing.put(interceptorClass, described);
+        BeanDefinition<?> fallback = null;
+        for (BeanDefinition<?> definition : beanContext.getBeanDefinitions(interceptorClass)) {
+            // a subclass that is an interceptor class too is a bean of this type as well, and describes itself:
+            // its bindings and its interceptor methods are not those of the class asked about
+            if (!isOfClass(definition, interceptorClass)
+                || definition.getAnnotation(JakartaInterceptorMethods.class) == null) {
+                continue;
+            }
+            // a bean a factory produces carries what its class records as well, but a proxy of it exposes the
+            // methods it advises rather than the interceptor methods, so the definition kept is the one that has
+            // an executable method for each of them
+            if (hasRecordedMethods(definition)) {
+                return definition;
+            }
+            fallback = definition;
         }
-        return described.orElse(null);
+        return fallback;
     }
 
     /**
@@ -214,26 +220,6 @@ final class InterceptorDefinitions {
                 + "path, and its bean must not be disabled");
         }
         return definition;
-    }
-
-    private @Nullable BeanDefinition<?> describe(Class<?> interceptorClass) {
-        BeanDefinition<?> fallback = null;
-        for (BeanDefinition<?> definition : beanContext.getBeanDefinitions(interceptorClass)) {
-            // a subclass that is an interceptor class too is a bean of this type as well, and describes itself:
-            // its bindings and its interceptor methods are not those of the class asked about
-            if (!isOfClass(definition, interceptorClass)
-                || definition.getAnnotation(JakartaInterceptorMethods.class) == null) {
-                continue;
-            }
-            // a bean a factory produces carries what its class records as well, but a proxy of it exposes the
-            // methods it advises rather than the interceptor methods, so the definition kept is the one that has
-            // an executable method for each of them
-            if (hasRecordedMethods(definition)) {
-                return definition;
-            }
-            fallback = definition;
-        }
-        return fallback;
     }
 
     /**

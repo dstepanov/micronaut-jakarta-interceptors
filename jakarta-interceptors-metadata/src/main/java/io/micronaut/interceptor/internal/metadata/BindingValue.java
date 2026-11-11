@@ -197,19 +197,44 @@ public final class BindingValue {
     }
 
     /**
-     * Whether this and another binding are the same declaration: the same binding, whose excluded members the
-     * declarations give alike as well. An element declaring a binding that differs from the one of its class only in
-     * a member excluded from it is bound alike, but reports its own declaration.
+     * Whether this and another binding are the same declaration: the values they are written out as are equal member
+     * for member, the members excluded from the binding included, and so are those of an annotation a member holds,
+     * at any depth. An element declaring a binding that differs from the one of its class only in a member excluded
+     * from it is bound alike, but reports its own declaration.
      *
      * @param other The other binding
      * @return Whether the two are the same declaration
      */
     public boolean isSameDeclaration(BindingValue other) {
-        if (!matches(other) || !excludedMembers.keySet().equals(other.excludedMembers.keySet())) {
+        return sameValue(toAnnotationValue(), other.toAnnotationValue());
+    }
+
+    private static boolean sameValue(@Nullable Object value, @Nullable Object other) {
+        if (value instanceof AnnotationValue<?> annotation) {
+            return other instanceof AnnotationValue<?> otherAnnotation
+                && annotation.getAnnotationName().equals(otherAnnotation.getAnnotationName())
+                && sameMembers(annotation.getValues(), otherAnnotation.getValues());
+        }
+        if (value instanceof Object[] values) {
+            if (!(other instanceof Object[] others) || values.length != others.length) {
+                return false;
+            }
+            for (int i = 0; i < values.length; i++) {
+                if (!sameValue(values[i], others[i])) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return Objects.deepEquals(value, other);
+    }
+
+    private static boolean sameMembers(Map<CharSequence, Object> members, Map<CharSequence, Object> others) {
+        if (members.size() != others.size()) {
             return false;
         }
-        for (Map.Entry<String, Object> member : excludedMembers.entrySet()) {
-            if (!Objects.deepEquals(member.getValue(), other.excludedMembers.get(member.getKey()))) {
+        for (Map.Entry<CharSequence, Object> member : members.entrySet()) {
+            if (!others.containsKey(member.getKey()) || !sameValue(member.getValue(), others.get(member.getKey()))) {
                 return false;
             }
         }

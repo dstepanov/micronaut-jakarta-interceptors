@@ -18,6 +18,7 @@ package io.micronaut.interceptor.internal.runtime;
 import io.micronaut.interceptor.spi.BoundInterceptorEnablement;
 import io.micronaut.interceptor.spi.InterceptorBindings;
 import io.micronaut.interceptor.spi.InterceptorMethods;
+import io.micronaut.aop.InterceptorKind;
 import io.micronaut.context.BeanContext;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
@@ -101,18 +102,25 @@ public final class InterceptorChainResolver {
     }
 
     /**
-     * The chains of the lifecycle events a method runs, which the method keeps, see {@link MethodChains}.
+     * Resolves the chain of a lifecycle event of a bean.
      *
-     * @param method The method Micronaut runs the lifecycle events of a bean through
-     * @return Its chains
+     * <p>Micronaut runs each event through a method object of its own, which keeps no value, so the chain is found
+     * in the resolver's map, under the interception the processor recorded, as the chain of a constructor is.</p>
+     *
+     * @param kind   The lifecycle event, {@code POST_CONSTRUCT} or {@code PRE_DESTROY}
+     * @param method The method Micronaut runs the event through
+     * @return The interceptors, in the order they are invoked in, none for a kind that is not a lifecycle event
      */
-    MethodChains.Lifecycle lifecycleChainsOf(ExecutableMethod<?, ?> method) {
-        return method.getCachedUnevaluatedValue(MethodChains.Lifecycle.class, m -> {
-            AnnotationValue<JakartaInterception> interception = recordedInterception(m.getAnnotationMetadata());
-            return new MethodChains.Lifecycle(
-                resolve(InterceptionKind.POST_CONSTRUCT, interception),
-                resolve(InterceptionKind.PRE_DESTROY, interception));
-        });
+    List<InterceptorReference> resolveLifecycle(InterceptorKind kind, ExecutableMethod<?, ?> method) {
+        InterceptionKind interceptionKind = switch (kind) {
+            case POST_CONSTRUCT -> InterceptionKind.POST_CONSTRUCT;
+            case PRE_DESTROY -> InterceptionKind.PRE_DESTROY;
+            default -> null;
+        };
+        if (interceptionKind == null) {
+            return List.of();
+        }
+        return resolve(interceptionKind, recordedInterception(method.getAnnotationMetadata()));
     }
 
     private MethodChains readChains(ExecutableMethod<?, ?> method) {

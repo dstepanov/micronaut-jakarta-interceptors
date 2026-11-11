@@ -15,7 +15,6 @@
  */
 package io.micronaut.interceptor.internal.runtime;
 
-import io.micronaut.aop.InterceptorKind;
 import io.micronaut.core.annotation.Internal;
 
 import java.util.List;
@@ -30,6 +29,9 @@ import java.util.List;
  * are built from the interception the processor recorded on the method, which holds no evaluated expression, so a
  * method another annotation of which holds one keeps them as well.</p>
  *
+ * <p>A lifecycle event is run through a method object Micronaut creates for the event, which keeps nothing, so
+ * the chains of the lifecycle events are not kept here: the resolver finds them in its map.</p>
+ *
  * @param business  The chain of a business method invocation of the method
  * @param scheduled The chain of an invocation the scheduler makes, which is the business chain unless the method is
  *                  a timeout method
@@ -41,28 +43,4 @@ import java.util.List;
 record MethodChains(List<InterceptorReference> business,
                     List<InterceptorReference> scheduled,
                     boolean timeout) {
-
-    /**
-     * The chains of a lifecycle event of a bean, kept by the method Micronaut runs the event through.
-     *
-     * @param postConstruct The chain of the post-construct event
-     * @param preDestroy    The chain of the pre-destroy event
-     */
-    @Internal
-    record Lifecycle(List<InterceptorReference> postConstruct, List<InterceptorReference> preDestroy) {
-
-        /**
-         * The chain of one lifecycle event.
-         *
-         * @param kind The kind of the event
-         * @return Its chain, none for a kind that is not a lifecycle event
-         */
-        List<InterceptorReference> of(InterceptorKind kind) {
-            return switch (kind) {
-                case POST_CONSTRUCT -> postConstruct;
-                case PRE_DESTROY -> preDestroy;
-                default -> List.of();
-            };
-        }
-    }
 }

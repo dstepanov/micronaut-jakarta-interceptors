@@ -164,7 +164,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      * not proceed keeps all of them from running.</p>
      */
     private @Nullable Object interceptLifecycle(MethodInvocationContext<Object, Object> context, InterceptorKind kind) {
-        List<InterceptorReference> chain = resolver.lifecycleChainsOf(context.getExecutableMethod()).of(kind);
+        List<InterceptorReference> chain = resolver.resolveLifecycle(kind, context.getExecutableMethod());
         if (chain.isEmpty()) {
             context.proceed();
             return context.getTarget();

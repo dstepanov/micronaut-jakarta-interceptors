@@ -183,14 +183,15 @@ are enabled, which Micronaut has nothing of. An interceptor class must declare `
 Micronaut's rule, comparing bindings alone, leaves to the caller; and Micronaut has no kind of interception for an
 `@AroundTimeout` method.
 
-A method keeps its chains - for a business method invocation, for the scheduler and for the lifecycle events a
-bean runs through it - and the bindings its invocations report, through Micronaut's experimental
+A method keeps its chains - for a business method invocation and for the scheduler - and the bindings its
+invocations report, through Micronaut's experimental
 `ExecutableMethod.getCachedUnevaluatedValue`, which keeps them for a method an annotation of which holds an evaluated
 expression as well. Micronaut documents the methods of a definition, and of the proxies a context creates, as
 belonging to that context, so the chains, which depend on the interceptor classes the context holds and enables,
 belong on the method that every object of the context is called through. Micronaut offers no such value for a
-constructor or a bean definition, where the resolver keeps the chains in a map of its own, under the interception
-the processor recorded; a method whose metadata Micronaut does not keep values for finds its chains there as well.
+constructor or a bean definition, and the method object Micronaut runs a lifecycle event through is created for the
+event and keeps none, so for those the resolver keeps the chains in a map of its own, under the interception the
+processor recorded; a method whose metadata Micronaut does not keep values for finds its chains there as well.
 
 == Languages
 

@@ -287,19 +287,39 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     }
 
     final List<AnnotationValue<?>> readBindingValues() {
-        AnnotationValue<JakartaInterception> interception = bindingMetadata().getAnnotation(JakartaInterception.class);
+        return bindingValuesOf(bindingMetadata());
+    }
+
+    final Set<Annotation> resolveBindings() {
+        return bindingsOf(bindingMetadata(), getInterceptorBindingValues());
+    }
+
+    /**
+     * The bindings the processor recorded on an element.
+     *
+     * @param metadata The metadata Micronaut compiled for the element, beneath any wrapper of an evaluation context
+     * @return The values of the bindings
+     */
+    static List<AnnotationValue<?>> bindingValuesOf(AnnotationMetadata metadata) {
+        AnnotationValue<JakartaInterception> interception = metadata.getAnnotation(JakartaInterception.class);
         if (interception == null) {
             return List.of();
         }
         return Collections.unmodifiableList(interception.getAnnotations(JakartaInterception.BINDINGS));
     }
 
-    final Set<Annotation> resolveBindings() {
-        List<AnnotationValue<?>> values = getInterceptorBindingValues();
+    /**
+     * The binding annotations built from the bindings of an element.
+     *
+     * @param metadata The metadata Micronaut compiled for the element, beneath any wrapper of an evaluation context
+     * @param values   The values of its bindings
+     * @return The binding annotations
+     */
+    static Set<Annotation> bindingsOf(AnnotationMetadata metadata, List<AnnotationValue<?>> values) {
         if (values.isEmpty()) {
             return Collections.emptySet();
         }
-        return BindingAnnotationAccess.build(bindingMetadata(), values);
+        return BindingAnnotationAccess.build(metadata, values);
     }
 
     /**

@@ -30,7 +30,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -94,7 +96,8 @@ public final class InterceptorBindings {
     /**
      * Reads a set of bindings from the values of the binding annotations, which may have been read from the
      * metadata of an element, as the processor recorded them, or built from annotation instances. The values are
-     * kept as they are, and compared by {@link AnnotationValue#matches(AnnotationValue)}.
+     * kept as they are, but for the arrays their members hold, which are copied so that the caller's arrays stay the
+     * caller's; they are compared by {@link AnnotationValue#matches(AnnotationValue)}.
      *
      * <p>A value lists the members excluded from its binding under {@value AnnotationUtil#NON_BINDING_ATTRIBUTE}.
      * Those are left out wherever it is compared, and so are the ones the other side of the comparison lists.
@@ -115,10 +118,60 @@ public final class InterceptorBindings {
         List<AnnotationValue<?>> read = new ArrayList<>(values.size());
         for (AnnotationValue<?> value : values) {
             if (read.stream().noneMatch(value::matches)) {
-                read.add(value);
+                read.add(snapshot(value));
             }
         }
         return new InterceptorBindings(Collections.unmodifiableList(read));
+    }
+
+    /**
+     * The value with every array a member holds copied, at any depth, and everything else as it is: an
+     * {@link AnnotationValue} keeps the arrays it is built with, and an array the caller changes afterwards must not
+     * change which interceptors these bindings select. A value holding no array is kept itself.
+     */
+    private static AnnotationValue<?> snapshot(AnnotationValue<?> value) {
+        Map<CharSequence, Object> members = value.getValues();
+        Map<CharSequence, Object> copied = null;
+        for (Map.Entry<CharSequence, Object> member : members.entrySet()) {
+            Object snapshot = snapshotMember(member.getValue());
+            if (snapshot != member.getValue()) {
+                if (copied == null) {
+                    copied = new LinkedHashMap<>(members);
+                }
+                copied.put(member.getKey(), snapshot);
+            }
+        }
+        return copied == null
+            ? value
+            : new AnnotationValue<>(value.getAnnotationName(), copied, value.getDefaultValues());
+    }
+
+    /**
+     * A member value with its arrays copied; listed out rather than read through {@code java.lang.reflect.Array}, so
+     * that the interception stays free of the reflection of the platform.
+     */
+    private static Object snapshotMember(Object value) {
+        return switch (value) {
+            case AnnotationValue<?> annotation -> snapshot(annotation);
+            case Object[] array -> {
+                Object[] copy = array.clone();
+                for (int i = 0; i < copy.length; i++) {
+                    if (copy[i] instanceof AnnotationValue<?> annotation) {
+                        copy[i] = snapshot(annotation);
+                    }
+                }
+                yield copy;
+            }
+            case int[] array -> array.clone();
+            case long[] array -> array.clone();
+            case double[] array -> array.clone();
+            case boolean[] array -> array.clone();
+            case byte[] array -> array.clone();
+            case short[] array -> array.clone();
+            case char[] array -> array.clone();
+            case float[] array -> array.clone();
+            default -> value;
+        };
     }
 
     /**

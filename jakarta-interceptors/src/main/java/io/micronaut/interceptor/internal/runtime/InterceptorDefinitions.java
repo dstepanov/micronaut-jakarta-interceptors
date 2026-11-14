@@ -78,8 +78,8 @@ final class InterceptorDefinitions {
      * applies: an interceptor is bound when every binding it declares matches one of the element, member by member
      * through {@code AnnotationValue.matches}. That qualifier reads the bindings of a candidate from the
      * {@code io.micronaut.aop.InterceptorBinding} values of its metadata, which an interceptor class of this module
-     * does not carry, so the candidates are filtered with {@link BoundInterceptorQualifier}, which hands the rule the
-     * bindings the processor recorded on each of them instead.</p>
+     * does not carry, so each candidate is handed to the rule with the bindings the processor recorded on it
+     * instead, by {@link InterceptorBindings#binds}.</p>
      *
      * <p>They are asked for by the type the processor indexed them under rather than by reading every bean
      * definition of the context and keeping the ones that are interceptor classes. An index is what the context
@@ -106,8 +106,10 @@ final class InterceptorDefinitions {
         // a class a factory produces as well is indexed by the definition of the factory too, which carries what the
         // processor recorded on the class; both are described by the one definition, and the class is bound once
         Set<BeanDefinition<?>> matching = new LinkedHashSet<>();
-        for (BeanDefinition<JakartaInterceptorIndex> bound : beanContext.getBeanDefinitions(
-            JakartaInterceptorIndex.class, new BoundInterceptorQualifier<>(bindingsOfElement))) {
+        for (BeanDefinition<JakartaInterceptorIndex> bound : beanContext.getBeanDefinitions(JakartaInterceptorIndex.class)) {
+            if (!bindingsOfElement.binds(bound)) {
+                continue;
+            }
             BeanDefinition<?> definition = describing(bound.getBeanType());
             // a class that declares an interceptor method without declaring itself an interceptor class is one
             // only where it is named directly, and takes no part in what a binding annotation binds

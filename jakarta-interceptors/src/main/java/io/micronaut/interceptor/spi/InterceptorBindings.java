@@ -20,12 +20,14 @@ import io.micronaut.aop.InterceptorKind;
 import io.micronaut.context.BeanContext;
 import io.micronaut.core.annotation.AnnotationUtil;
 import io.micronaut.core.annotation.AnnotationValue;
+import io.micronaut.core.annotation.Internal;
 import io.micronaut.inject.BeanDefinition;
 import io.micronaut.inject.BeanType;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorMethods;
 import io.micronaut.interceptor.internal.runtime.InterceptorChainResolver;
 import org.jspecify.annotations.Nullable;
 
+import java.lang.annotation.Annotation;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -65,18 +67,12 @@ public final class InterceptorBindings {
     private static final InterceptorBindings NONE = new InterceptorBindings(List.of());
 
     private final List<AnnotationValue<?>> bindings;
-    private final int hash;
     // the bindings as an interception point Micronaut selects the interceptors of with its exact rule: every binding
     // of an interceptor applies at the point
     private final ExactInterceptorBindingQualifier<?> point;
 
     private InterceptorBindings(List<AnnotationValue<?>> bindings) {
         this.bindings = bindings;
-        Set<String> names = new HashSet<>();
-        for (AnnotationValue<?> binding : bindings) {
-            names.add(binding.getAnnotationName());
-        }
-        this.hash = names.hashCode();
         // the kind takes no part in comparing occurrences, which carry no kind of their own
         this.point = ExactInterceptorBindingQualifier.ofOccurrences(bindings, InterceptorKind.AROUND);
     }
@@ -88,9 +84,13 @@ public final class InterceptorBindings {
      * @return The bindings, none where the class declares none or is not an interceptor class
      */
     public static InterceptorBindings of(BeanType<?> interceptor) {
+        return ofValues(recordedBindingsOf(interceptor));
+    }
+
+    private static List<AnnotationValue<Annotation>> recordedBindingsOf(BeanType<?> interceptor) {
         AnnotationValue<JakartaInterceptorMethods> recorded =
             interceptor.getAnnotation(JakartaInterceptorMethods.class);
-        return recorded == null ? NONE : ofValues(recorded.getAnnotations(JakartaInterceptorMethods.BINDINGS));
+        return recorded == null ? List.of() : recorded.getAnnotations(JakartaInterceptorMethods.BINDINGS);
     }
 
     /**
@@ -246,6 +246,19 @@ public final class InterceptorBindings {
     }
 
     /**
+     * Tells whether the interceptor class of a bean is bound to an interception point declaring these bindings:
+     * {@code InterceptorBindings.of(interceptor).isBoundBy(this)}, comparing the bindings recorded on the bean as
+     * they are read, without making them a set of bindings of their own.
+     *
+     * @param interceptor The bean of the interceptor class
+     * @return Whether the interceptor is bound to the point
+     */
+    @Internal
+    public boolean binds(BeanType<?> interceptor) {
+        return point.matches(recordedBindingsOf(interceptor));
+    }
+
+    /**
      * Two sets of bindings are equal when each binding of either is a binding of the other.
      *
      * @param o The other object
@@ -270,7 +283,11 @@ public final class InterceptorBindings {
      */
     @Override
     public int hashCode() {
-        return hash;
+        Set<String> names = new HashSet<>();
+        for (AnnotationValue<?> binding : bindings) {
+            names.add(binding.getAnnotationName());
+        }
+        return names.hashCode();
     }
 
     @Override

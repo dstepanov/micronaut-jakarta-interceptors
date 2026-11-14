@@ -178,8 +178,13 @@ public final class InterceptorChainResolver {
      * interceptor class associated with the class created before an {@code @AroundConstruct} method runs, which is
      * more than the chains that run: a class the constructor excludes, or replaces the binding of with one of its
      * own, and a class with no interceptor method of a kind anything of the object is intercepted as, such as an
-     * {@code @AroundTimeout} method of a bean nothing schedules. The interception of the class is therefore resolved
-     * for every kind, and the class-level classes of each kind are among those created.</p>
+     * {@code @AroundTimeout} method of a bean nothing schedules. Every interceptor class the class names or binds is
+     * therefore among those created, whatever kinds its interceptor methods interpose on: the processor rejects an
+     * interceptor class that declares none.</p>
+     *
+     * <p>The classes of a method are the ones its chains run, which are selected rather than built here: the chains
+     * of a method are kept by the method the proxy invokes, which is not among the methods of the definition, and
+     * building them on those would build them twice.</p>
      *
      * <p>Only what this module intercepts is asked for: an element it does not intercept has no chain. An
      * interceptor method the class declares itself runs on the object, and has no instance of its own. The classes
@@ -198,14 +203,20 @@ public final class InterceptorChainResolver {
                                               @Nullable AnnotationValue<JakartaInterception> classInterception) {
         Set<Class<?>> classes = new LinkedHashSet<>();
         addInterceptorClasses(construction, classes);
-        if (classInterception != null) {
-            for (InterceptionKind kind : InterceptionKind.values()) {
-                addInterceptorClasses(build(kind, classInterception), classes);
-            }
+        for (BeanDefinition<?> interceptor : selected(classInterception)) {
+            classes.add(interceptor.getBeanType());
         }
         for (ExecutableMethod<?, ?> method : definition.getExecutableMethods()) {
-            if (method.getAnnotationMetadata().hasAnnotation(JakartaInterception.class)) {
-                addInterceptorClasses(chainsOf(method).scheduled(), classes);
+            AnnotationValue<JakartaInterception> interception = recordedInterception(method.getAnnotationMetadata());
+            boolean timeout = interception != null
+                && interception.booleanValue(JakartaInterception.TIMEOUT).orElse(false);
+            for (BeanDefinition<?> interceptor : selected(interception)) {
+                // the classes the chains of the method run: its business chain, of the @AroundInvoke methods, and
+                // the chain of a timeout, of the @AroundTimeout methods or, without any, the @AroundInvoke ones
+                if (!InterceptorMethods.of(interceptor, InterceptionKind.AROUND_INVOKE).isEmpty()
+                    || timeout && !InterceptorMethods.of(interceptor, InterceptionKind.AROUND_TIMEOUT).isEmpty()) {
+                    classes.add(interceptor.getBeanType());
+                }
             }
         }
         return List.copyOf(classes);
@@ -225,13 +236,10 @@ public final class InterceptorChainResolver {
      */
     private List<InterceptorReference> build(InterceptionKind kind,
                                              @Nullable AnnotationValue<JakartaInterception> interception) {
-        // an element that records no interception names no interceptor class and has no binding to be bound by
         if (interception == null || interception.booleanValue(JakartaInterception.EXCLUDED).orElse(false)) {
             return List.of();
         }
-        Collection<BeanDefinition<?>> ordered = ordered(
-            List.of(interception.classValues(JakartaInterception.INTERCEPTORS)),
-            InterceptorBindings.ofValues(interception.getAnnotations(JakartaInterception.BINDINGS)));
+        Collection<BeanDefinition<?>> ordered = selected(interception);
         // the interceptor methods a class declares on itself are invoked after every interceptor class
         Class<?> self = interception.classValue(JakartaInterception.SELF).filter(type -> type != void.class).orElse(null);
         List<InterceptorReference> chain = new ArrayList<>(ordered.size() + 1);
@@ -242,6 +250,20 @@ public final class InterceptorChainResolver {
             chain.addAll(references(definitions.requireDescribing(self), kind, true));
         }
         return List.copyOf(chain);
+    }
+
+    /**
+     * The interceptor classes an interception names and binds, in the order their interceptor methods are invoked in,
+     * whatever kind of interception they interpose on.
+     */
+    private Collection<BeanDefinition<?>> selected(@Nullable AnnotationValue<JakartaInterception> interception) {
+        // an element that records no interception names no interceptor class and has no binding to be bound by
+        if (interception == null || interception.booleanValue(JakartaInterception.EXCLUDED).orElse(false)) {
+            return List.of();
+        }
+        return ordered(
+            List.of(interception.classValues(JakartaInterception.INTERCEPTORS)),
+            InterceptorBindings.ofValues(interception.getAnnotations(JakartaInterception.BINDINGS)));
     }
 
     /**

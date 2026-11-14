@@ -86,11 +86,11 @@ final class InterceptorDefinitions {
      * keeps for exactly this question, and it answers it without the size of the application being the cost of
      * resolving one chain.</p>
      *
-     * <p>They are looked for again for every chain that is resolved, rather than once and remembered. The first
-     * chain of an application is resolved while a bean of it is being created, and the definitions the context
-     * knows of at that moment are not yet all of them; a list taken then and kept would leave every interceptor
-     * that had not been reached yet out of every chain resolved afterwards. What is remembered is the chain of
-     * each intercepted element, so this runs once for each of them rather than once for each invocation.</p>
+     * <p>They are looked for when a chain is built rather than once for the resolver: the context indexes them, so
+     * the lookup costs no more than the interceptor classes there are. The chain built from them is then kept, by
+     * the method or the definition it belongs to, so this runs once for each intercepted element rather than once
+     * for each invocation, and an interceptor class registered with the context after a chain was built is not in
+     * that chain, as the limitations guide says.</p>
      *
      * <p>It is the selection {@link InterceptorBindings#boundInterceptors(BeanContext, InterceptorBindings)} makes
      * for another module, which asks it of this resolver so that the two cannot differ.</p>
@@ -171,9 +171,8 @@ final class InterceptorDefinitions {
      * through, and it is the one read here; which of them provides the instance is a separate question, answered
      * by the bean context.</p>
      *
-     * <p>It is looked up every time a chain is built rather than remembered: the chains are kept, by the method and
-     * by the resolver, so this runs once for each of them, and a class looked up before its definition was known is
-     * found once it is.</p>
+     * <p>It is looked up every time a chain is built rather than remembered: the chains are kept, so this runs once
+     * for each of them.</p>
      */
     @Nullable BeanDefinition<?> describing(Class<?> interceptorClass) {
         BeanDefinition<?> fallback = null;

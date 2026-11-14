@@ -191,8 +191,8 @@ public final class InterceptorBindings {
      *
      * <p>Each definition is the one Micronaut generated from the interceptor class, which carries the executable
      * methods {@link InterceptorMethods#of(BeanDefinition, io.micronaut.interceptor.metadata.InterceptionKind)}
-     * reads, and whose bindings {@link #of(BeanType)} reads. The selection is made again for every call, since the
-     * definitions a context knows of may still grow while its beans are first created.</p>
+     * reads, and whose bindings {@link #of(BeanType)} reads. The selection is made again for every call; a chain keeps
+     * the selection it was built from.</p>
      *
      * @param beanContext The bean context the interceptor classes are beans of
      * @param point       The bindings of the interception point

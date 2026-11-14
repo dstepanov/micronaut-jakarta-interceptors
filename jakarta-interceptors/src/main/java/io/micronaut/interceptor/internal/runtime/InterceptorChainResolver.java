@@ -36,10 +36,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Resolves, and remembers, the chain of interceptor classes that applies to an intercepted element.
@@ -57,7 +55,6 @@ import java.util.concurrent.ConcurrentHashMap;
 @Internal
 public final class InterceptorChainResolver {
 
-    private final Map<ReferenceKey, List<InterceptorReference>> references = new ConcurrentHashMap<>();
     // which interceptor classes there are to intercept with: the definitions describing them, and which of them a
     // binding binds
     private final InterceptorDefinitions definitions;
@@ -288,15 +285,8 @@ public final class InterceptorChainResolver {
      * The interceptor methods of one interceptor class that interpose on a kind of interception, in the order the
      * specification invokes them: the ones its superclasses declare first, its own last.
      */
-    private List<InterceptorReference> references(BeanDefinition<?> definition, InterceptionKind kind, boolean self) {
-        // the interceptor methods of a class that interpose on a kind are the same for every element whose chain
-        // includes it, so the list is built once and shared between them
-        return references.computeIfAbsent(
-            new ReferenceKey(definition.getBeanType(), kind, self),
-            key -> referencesOf(definition, kind, self));
-    }
-
-    private static List<InterceptorReference> referencesOf(BeanDefinition<?> definition, InterceptionKind kind, boolean self) {
+    private static List<InterceptorReference> references(BeanDefinition<?> definition, InterceptionKind kind, boolean self) {
+        // the interceptor methods themselves are kept by the definition, see InterceptorMethods.of
         InterceptorMethods declared = InterceptorMethods.of(definition, kind);
         if (kind == InterceptionKind.AROUND_TIMEOUT && declared.isEmpty()) {
             // the specification has an @AroundInvoke method interpose on business methods alone. An interceptor
@@ -309,19 +299,6 @@ public final class InterceptorChainResolver {
         for (ExecutableMethod<Object, Object> method : methods) {
             references.add(new InterceptorReference(definition.getBeanType(), method, self));
         }
-        // the list is shared between every chain that includes this interceptor, so it is not one of theirs to
-        // change
-        return List.copyOf(references);
-    }
-
-    /**
-     * Identifies the interceptor methods of one interceptor class that interpose on one kind of interception,
-     * invoked on an interceptor of its own or on the intercepted instance.
-     *
-     * @param interceptorClass The interceptor class
-     * @param kind             The kind of interception
-     * @param self             Whether the methods are invoked on the intercepted instance
-     */
-    private record ReferenceKey(Class<?> interceptorClass, InterceptionKind kind, boolean self) {
+        return references;
     }
 }

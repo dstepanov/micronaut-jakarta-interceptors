@@ -73,6 +73,10 @@ public final class InterceptorMethods {
      * {@code @AroundInvoke} methods of a class without an {@code @AroundTimeout} method interpose on a timeout is a
      * decision of the chain, and not something the class declares.</p>
      *
+     * <p>The interceptor methods of every kind are read once and kept by the definition, through
+     * {@link BeanDefinition#getCachedUnevaluatedValue}: they depend on nothing but what the processor recorded on
+     * it.</p>
+     *
      * @param definition The definition of the interceptor class, which has to be the one Micronaut generated from
      *                   the class for it to carry the executable methods
      * @param kind       The kind of interception
@@ -80,11 +84,26 @@ public final class InterceptorMethods {
      * @throws IllegalStateException if a recorded interceptor method has no executable method
      */
     public static InterceptorMethods of(BeanDefinition<?> definition, InterceptionKind kind) {
+        return definition.getCachedUnevaluatedValue(ByKind.class, InterceptorMethods::read).of(kind);
+    }
+
+    private static ByKind read(BeanDefinition<?> definition) {
         AnnotationValue<JakartaInterceptorMethods> recorded =
             definition.getAnnotation(JakartaInterceptorMethods.class);
         if (recorded == null) {
-            return NONE;
+            return ByKind.NONE;
         }
+        InterceptionKind[] kinds = InterceptionKind.values();
+        List<InterceptorMethods> byKind = new ArrayList<>(kinds.length);
+        for (InterceptionKind kind : kinds) {
+            byKind.add(read(definition, recorded, kind));
+        }
+        return new ByKind(List.copyOf(byKind));
+    }
+
+    private static InterceptorMethods read(BeanDefinition<?> definition,
+                                           AnnotationValue<JakartaInterceptorMethods> recorded,
+                                           InterceptionKind kind) {
         String[] names = recorded.stringValues(kind.member());
         if (names.length == 0) {
             return NONE;
@@ -202,6 +221,21 @@ public final class InterceptorMethods {
             + (declaringType == null ? definition.getBeanType().getName() : declaringType)
             + "] has no executable method. The interceptor class has to be compiled with "
             + "micronaut-jakarta-interceptors-processor on the annotation processor path");
+    }
+
+    /**
+     * The interceptor methods of a class, of every kind, as its definition keeps them. Listed by the ordinal of the
+     * kind rather than in an {@code EnumMap}, which finds the constants of the enum by reflection.
+     *
+     * @param byKind The methods, at the ordinal of their kind, or none for a class that records no interceptor method
+     */
+    private record ByKind(List<InterceptorMethods> byKind) {
+
+        static final ByKind NONE = new ByKind(List.of());
+
+        InterceptorMethods of(InterceptionKind kind) {
+            return byKind.isEmpty() ? InterceptorMethods.NONE : byKind.get(kind.ordinal());
+        }
     }
 
     /**

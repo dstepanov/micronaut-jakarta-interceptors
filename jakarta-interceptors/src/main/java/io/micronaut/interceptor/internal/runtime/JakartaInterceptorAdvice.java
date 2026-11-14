@@ -81,6 +81,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      * has one instance, owned by {@link #dependencies}, however many threads ask for it first.
      */
     private final Map<Class<?>, Object> instances = new ConcurrentHashMap<>(4);
+
     /**
      * Creates the advice of one object.
      *

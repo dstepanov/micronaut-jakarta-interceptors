@@ -24,14 +24,12 @@ import io.micronaut.core.util.CollectionUtils;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.function.Function;
 
 /**
  * One interceptor binding, reduced to what it binds by, as the processor records it. The runtime compares what was
@@ -101,25 +99,17 @@ public final class BindingValue {
      * Reduces a binding annotation as the processor records it.
      *
      * <p>Micronaut records every member excluded from a binding on each occurrence of the annotation, whether or not
-     * the occurrence supplied a value for it, and those are the ones read. An annotation held by a member of another
-     * is recorded without them, so the members excluded from the type of such an annotation are supplied, which the
-     * processor reads off the type.</p>
+     * the occurrence supplied a value for it, and on an annotation a member of another holds as well, and those are
+     * the ones read.</p>
      *
      * <p>An empty string the value carries no default for is left out of what is recorded, which reads the same
      * whether it was declared or not. An empty string where a default was recorded is recorded, and differs from the
      * default the other side has filled in.</p>
      *
      * @param annotation The binding annotation, as declared on an element
-     * @param excluded   The members excluded from an annotation a member holds, by the name of the annotation
      * @return The binding
      */
-    public static BindingValue reduce(AnnotationValue<?> annotation, Function<String, ? extends Collection<String>> excluded) {
-        return of(annotation, excluded, false);
-    }
-
-    private static BindingValue of(AnnotationValue<?> annotation,
-                                   Function<String, ? extends Collection<String>> excluded,
-                                   boolean nested) {
+    public static BindingValue reduce(AnnotationValue<?> annotation) {
         String name = annotation.getAnnotationName();
         // the keys are read as strings so that two bindings compare by the names of their members, which a
         // CharSequence does not promise to do
@@ -138,20 +128,17 @@ public final class BindingValue {
         // Micronaut lists the member it records them under among them, which is no member of the annotation; kept,
         // it would set a binding read from the metadata apart from the same binding as recorded
         nonBinding.remove(AnnotationUtil.NON_BINDING_ATTRIBUTE);
-        if (nested) {
-            nonBinding.addAll(excluded.apply(name));
-        }
         members.remove(AnnotationUtil.NON_BINDING_ATTRIBUTE);
         members.remove(AnnotationUtil.STEREOTYPES_MEMBER);
         Map<String, Object> excludedMembers = new LinkedHashMap<>();
         annotation.getValues().forEach((member, value) -> {
             if (nonBinding.contains(member.toString())) {
-                excludedMembers.put(member.toString(), writable(value, excluded));
+                excludedMembers.put(member.toString(), writable(value));
             }
         });
         members.keySet().removeAll(nonBinding);
         Map<String, Object> written = CollectionUtils.newLinkedHashMap(members.size());
-        members.forEach((member, value) -> written.put(member, writable(value, excluded)));
+        members.forEach((member, value) -> written.put(member, writable(value)));
         return new BindingValue(name, Collections.unmodifiableSet(nonBinding), Collections.unmodifiableMap(written),
             Collections.unmodifiableMap(excludedMembers));
     }
@@ -317,14 +304,14 @@ public final class BindingValue {
      * a class as an {@link AnnotationClassValue}, with an annotation it holds reduced as a binding is. An array keeps
      * its type, which is what Micronaut writes the metadata of an annotation from.
      */
-    private static Object writable(Object value, Function<String, ? extends Collection<String>> excluded) {
+    private static Object writable(Object value) {
         if (value instanceof AnnotationValue<?> annotation) {
-            return of(annotation, excluded, true).toAnnotationValue();
+            return reduce(annotation).toAnnotationValue();
         }
         if (value instanceof AnnotationValue<?>[] annotations) {
             AnnotationValue<?>[] written = new AnnotationValue<?>[annotations.length];
             for (int i = 0; i < annotations.length; i++) {
-                written[i] = of(annotations[i], excluded, true).toAnnotationValue();
+                written[i] = reduce(annotations[i]).toAnnotationValue();
             }
             return written;
         }
@@ -343,7 +330,7 @@ public final class BindingValue {
                 .toArray(AnnotationClassValue<?>[]::new);
         }
         if (value instanceof EvaluatedExpressionReference expression) {
-            return writable(expression.annotationValue(), excluded);
+            return writable(expression.annotationValue());
         }
         // an array is copied, as the one the binding was read from stays the caller's
         return copyOf(value);

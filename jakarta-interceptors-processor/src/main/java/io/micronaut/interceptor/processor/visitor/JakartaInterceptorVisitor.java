@@ -28,7 +28,6 @@ import io.micronaut.inject.visitor.TypeElementQuery;
 import io.micronaut.inject.visitor.TypeElementVisitor;
 import io.micronaut.inject.visitor.VisitorContext;
 import io.micronaut.interceptor.processor.BindingConflicts;
-import io.micronaut.interceptor.processor.InterceptorBindingValues;
 import io.micronaut.interceptor.processor.InterceptorClassModel;
 import io.micronaut.interceptor.processor.InterceptorClassScanner;
 import io.micronaut.interceptor.processor.JakartaInterceptors;
@@ -116,9 +115,7 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
             return;
         }
         rejectNarrowerBindings(element, context);
-        // the members excluded from each binding annotation are read off its type once for the whole class
-        InterceptorBindingValues.ExcludedMembers excluded = InterceptorBindingValues.excludedMembersOf(context);
-        String conflict = BindingConflicts.conflictOf(element, context, excluded);
+        String conflict = BindingConflicts.conflictOf(element, context);
         if (conflict != null) {
             throw new ProcessingException(element, "The class [" + element.getName() + "] is bound by ["
                 + conflict + "] twice, with different member values. A binding annotation declared on two of the "
@@ -136,7 +133,7 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
                 + "@PostConstruct or @PreDestroy, each accepting a single InvocationContext");
         }
         if (model.intercepts()) {
-            InterceptorMethodWriter.declareInterceptorMethods(model, declaredAsABean, isInterceptorClass, excluded);
+            InterceptorMethodWriter.declareInterceptorMethods(model, declaredAsABean, isInterceptorClass);
         }
         if (isInterceptorClass) {
             if (element.hasDeclaredAnnotation(JakartaInterceptorSupport.INTERCEPTOR)
@@ -149,7 +146,7 @@ public final class JakartaInterceptorVisitor implements TypeElementVisitor<Objec
             }
             return;
         }
-        BeanInterceptionWriter.intercept(element, model, declaredAsABean, context, excluded);
+        BeanInterceptionWriter.intercept(element, model, declaredAsABean, context);
     }
 
     /**

@@ -68,8 +68,7 @@ final class BeanInterceptionWriter {
     static void intercept(ClassElement element,
                           InterceptorClassModel model,
                           boolean declaredAsABean,
-                          VisitorContext context,
-                          InterceptorBindingValues.ExcludedMembers excluded) {
+                          VisitorContext context) {
         boolean reflective = BindingReflectionHints.reflectiveAccessors(context);
         List<String> classInterceptors = namedInterceptors(element, context);
         MethodElement constructor = element.getPrimaryConstructor().orElse(null);
@@ -93,21 +92,21 @@ final class BeanInterceptionWriter {
         // a binding that disagrees with itself is a definition error wherever it is declared, so the members that
         // can be bound are checked as the class was, before anything is read from their bindings
         if (constructor != null) {
-            rejectConflictingBindings(constructor, "constructor", context, excluded);
+            rejectConflictingBindings(constructor, "constructor", context);
         }
         for (MethodElement method : methods) {
             if (!model.isInterceptorMethod(method) && isBusinessMethod(method)) {
-                rejectConflictingBindings(method, "method", context, excluded);
+                rejectConflictingBindings(method, "method", context);
             }
         }
         for (Producer producer : producers) {
-            rejectConflictingBindings(producer.element(), "factory member", context, excluded);
+            rejectConflictingBindings(producer.element(), "factory member", context);
         }
         if (!InterceptorClassScanner.bindingsOf(element).isEmpty()) {
             rejectFinalMethods(element, methods);
         }
         for (Producer producer : producers) {
-            interceptProduced(producer, context, excluded);
+            interceptProduced(producer, context);
         }
         if (reflective) {
             // before the class is found to intercept nothing itself: the member of a factory may be the one place a
@@ -119,7 +118,7 @@ final class BeanInterceptionWriter {
             return;
         }
         interceptEachTarget(element, false);
-        List<BindingValue> classBindings = InterceptorBindingValues.ofClass(element, excluded);
+        List<BindingValue> classBindings = InterceptorBindingValues.ofClass(element);
         if (classDeclares) {
             element.annotate(JakartaInterception.class, builder -> {
                 interceptorMembers(builder, classInterceptors);
@@ -137,7 +136,7 @@ final class BeanInterceptionWriter {
             }
             whenConstructed.addAll(constructorInterceptors);
             List<BindingValue> constructorBindings =
-                InterceptorBindingValues.ofMember(constructor, classBindings, excluded);
+                InterceptorBindingValues.ofMember(constructor, classBindings);
             constructor.annotate(JakartaInterception.class, builder -> {
                 interceptorMembers(builder, whenConstructed);
                 bindingsMember(builder, constructorBindings);
@@ -150,7 +149,7 @@ final class BeanInterceptionWriter {
             constructor.annotate(ReflectiveAccess.class);
         }
         for (MethodElement method : methods) {
-            interceptMethod(model, method, classInterceptors, classBindings, classDeclares, context, excluded);
+            interceptMethod(model, method, classInterceptors, classBindings, classDeclares, context);
         }
     }
 
@@ -207,8 +206,7 @@ final class BeanInterceptionWriter {
      * the producer declares replaces the one of the type rather than adding to it.</p>
      */
     private static void interceptProduced(Producer producer,
-                                          VisitorContext context,
-                                          InterceptorBindingValues.ExcludedMembers excluded) {
+                                          VisitorContext context) {
         MethodElement member = producer.element();
         ClassElement producedType = producer.producedType();
         InterceptorClassModel producedModel = InterceptorClassScanner.scan(producedType);
@@ -237,7 +235,7 @@ final class BeanInterceptionWriter {
         List<String> interceptors = new ArrayList<>(namedInterceptors(producedType, context));
         interceptors.addAll(namedInterceptors(member, context));
         List<BindingValue> bindings = InterceptorBindingValues.ofMember(
-            member, InterceptorBindingValues.ofClass(producedType, excluded), excluded);
+            member, InterceptorBindingValues.ofClass(producedType));
         member.annotate(JakartaInterception.class, builder -> {
             interceptorMembers(builder, interceptors);
             // Micronaut reads the metadata of a produced bean together with the metadata of the factory that
@@ -330,9 +328,8 @@ final class BeanInterceptionWriter {
      */
     private static void rejectConflictingBindings(MemberElement member,
                                                   String noun,
-                                                  VisitorContext context,
-                                                  InterceptorBindingValues.ExcludedMembers excluded) {
-        String conflict = BindingConflicts.declaredConflictOf(member, context, excluded);
+                                                  VisitorContext context) {
+        String conflict = BindingConflicts.declaredConflictOf(member, context);
         if (conflict != null) {
             throw new ProcessingException(member, "The " + noun + " [" + member.getDeclaringType().getName() + "."
                 + member.getName() + "] is bound by [" + conflict + "] twice, with different member values. A "
@@ -346,8 +343,7 @@ final class BeanInterceptionWriter {
                                         List<String> classInterceptors,
                                         List<BindingValue> classBindings,
                                         boolean classDeclares,
-                                        VisitorContext context,
-                                        InterceptorBindingValues.ExcludedMembers excluded) {
+                                        VisitorContext context) {
         if (model.isInterceptorMethod(method)) {
             // an interceptor method is not a business method, so it takes no part in the interception of the
             // class. A private method is never intercepted to begin with, and marking one would leave advice
@@ -382,7 +378,7 @@ final class BeanInterceptionWriter {
         // a schedule is recorded through its repeatable container even when a method declares only one
         boolean timeout = method.hasDeclaredAnnotation(JakartaInterceptorSupport.SCHEDULED)
             || method.hasDeclaredAnnotation(JakartaInterceptors.SCHEDULES);
-        List<BindingValue> methodBindings = InterceptorBindingValues.ofMember(method, classBindings, excluded);
+        List<BindingValue> methodBindings = InterceptorBindingValues.ofMember(method, classBindings);
         // a binding the method declares replaces the one of the class, so the method carries a declaration of its
         // own as soon as what it is bound by, or the declaration of it, differs from what its class declares
         boolean replacesBindings = !sameBindings(classBindings, methodBindings);

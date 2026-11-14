@@ -13,6 +13,8 @@ dependencies {
     testImplementation mn.micronaut.core
     testImplementation mn.micronaut.inject
     testImplementation mn.micronaut.aop
+    // jakarta.enterprise.util.Nonbinding, which excludes a member from a binding
+    testImplementation libs.jakarta.cdi.api
     testRuntimeOnly mn.micronaut.context
     // answers the accessors of InvocationContext that return an object of the Java reflection API, which the tests
     // call; being on the compile classpath, it is also what has the processor declare the metadata they need

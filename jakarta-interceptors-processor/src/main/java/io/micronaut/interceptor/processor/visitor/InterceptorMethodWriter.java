@@ -55,8 +55,7 @@ final class InterceptorMethodWriter {
      */
     static void declareInterceptorMethods(InterceptorClassModel model,
                                           boolean declaredAsABean,
-                                          boolean isInterceptorClass,
-                                          InterceptorBindingValues.ExcludedMembers excluded) {
+                                          boolean isInterceptorClass) {
         ClassElement interceptorClass = model.interceptorClass();
         if (!declaredAsABean) {
             // an interceptor class need not be a bean of its own, whether it declares @Interceptor or is named
@@ -68,7 +67,7 @@ final class InterceptorMethodWriter {
         }
         // an interceptor class is not itself intercepted: its bindings say what it intercepts
         List<BindingValue> bindings =
-            isInterceptorClass ? InterceptorBindingValues.ofClass(interceptorClass, excluded) : List.of();
+            isInterceptorClass ? InterceptorBindingValues.ofClass(interceptorClass) : List.of();
         interceptorClass.annotate(JakartaInterceptorMethods.class, builder -> {
             for (Map.Entry<InterceptionKind, List<MethodElement>> entry : model.methods().entrySet()) {
                 builder.member(entry.getKey().member(), entry.getValue().stream()

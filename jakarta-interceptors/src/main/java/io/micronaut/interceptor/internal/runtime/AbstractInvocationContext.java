@@ -228,10 +228,12 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     /**
      * The binding of one annotation type, which the specification added in 2.2 alongside the whole set.
      *
-     * <p>Answered without building the rest. The inherited default reads {@link #getInterceptorBindings()} and
-     * filters it, which for this implementation means synthesizing every binding of the element - a dynamic proxy
-     * class apiece, kept for as long as the class loader - to hand back one of them. Where the whole set has
-     * already been built it is read, since the annotation asked for is in it.</p>
+     * <p>Where the binding annotations of the element are kept - by a method, for every invocation of it - the
+     * binding is picked out of them, so that an interceptor asking for its binding on every invocation, as the
+     * specification has it do, builds no annotation after the first. Otherwise only the one asked for is built: the
+     * inherited default reads {@link #getInterceptorBindings()} and filters it, which for an invocation that keeps
+     * nothing means synthesizing every binding of the element to hand back one of them. A type the element carries
+     * no binding of builds nothing either way.</p>
      *
      * @param annotationType The binding annotation type
      * @param <T>            The binding annotation type
@@ -239,9 +241,9 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
      */
     @Override
     public <T extends Annotation> @Nullable T getInterceptorBinding(Class<T> annotationType) {
-        Set<Annotation> resolved = bindings;
-        if (resolved != null) {
-            return BindingAnnotationAccess.first(resolved, annotationType);
+        Set<Annotation> built = builtBindings(annotationType);
+        if (built != null) {
+            return BindingAnnotationAccess.first(built, annotationType);
         }
         return BindingAnnotationAccess.first(getInterceptorBindingValues(), annotationType);
     }
@@ -249,7 +251,7 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     /**
      * The bindings of one annotation type, of which a repeatable binding may leave several on an element.
      *
-     * <p>Answered without building the rest, as {@link #getInterceptorBinding(Class)} is.</p>
+     * <p>Answered as {@link #getInterceptorBinding(Class)} is.</p>
      *
      * @param annotationType The binding annotation type
      * @param <T>            The binding annotation type
@@ -257,11 +259,46 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
      */
     @Override
     public <T extends Annotation> Set<T> getInterceptorBindings(Class<T> annotationType) {
-        Set<Annotation> resolved = bindings;
-        if (resolved != null) {
-            return BindingAnnotationAccess.all(resolved, annotationType);
+        Set<Annotation> built = builtBindings(annotationType);
+        if (built != null) {
+            return BindingAnnotationAccess.all(built, annotationType);
         }
         return BindingAnnotationAccess.all(getInterceptorBindingValues(), annotationType);
+    }
+
+    /**
+     * The binding annotations of the element to pick those of one type out of: the ones this invocation built
+     * already, or those the element keeps, where it keeps them and the element carries a binding of the type.
+     *
+     * <p>The ones the element keeps are all of its bindings, and building them takes the reflection module for a
+     * binding Micronaut generated no builder for. Without the module, a binding of the type asked for is built on
+     * its own, which a builder can do, as is one of a type the element carries none of: none.</p>
+     */
+    private @Nullable Set<Annotation> builtBindings(Class<? extends Annotation> annotationType) {
+        Set<Annotation> resolved = bindings;
+        if (resolved != null) {
+            return resolved;
+        }
+        if (!keepsBindings() || ReflectionModule.MISSING != null) {
+            return null;
+        }
+        String name = annotationType.getName();
+        for (AnnotationValue<?> value : getInterceptorBindingValues()) {
+            if (value.getAnnotationName().equals(name)) {
+                return getInterceptorBindings();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Whether the element keeps its binding annotations across invocations, which {@link #elementBindings()} then
+     * answers with.
+     *
+     * @return Whether they are kept
+     */
+    boolean keepsBindings() {
+        return false;
     }
 
     /**

@@ -36,9 +36,9 @@ import io.micronaut.interceptor.internal.metadata.JakartaInterception;
 import jakarta.interceptor.Interceptor;
 import org.jspecify.annotations.Nullable;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 /**
@@ -74,7 +74,13 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      * shared by every object it intercepts - stays in its scope.
      */
     private final BeanDependencyResolver dependencies;
-    private final Map<Class<?>, Object> instances = new HashMap<>(4);
+    /**
+     * The interceptor instances of the object, by interceptor class. Read on every invocation, without a lock: they
+     * are created as the advice is created where Micronaut hands it its bean, so an invocation finds them here.
+     * Creating one later - for an advice handed no bean - takes the lock of the advice, so that an interceptor class
+     * has one instance, owned by {@link #dependencies}, however many threads ask for it first.
+     */
+    private final Map<Class<?>, Object> instances = new ConcurrentHashMap<>(4);
     /**
      * Creates the advice of one object.
      *
@@ -241,7 +247,17 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         return interceptorInstance(reference.interceptorClass());
     }
 
-    private synchronized Object interceptorInstance(Class<?> interceptorClass) {
+    private Object interceptorInstance(Class<?> interceptorClass) {
+        Object instance = instances.get(interceptorClass);
+        return instance == null ? createInterceptorInstance(interceptorClass) : instance;
+    }
+
+    /**
+     * Creates the instance of an interceptor class that has none yet, once. The instance is created under the lock
+     * rather than in a {@code computeIfAbsent}, which would hold a lock of the map across the bean context while an
+     * interceptor whose creation reaches this advice again asks for another instance.
+     */
+    private synchronized Object createInterceptorInstance(Class<?> interceptorClass) {
         Object instance = instances.get(interceptorClass);
         if (instance == null) {
             instance = create(interceptorClass);

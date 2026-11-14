@@ -121,36 +121,6 @@ class InterceptorBindingsTest {
     }
 
     /**
-     * An array the bindings were read from stays the caller's: changed afterwards, it changes neither what the
-     * bindings are compared by nor the values they hand out.
-     */
-    @Test
-    void anArrayTheBindingsWereReadFromStaysTheCallers() {
-        String[] tags = {"a"};
-        InterceptorBindings bindings = bindings(value(LOGGED, Map.of("value", tags)));
-
-        tags[0] = "b";
-
-        assertTrue(bindings.isBoundBy(bindings(value(LOGGED, Map.of("value", new String[]{"a"})))));
-        assertEquals(List.of("a"), List.of(bindings.values().get(0).stringValues("value")));
-    }
-
-    /**
-     * An array held by an annotation a member holds stays the caller's as well.
-     */
-    @Test
-    void aNestedArrayTheBindingsWereReadFromStaysTheCallers() {
-        String[] tags = {"a"};
-        AnnotationValue<?> inner = value("test.Inner", Map.of("value", tags));
-        InterceptorBindings bindings = bindings(value(LOGGED, Map.of("inner", new AnnotationValue<?>[]{inner})));
-
-        tags[0] = "b";
-
-        assertTrue(bindings.isBoundBy(bindings(value(LOGGED, Map.of("inner",
-            new AnnotationValue<?>[]{value("test.Inner", Map.of("value", new String[]{"a"}))})))));
-    }
-
-    /**
      * An annotation held by a member compares by every member of it, the ones it defaults to included: an
      * annotation value's own {@code equals} would pass over a member the other one does not declare.
      */

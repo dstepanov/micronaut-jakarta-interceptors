@@ -33,7 +33,7 @@ import io.micronaut.inject.ast.MethodElement;
 import io.micronaut.inject.ast.ParameterElement;
 import io.micronaut.inject.processing.ProcessingException;
 import io.micronaut.inject.visitor.VisitorContext;
-import io.micronaut.interceptor.internal.metadata.BindingValue;
+import io.micronaut.interceptor.processor.BindingValue;
 import io.micronaut.interceptor.internal.metadata.JakartaInterception;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorSupport;
 import io.micronaut.interceptor.metadata.InterceptionKind;

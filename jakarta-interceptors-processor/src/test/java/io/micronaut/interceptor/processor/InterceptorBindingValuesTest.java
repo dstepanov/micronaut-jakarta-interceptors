@@ -3,7 +3,6 @@ package io.micronaut.interceptor.processor;
 import io.micronaut.core.annotation.AnnotationClassValue;
 import io.micronaut.core.annotation.AnnotationUtil;
 import io.micronaut.core.annotation.AnnotationValue;
-import io.micronaut.interceptor.internal.metadata.BindingValue;
 import io.micronaut.interceptor.spi.InterceptorBindings;
 import org.junit.jupiter.api.Test;
 

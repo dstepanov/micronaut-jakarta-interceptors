@@ -24,7 +24,7 @@ import io.micronaut.core.annotation.ReflectiveAccess;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.inject.ast.ClassElement;
 import io.micronaut.inject.ast.MethodElement;
-import io.micronaut.interceptor.internal.metadata.BindingValue;
+import io.micronaut.interceptor.processor.BindingValue;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorIndex;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorMethods;
 import io.micronaut.interceptor.metadata.InterceptionKind;

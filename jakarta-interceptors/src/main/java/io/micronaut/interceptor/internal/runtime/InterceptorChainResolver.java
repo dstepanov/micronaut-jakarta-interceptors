@@ -18,7 +18,9 @@ package io.micronaut.interceptor.internal.runtime;
 import io.micronaut.interceptor.spi.BoundInterceptorEnablement;
 import io.micronaut.interceptor.spi.InterceptorBindings;
 import io.micronaut.interceptor.spi.InterceptorMethods;
+import io.micronaut.aop.ConstructorInvocationContext;
 import io.micronaut.aop.InterceptorKind;
+import io.micronaut.aop.MethodInvocationContext;
 import io.micronaut.context.BeanContext;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
@@ -35,6 +37,7 @@ import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -54,13 +57,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Internal
 public final class InterceptorChainResolver {
 
-    // the chains, under the interception as the processor recorded it, so that finding the chain of an element a
-    // second time reads nothing of the interception
-    private final Map<RecordedKey, List<InterceptorReference>> recorded = new ConcurrentHashMap<>();
     private final Map<ReferenceKey, List<InterceptorReference>> references = new ConcurrentHashMap<>();
-    // the interceptor classes whose instances are created with an object, by the definition of the object, which is
-    // equal for every bean of it a definition Micronaut compiled creates
-    private final Map<BeanDefinition<?>, List<Class<?>>> interceptorClasses = new ConcurrentHashMap<>();
     // which interceptor classes there are to intercept with: the definitions describing them, and which of them a
     // binding binds
     private final InterceptorDefinitions definitions;
@@ -77,16 +74,19 @@ public final class InterceptorChainResolver {
     /**
      * Resolves the chain of the construction of a bean, read from its constructor.
      *
-     * <p>A chain is remembered under the interception exactly as the processor recorded it on the element, and the
-     * kind of interception, see {@link RecordedKey}. Two elements recorded alike share one chain, and the same
-     * element declared differently by two beans - a class two factory methods produce - has a chain for each
-     * declaration.</p>
+     * <p>The chain is kept by the definition of the bean, see {@link ObjectChains}, which Micronaut hands the
+     * context of the construction. A context that carries no definition has its chain built from the constructor
+     * it carries, and kept nowhere.</p>
      *
-     * @param metadata The annotation metadata of the constructor
+     * @param context The context of the construction
      * @return The interceptors, in the order they are invoked in
      */
-    List<InterceptorReference> resolveConstruction(AnnotationMetadata metadata) {
-        return resolve(InterceptionKind.AROUND_CONSTRUCT, recordedInterception(metadata));
+    List<InterceptorReference> resolveConstruction(ConstructorInvocationContext<?> context) {
+        Optional<? extends BeanDefinition<?>> definition = context.findBeanDefinition();
+        if (definition.isPresent()) {
+            return objectChains(definition.get()).construction();
+        }
+        return construction(context.getConstructor().getAnnotationMetadata());
     }
 
     /**
@@ -103,51 +103,59 @@ public final class InterceptorChainResolver {
     /**
      * Resolves the chain of a lifecycle event of a bean.
      *
-     * <p>Micronaut runs each event through a method object of its own, which keeps no value, so the chain is found
-     * in the resolver's map, under the interception the processor recorded, as the chain of a constructor is.</p>
+     * <p>Micronaut runs each event through a method object of its own, which keeps no value, but which hands out
+     * the definition of the bean, and the chain is kept by that definition, see {@link ObjectChains}. The method
+     * carries the metadata of the class, which is what the chain is built from where there is no definition.</p>
      *
-     * @param kind   The lifecycle event, {@code POST_CONSTRUCT} or {@code PRE_DESTROY}
-     * @param method The method Micronaut runs the event through
+     * @param kind    The lifecycle event, {@code POST_CONSTRUCT} or {@code PRE_DESTROY}
+     * @param context The context of the event
      * @return The interceptors, in the order they are invoked in, none for a kind that is not a lifecycle event
      */
-    List<InterceptorReference> resolveLifecycle(InterceptorKind kind, ExecutableMethod<?, ?> method) {
-        InterceptionKind interceptionKind = switch (kind) {
-            case POST_CONSTRUCT -> InterceptionKind.POST_CONSTRUCT;
-            case PRE_DESTROY -> InterceptionKind.PRE_DESTROY;
-            default -> null;
-        };
-        if (interceptionKind == null) {
+    List<InterceptorReference> resolveLifecycle(InterceptorKind kind, MethodInvocationContext<?, ?> context) {
+        if (kind != InterceptorKind.POST_CONSTRUCT && kind != InterceptorKind.PRE_DESTROY) {
             return List.of();
         }
-        return resolve(interceptionKind, recordedInterception(method.getAnnotationMetadata()));
+        Optional<? extends BeanDefinition<?>> definition = context.findBeanDefinition();
+        if (definition.isPresent()) {
+            ObjectChains chains = objectChains(definition.get());
+            return kind == InterceptorKind.POST_CONSTRUCT ? chains.postConstruct() : chains.preDestroy();
+        }
+        InterceptionKind interceptionKind = kind == InterceptorKind.POST_CONSTRUCT
+            ? InterceptionKind.POST_CONSTRUCT
+            : InterceptionKind.PRE_DESTROY;
+        return build(interceptionKind, recordedInterception(context.getExecutableMethod().getAnnotationMetadata()));
+    }
+
+    private ObjectChains objectChains(BeanDefinition<?> definition) {
+        return definition.getCachedUnevaluatedValue(ObjectChains.class, this::readObjectChains);
+    }
+
+    /**
+     * Builds what the definition keeps of the interception of the objects it creates: the chains of the
+     * construction and of the two lifecycle events, and the interceptor classes whose instances are created with
+     * an object.
+     */
+    private ObjectChains readObjectChains(BeanDefinition<?> definition) {
+        List<InterceptorReference> construction = construction(definition.getConstructor().getAnnotationMetadata());
+        AnnotationValue<JakartaInterception> classInterception =
+            recordedInterception(definition.getAnnotationMetadata());
+        return new ObjectChains(construction,
+            build(InterceptionKind.POST_CONSTRUCT, classInterception),
+            build(InterceptionKind.PRE_DESTROY, classInterception),
+            interceptorClasses(definition, construction, classInterception));
+    }
+
+    private List<InterceptorReference> construction(AnnotationMetadata constructorMetadata) {
+        return build(InterceptionKind.AROUND_CONSTRUCT, recordedInterception(constructorMetadata));
     }
 
     private MethodChains readChains(ExecutableMethod<?, ?> method) {
         AnnotationValue<JakartaInterception> interception = recordedInterception(method.getAnnotationMetadata());
         boolean timeout = interception != null && interception.booleanValue(JakartaInterception.TIMEOUT).orElse(false);
-        List<InterceptorReference> business = resolve(InterceptionKind.AROUND_INVOKE, interception);
+        List<InterceptorReference> business = build(InterceptionKind.AROUND_INVOKE, interception);
         return new MethodChains(business,
-            timeout ? resolve(InterceptionKind.AROUND_TIMEOUT, interception) : business,
+            timeout ? build(InterceptionKind.AROUND_TIMEOUT, interception) : business,
             timeout);
-    }
-
-    private List<InterceptorReference> resolve(InterceptionKind kind,
-                                               @Nullable AnnotationValue<JakartaInterception> interception) {
-        return resolve(RecordedKey.of(kind, interception), kind, interception);
-    }
-
-    private List<InterceptorReference> resolve(RecordedKey recordedKey,
-                                               InterceptionKind kind,
-                                               @Nullable AnnotationValue<JakartaInterception> interception) {
-        List<InterceptorReference> chain = recorded.get(recordedKey);
-        if (chain == null) {
-            // two threads may build the same chain, and the later put wins. The key is everything the chain is
-            // built from, so the two chains are equal and nothing is lost. Building inside a computeIfAbsent would
-            // instead hold a lock of the map across the bean context
-            chain = build(kind, interception);
-            recorded.put(recordedKey, chain);
-        }
-        return chain;
     }
 
     /**
@@ -176,39 +184,34 @@ public final class InterceptorChainResolver {
      * {@code @AroundTimeout} method of a bean nothing schedules. The interception of the class is therefore resolved
      * for every kind, and the class-level classes of each kind are among those created.</p>
      *
-     * <p>Only what this module intercepts is asked for: an element it does not intercept has no chain, and resolving
-     * one would put an empty chain in the map for nothing. An interceptor method the class declares itself runs on
-     * the object, and has no instance of its own. The classes are remembered by the definition, rather than read from
-     * every chain of the object again for every bean of it created; two threads resolving them for one definition
-     * resolve the same.</p>
+     * <p>Only what this module intercepts is asked for: an element it does not intercept has no chain. An
+     * interceptor method the class declares itself runs on the object, and has no instance of its own. The classes
+     * are kept by the definition, with its chains, see {@link ObjectChains}, rather than read from every chain of the
+     * object again for every bean of it created.</p>
      *
      * @param definition The definition of the object
      * @return The interceptor classes, each once, in the order they are first met
      */
     List<Class<?>> resolveInterceptorClasses(BeanDefinition<?> definition) {
-        List<Class<?>> resolved = interceptorClasses.get(definition);
-        if (resolved == null) {
-            Set<Class<?>> classes = new LinkedHashSet<>();
-            AnnotationMetadata constructorMetadata = definition.getConstructor().getAnnotationMetadata();
-            if (constructorMetadata.hasAnnotation(JakartaInterception.class)) {
-                addInterceptorClasses(resolveConstruction(constructorMetadata), classes);
+        return objectChains(definition).interceptorClasses();
+    }
+
+    private List<Class<?>> interceptorClasses(BeanDefinition<?> definition,
+                                              List<InterceptorReference> construction,
+                                              @Nullable AnnotationValue<JakartaInterception> classInterception) {
+        Set<Class<?>> classes = new LinkedHashSet<>();
+        addInterceptorClasses(construction, classes);
+        if (classInterception != null) {
+            for (InterceptionKind kind : InterceptionKind.values()) {
+                addInterceptorClasses(build(kind, classInterception), classes);
             }
-            AnnotationValue<JakartaInterception> classInterception =
-                recordedInterception(definition.getAnnotationMetadata());
-            if (classInterception != null) {
-                for (InterceptionKind kind : InterceptionKind.values()) {
-                    addInterceptorClasses(resolve(kind, classInterception), classes);
-                }
-            }
-            for (ExecutableMethod<?, ?> method : definition.getExecutableMethods()) {
-                if (method.getAnnotationMetadata().hasAnnotation(JakartaInterception.class)) {
-                    addInterceptorClasses(chainsOf(method).scheduled(), classes);
-                }
-            }
-            resolved = List.copyOf(classes);
-            interceptorClasses.put(definition, resolved);
         }
-        return resolved;
+        for (ExecutableMethod<?, ?> method : definition.getExecutableMethods()) {
+            if (method.getAnnotationMetadata().hasAnnotation(JakartaInterception.class)) {
+                addInterceptorClasses(chainsOf(method).scheduled(), classes);
+            }
+        }
+        return List.copyOf(classes);
     }
 
     private static void addInterceptorClasses(List<InterceptorReference> chain, Set<Class<?>> classes) {
@@ -221,7 +224,7 @@ public final class InterceptorChainResolver {
 
     /**
      * Builds a chain from the interception the processor recorded on an element and the kind of interception, which
-     * is everything it is built from, so that it can be remembered under the {@link RecordedKey} of the two.
+     * is everything it is built from.
      */
     private List<InterceptorReference> build(InterceptionKind kind,
                                              @Nullable AnnotationValue<JakartaInterception> interception) {

@@ -170,7 +170,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      * not proceed keeps all of them from running.</p>
      */
     private @Nullable Object interceptLifecycle(MethodInvocationContext<Object, Object> context, InterceptorKind kind) {
-        List<InterceptorReference> chain = resolver.resolveLifecycle(kind, context.getExecutableMethod());
+        List<InterceptorReference> chain = resolver.resolveLifecycle(kind, context);
         if (chain.isEmpty()) {
             context.proceed();
             return context.getTarget();
@@ -189,9 +189,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
     @Override
     public Object intercept(ConstructorInvocationContext<Object> context) {
         BeanConstructor<Object> constructor = context.getConstructor();
-        // the annotation metadata of a constructor invocation is carried by the constructor rather than by the
-        // context, which has none of its own
-        List<InterceptorReference> chain = resolver.resolveConstruction(constructor.getAnnotationMetadata());
+        List<InterceptorReference> chain = resolver.resolveConstruction(context);
         if (chain.isEmpty()) {
             return context.proceed();
         }

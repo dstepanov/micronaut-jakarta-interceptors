@@ -32,7 +32,6 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -265,19 +264,21 @@ public final class InterceptorChainResolver {
      * The definitions of the interceptor classes named directly and of those the bindings bind, in the order their
      * interceptor methods are invoked in.
      *
-     * <p>A map keyed by the interceptor class keeps the order while making sure an interceptor class that is both
-     * named directly and bound by an annotation is only invoked once, at its first position.</p>
+     * <p>A set of the definitions describing them keeps the order while making sure an interceptor class that is
+     * both named directly and bound by an annotation is only invoked once, at its first position. The definition
+     * rather than its bean type tells the two apart: an interceptor class Micronaut proxies is described by the
+     * definition of the subclass it generates, whose bean type is not the class the element names.</p>
      */
     private Collection<BeanDefinition<?>> ordered(List<Class<?>> interceptors, InterceptorBindings bindings) {
-        Map<Class<?>, BeanDefinition<?>> ordered = new LinkedHashMap<>();
+        Set<BeanDefinition<?>> ordered = new LinkedHashSet<>();
         for (Class<?> interceptorClass : interceptors) {
-            ordered.putIfAbsent(interceptorClass, definitions.requireDescribing(interceptorClass));
+            ordered.add(definitions.requireDescribing(interceptorClass));
         }
         for (BeanDefinition<?> definition : definitions.boundInterceptors(bindings)) {
             BeanDefinition<?> describing = definitions.describing(definition.getBeanType());
-            ordered.putIfAbsent(definition.getBeanType(), describing == null ? definition : describing);
+            ordered.add(describing == null ? definition : describing);
         }
-        return ordered.values();
+        return ordered;
     }
 
     /**

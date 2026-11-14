@@ -3,7 +3,6 @@ package io.micronaut.interceptor.processor;
 import io.micronaut.core.annotation.AnnotationClassValue;
 import io.micronaut.core.annotation.AnnotationUtil;
 import io.micronaut.core.annotation.AnnotationValue;
-import io.micronaut.interceptor.internal.metadata.BindingValue;
 import io.micronaut.interceptor.spi.InterceptorBindings;
 import org.junit.jupiter.api.Test;
 
@@ -27,7 +26,7 @@ class InterceptorBindingValuesTest {
     private static final String BINDING = "test.Tags";
 
     private static BindingValue binding(Map<CharSequence, Object> values) {
-        return InterceptorBindingValues.of(AnnotationValue.builder(BINDING).members(values).build(), name -> List.of());
+        return InterceptorBindingValues.of(AnnotationValue.builder(BINDING).members(values).build());
     }
 
     private static InterceptorBindings written(BindingValue binding) {
@@ -121,7 +120,7 @@ class InterceptorBindingValuesTest {
             List.of(binding(Map.of("value", new TimeUnit[]{TimeUnit.SECONDS})),
                 binding(Map.of("value", new String[]{"SECONDS"}))),
             List.of(binding(Map.of("value", new int[]{1, 2})), InterceptorBindingValues.of(
-                new AnnotationValue<>(BINDING, Map.of("value", new Integer[]{1, 2}), Map.of()), name -> List.of())),
+                new AnnotationValue<>(BINDING, Map.of("value", new Integer[]{1, 2}), Map.of()))),
             List.of(binding(Map.of()), binding(Map.of("value", ""))),
             List.of(binding(Map.of("value", AnnotationValue.builder("test.Inner").member("value", "a").build())),
                 binding(Map.of("value", AnnotationValue.builder("test.Inner").member("value", "a").build()))));
@@ -148,7 +147,7 @@ class InterceptorBindingValuesTest {
             .build();
 
         BindingValue binding =
-            InterceptorBindingValues.of(declared, name -> List.of("value"));
+            InterceptorBindingValues.of(declared);
 
         AnnotationValue<?> written = binding.toAnnotationValue();
         assertEquals("a", written.stringValue().orElse(null));
@@ -158,22 +157,25 @@ class InterceptorBindingValuesTest {
         assertEquals(binding, InterceptorBindingValues.of(AnnotationValue.builder(BINDING)
             .member("value", "a")
             .member(AnnotationUtil.NON_BINDING_ATTRIBUTE, new String[]{"comment", "note"})
-            .build(), name -> List.of()));
+            .build()));
         assertTrue(InterceptorBindings.ofValues(List.of(written)).isBoundBy(InterceptorBindings.ofValues(List.of(
             AnnotationValue.builder(BINDING).member("value", "a").member("comment", "z").member("note", "w").build()))));
     }
 
     /**
-     * An annotation a member of a binding holds is recorded without the members its type excludes, so those are
-     * supplied off the type.
+     * An annotation a member of a binding holds lists the members its type excludes, as Micronaut records them on it,
+     * and they are kept as declared and listed, as those of the binding are.
      */
     @Test
     void anAnnotationAMemberHoldsListsTheMembersItsTypeExcludes() {
-        AnnotationValue<?> held = AnnotationValue.builder("test.Held").member("value", "a").member("note", "y").build();
+        AnnotationValue<?> held = AnnotationValue.builder("test.Held")
+            .member("value", "a")
+            .member("note", "y")
+            .member(AnnotationUtil.NON_BINDING_ATTRIBUTE, new String[]{"note"})
+            .build();
         AnnotationValue<?> declared = AnnotationValue.builder(BINDING).member("value", held).build();
 
-        BindingValue binding = InterceptorBindingValues.of(declared,
-            name -> name.equals("test.Held") ? List.of("note") : List.of());
+        BindingValue binding = InterceptorBindingValues.of(declared);
 
         AnnotationValue<?> written = binding.toAnnotationValue().getAnnotation("value").orElseThrow();
         assertEquals("a", written.stringValue().orElse(null));
@@ -200,9 +202,9 @@ class InterceptorBindingValuesTest {
         AnnotationValue<?> empty = new AnnotationValue<>(BINDING, Map.of("value", ""), Map.of("value", "eu"));
         AnnotationValue<?> defaulted = new AnnotationValue<>(BINDING, Map.of(), Map.of("value", "eu"));
 
-        BindingValue reduced = InterceptorBindingValues.of(empty, name -> List.of());
+        BindingValue reduced = InterceptorBindingValues.of(empty);
         assertEquals("", reduced.toAnnotationValue().getValues().get("value"));
-        assertNotEquals(reduced, InterceptorBindingValues.of(defaulted, name -> List.of()));
+        assertNotEquals(reduced, InterceptorBindingValues.of(defaulted));
         assertFalse(written(reduced).isBoundBy(InterceptorBindings.ofValues(List.of(defaulted))));
         assertTrue(written(reduced).isBoundBy(InterceptorBindings.ofValues(List.of(empty))));
     }

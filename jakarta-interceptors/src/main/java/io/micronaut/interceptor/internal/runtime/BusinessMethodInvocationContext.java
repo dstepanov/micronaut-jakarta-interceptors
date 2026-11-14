@@ -83,6 +83,11 @@ final class BusinessMethodInvocationContext extends AbstractInvocationContext
             .annotations();
     }
 
+    @Override
+    boolean keepsBindings() {
+        return true;
+    }
+
     private static AnnotationMetadata compiledMetadataOf(ExecutableMethod<?, ?> method) {
         return method.getAnnotationMetadata().getTargetAnnotationMetadata();
     }

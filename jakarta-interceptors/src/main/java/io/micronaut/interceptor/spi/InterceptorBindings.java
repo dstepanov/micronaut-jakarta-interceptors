@@ -20,19 +20,19 @@ import io.micronaut.aop.InterceptorKind;
 import io.micronaut.context.BeanContext;
 import io.micronaut.core.annotation.AnnotationUtil;
 import io.micronaut.core.annotation.AnnotationValue;
+import io.micronaut.core.annotation.Internal;
 import io.micronaut.inject.BeanDefinition;
 import io.micronaut.inject.BeanType;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorMethods;
 import io.micronaut.interceptor.internal.runtime.InterceptorChainResolver;
 import org.jspecify.annotations.Nullable;
 
+import java.lang.annotation.Annotation;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -65,18 +65,12 @@ public final class InterceptorBindings {
     private static final InterceptorBindings NONE = new InterceptorBindings(List.of());
 
     private final List<AnnotationValue<?>> bindings;
-    private final int hash;
     // the bindings as an interception point Micronaut selects the interceptors of with its exact rule: every binding
     // of an interceptor applies at the point
     private final ExactInterceptorBindingQualifier<?> point;
 
     private InterceptorBindings(List<AnnotationValue<?>> bindings) {
         this.bindings = bindings;
-        Set<String> names = new HashSet<>();
-        for (AnnotationValue<?> binding : bindings) {
-            names.add(binding.getAnnotationName());
-        }
-        this.hash = names.hashCode();
         // the kind takes no part in comparing occurrences, which carry no kind of their own
         this.point = ExactInterceptorBindingQualifier.ofOccurrences(bindings, InterceptorKind.AROUND);
     }
@@ -88,16 +82,21 @@ public final class InterceptorBindings {
      * @return The bindings, none where the class declares none or is not an interceptor class
      */
     public static InterceptorBindings of(BeanType<?> interceptor) {
+        return ofValues(recordedBindingsOf(interceptor));
+    }
+
+    private static List<AnnotationValue<Annotation>> recordedBindingsOf(BeanType<?> interceptor) {
         AnnotationValue<JakartaInterceptorMethods> recorded =
             interceptor.getAnnotation(JakartaInterceptorMethods.class);
-        return recorded == null ? NONE : ofValues(recorded.getAnnotations(JakartaInterceptorMethods.BINDINGS));
+        return recorded == null ? List.of() : recorded.getAnnotations(JakartaInterceptorMethods.BINDINGS);
     }
 
     /**
      * Reads a set of bindings from the values of the binding annotations, which may have been read from the
      * metadata of an element, as the processor recorded them, or built from annotation instances. The values are
-     * kept as they are, but for the arrays their members hold, which are copied so that the caller's arrays stay the
-     * caller's; they are compared by {@link AnnotationValue#matches(AnnotationValue)}.
+     * kept as they are, arrays included, and compared by {@link AnnotationValue#matches(AnnotationValue)}: a set of
+     * bindings is made to be compared there and then, and an array changed while it is in use changes what it
+     * selects.
      *
      * <p>A value lists the members excluded from its binding under {@value AnnotationUtil#NON_BINDING_ATTRIBUTE}.
      * Those are left out wherever it is compared, and so are the ones the other side of the comparison lists.
@@ -118,60 +117,10 @@ public final class InterceptorBindings {
         List<AnnotationValue<?>> read = new ArrayList<>(values.size());
         for (AnnotationValue<?> value : values) {
             if (read.stream().noneMatch(value::matches)) {
-                read.add(snapshot(value));
+                read.add(value);
             }
         }
         return new InterceptorBindings(Collections.unmodifiableList(read));
-    }
-
-    /**
-     * The value with every array a member holds copied, at any depth, and everything else as it is: an
-     * {@link AnnotationValue} keeps the arrays it is built with, and an array the caller changes afterwards must not
-     * change which interceptors these bindings select. A value holding no array is kept itself.
-     */
-    private static AnnotationValue<?> snapshot(AnnotationValue<?> value) {
-        Map<CharSequence, Object> members = value.getValues();
-        Map<CharSequence, Object> copied = null;
-        for (Map.Entry<CharSequence, Object> member : members.entrySet()) {
-            Object snapshot = snapshotMember(member.getValue());
-            if (snapshot != member.getValue()) {
-                if (copied == null) {
-                    copied = new LinkedHashMap<>(members);
-                }
-                copied.put(member.getKey(), snapshot);
-            }
-        }
-        return copied == null
-            ? value
-            : new AnnotationValue<>(value.getAnnotationName(), copied, value.getDefaultValues());
-    }
-
-    /**
-     * A member value with its arrays copied; listed out rather than read through {@code java.lang.reflect.Array}, so
-     * that the interception stays free of the reflection of the platform.
-     */
-    private static Object snapshotMember(Object value) {
-        return switch (value) {
-            case AnnotationValue<?> annotation -> snapshot(annotation);
-            case Object[] array -> {
-                Object[] copy = array.clone();
-                for (int i = 0; i < copy.length; i++) {
-                    if (copy[i] instanceof AnnotationValue<?> annotation) {
-                        copy[i] = snapshot(annotation);
-                    }
-                }
-                yield copy;
-            }
-            case int[] array -> array.clone();
-            case long[] array -> array.clone();
-            case double[] array -> array.clone();
-            case boolean[] array -> array.clone();
-            case byte[] array -> array.clone();
-            case short[] array -> array.clone();
-            case char[] array -> array.clone();
-            case float[] array -> array.clone();
-            default -> value;
-        };
     }
 
     /**
@@ -191,8 +140,8 @@ public final class InterceptorBindings {
      *
      * <p>Each definition is the one Micronaut generated from the interceptor class, which carries the executable
      * methods {@link InterceptorMethods#of(BeanDefinition, io.micronaut.interceptor.metadata.InterceptionKind)}
-     * reads, and whose bindings {@link #of(BeanType)} reads. The selection is made again for every call, since the
-     * definitions a context knows of may still grow while its beans are first created.</p>
+     * reads, and whose bindings {@link #of(BeanType)} reads. The selection is made again for every call; a chain keeps
+     * the selection it was built from.</p>
      *
      * @param beanContext The bean context the interceptor classes are beans of
      * @param point       The bindings of the interception point
@@ -246,6 +195,19 @@ public final class InterceptorBindings {
     }
 
     /**
+     * Tells whether the interceptor class of a bean is bound to an interception point declaring these bindings:
+     * {@code InterceptorBindings.of(interceptor).isBoundBy(this)}, comparing the bindings recorded on the bean as
+     * they are read, without making them a set of bindings of their own.
+     *
+     * @param interceptor The bean of the interceptor class
+     * @return Whether the interceptor is bound to the point
+     */
+    @Internal
+    public boolean binds(BeanType<?> interceptor) {
+        return point.matches(recordedBindingsOf(interceptor));
+    }
+
+    /**
      * Two sets of bindings are equal when each binding of either is a binding of the other.
      *
      * @param o The other object
@@ -270,7 +232,11 @@ public final class InterceptorBindings {
      */
     @Override
     public int hashCode() {
-        return hash;
+        Set<String> names = new HashSet<>();
+        for (AnnotationValue<?> binding : bindings) {
+            names.add(binding.getAnnotationName());
+        }
+        return names.hashCode();
     }
 
     @Override

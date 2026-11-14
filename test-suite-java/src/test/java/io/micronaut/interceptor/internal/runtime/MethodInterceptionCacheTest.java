@@ -3,6 +3,7 @@ package io.micronaut.interceptor.internal.runtime;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.context.annotation.Prototype;
 import io.micronaut.inject.ExecutableMethod;
+import io.micronaut.interceptor.MicronautMethodInvocationContext;
 import jakarta.annotation.PostConstruct;
 import jakarta.interceptor.AroundInvoke;
 import jakarta.interceptor.Interceptor;
@@ -23,12 +24,14 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The chains of a method are kept by the method itself, which every bean of a prototype created in the context
- * shares, also where another annotation of the method holds an evaluated expression.
+ * The chains of a method are kept by the method the proxies invoke it through, which every bean of a prototype
+ * created in the context shares, also where another annotation of the method holds an evaluated expression.
  */
 class MethodInterceptionCacheTest {
 
     static final List<String> CALLS = new CopyOnWriteArrayList<>();
+    // the methods the invocations went through, which are the proxy's rather than those of the bean definition
+    static final List<ExecutableMethod<?, ?>> INVOKED = new CopyOnWriteArrayList<>();
 
     @InterceptorBinding
     @Retention(RetentionPolicy.RUNTIME)
@@ -42,6 +45,7 @@ class MethodInterceptionCacheTest {
         @AroundInvoke
         public Object invoke(InvocationContext context) throws Exception {
             CALLS.add("invoke " + context.getMethod().getName());
+            INVOKED.add(((MicronautMethodInvocationContext) context).getMicronautInvocation().getExecutableMethod());
             return context.proceed();
         }
 
@@ -78,11 +82,11 @@ class MethodInterceptionCacheTest {
     @Test
     void aMethodWhoseMetadataHoldsAnEvaluatedExpressionKeepsWhatItRecordsAsWell() {
         try (ApplicationContext context = ApplicationContext.run()) {
+            INVOKED.clear();
             assertEquals("worked", context.getBean(EvaluatedPrototype.class).work());
             assertEquals("worked", context.getBean(EvaluatedPrototype.class).work());
 
-            ExecutableMethod<EvaluatedPrototype, Object> work =
-                context.getBeanDefinition(EvaluatedPrototype.class).getRequiredMethod("work");
+            ExecutableMethod<?, ?> work = invokedOnce();
             assertTrue(work.getAnnotationMetadata().hasEvaluatedExpressions());
             MethodChains kept = work.getCachedUnevaluatedValue(MethodChains.class, method -> {
                 throw new AssertionError("the chains are built from the compiled metadata alone, and kept");
@@ -97,13 +101,13 @@ class MethodInterceptionCacheTest {
         try (ApplicationContext context = ApplicationContext.run()) {
             InterceptorChainResolver resolver = context.getBean(InterceptorChainResolver.class);
             CALLS.clear();
+            INVOKED.clear();
             for (int i = 0; i < 101; i++) {
                 assertEquals("worked", context.getBean(KeptPrototype.class).work());
             }
 
             assertEquals(202, CALLS.size(), "each bean is created and invoked through its chain");
-            ExecutableMethod<KeptPrototype, Object> work =
-                context.getBeanDefinition(KeptPrototype.class).getRequiredMethod("work");
+            ExecutableMethod<?, ?> work = invokedOnce();
             MethodChains kept = work.getCachedUnevaluatedValue(MethodChains.class, method -> {
                 throw new AssertionError("the method keeps its chains once it has been invoked");
             });
@@ -111,5 +115,16 @@ class MethodInterceptionCacheTest {
             assertEquals(List.of(KeptInterceptor.class), kept.business()
                 .stream().<Class<?>>map(InterceptorReference::interceptorClass).toList());
         }
+    }
+
+    /**
+     * The one method every invocation went through: the proxies of the beans share it.
+     */
+    private static ExecutableMethod<?, ?> invokedOnce() {
+        ExecutableMethod<?, ?> first = INVOKED.get(0);
+        for (ExecutableMethod<?, ?> invoked : INVOKED) {
+            assertSame(first, invoked, "every bean is invoked through one method");
+        }
+        return first;
     }
 }

@@ -25,8 +25,8 @@ public class FirstInterceptor {
 <1> Runs before an interceptor without a declared priority, which is ordered at
 `Interceptor.Priority.APPLICATION`.
 
-An interceptor class may be ordered with Micronaut's own api:core.annotation.Order[] instead, which is read when
-no `@Priority` is declared.
+An interceptor class may be ordered with Micronaut's own api:core.annotation.Order[] instead: Micronaut maps
+`@Priority` onto `@Order` with the same value, and `@Order` is what the priority is read from.
 
 On its own this module enables every interceptor class of the context, so an interceptor class bound by an
 annotation intercepts whether or not it declares a priority. A module with rules of enablement of its own provides a

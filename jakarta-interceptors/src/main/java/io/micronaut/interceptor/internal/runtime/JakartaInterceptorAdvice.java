@@ -36,9 +36,9 @@ import io.micronaut.interceptor.internal.metadata.JakartaInterception;
 import jakarta.interceptor.Interceptor;
 import org.jspecify.annotations.Nullable;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 /**
@@ -74,7 +74,14 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      * shared by every object it intercepts - stays in its scope.
      */
     private final BeanDependencyResolver dependencies;
-    private final Map<Class<?>, Object> instances = new HashMap<>(4);
+    /**
+     * The interceptor instances of the object, by interceptor class. Read on every invocation, without a lock: they
+     * are created as the advice is created where Micronaut hands it its bean, so an invocation finds them here.
+     * Creating one later - for an advice handed no bean - takes the lock of the advice, so that an interceptor class
+     * has one instance, owned by {@link #dependencies}, however many threads ask for it first.
+     */
+    private final Map<Class<?>, Object> instances = new ConcurrentHashMap<>(4);
+
     /**
      * Creates the advice of one object.
      *
@@ -164,7 +171,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
      * not proceed keeps all of them from running.</p>
      */
     private @Nullable Object interceptLifecycle(MethodInvocationContext<Object, Object> context, InterceptorKind kind) {
-        List<InterceptorReference> chain = resolver.resolveLifecycle(kind, context.getExecutableMethod());
+        List<InterceptorReference> chain = resolver.resolveLifecycle(kind, context);
         if (chain.isEmpty()) {
             context.proceed();
             return context.getTarget();
@@ -183,9 +190,7 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
     @Override
     public Object intercept(ConstructorInvocationContext<Object> context) {
         BeanConstructor<Object> constructor = context.getConstructor();
-        // the annotation metadata of a constructor invocation is carried by the constructor rather than by the
-        // context, which has none of its own
-        List<InterceptorReference> chain = resolver.resolveConstruction(constructor.getAnnotationMetadata());
+        List<InterceptorReference> chain = resolver.resolveConstruction(context);
         if (chain.isEmpty()) {
             return context.proceed();
         }
@@ -241,7 +246,17 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         return interceptorInstance(reference.interceptorClass());
     }
 
-    private synchronized Object interceptorInstance(Class<?> interceptorClass) {
+    private Object interceptorInstance(Class<?> interceptorClass) {
+        Object instance = instances.get(interceptorClass);
+        return instance == null ? createInterceptorInstance(interceptorClass) : instance;
+    }
+
+    /**
+     * Creates the instance of an interceptor class that has none yet, once. The instance is created under the lock
+     * rather than in a {@code computeIfAbsent}, which would hold a lock of the map across the bean context while an
+     * interceptor whose creation reaches this advice again asks for another instance.
+     */
+    private synchronized Object createInterceptorInstance(Class<?> interceptorClass) {
         Object instance = instances.get(interceptorClass);
         if (instance == null) {
             instance = create(interceptorClass);

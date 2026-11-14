@@ -175,8 +175,8 @@ of a repeatable binding compared as one group. What the module still does itself
 * the bindings are those the processor recorded. Micronaut's qualifier reads the bindings of an element and of a
 candidate from Micronaut's own `@InterceptorBinding`, with the occurrences on a method replacing those of its class.
 Binding types are not meta-annotated with it, since that would have Micronaut proxy every class carrying a binding,
-interceptor classes included, so the processor records the bindings, a method's replacing its class's, and a
-qualifier of this module hands them to the rule;
+interceptor classes included, so the processor records the bindings, a method's replacing its class's, and each
+indexed interceptor class is handed to the rule with the bindings recorded on it;
 * the interceptor classes are ordered by `@Priority`, and one that declares none at
 `Interceptor.Priority.APPLICATION`, where Micronaut orders it at 0, and a `BoundInterceptorEnablement` decides which
 are enabled, which Micronaut has nothing of. An interceptor class must declare `@Interceptor` to be bound, which
@@ -188,10 +188,14 @@ invocations report, through Micronaut's experimental
 `ExecutableMethod.getCachedUnevaluatedValue`, which keeps them for a method an annotation of which holds an evaluated
 expression as well. Micronaut documents the methods of a definition, and of the proxies a context creates, as
 belonging to that context, so the chains, which depend on the interceptor classes the context holds and enables,
-belong on the method that every object of the context is called through. Micronaut offers no such value for a
-constructor or a bean definition, and the method object Micronaut runs a lifecycle event through is created for the
-event and keeps none, so for those the resolver keeps the chains in a map of its own, under the interception the
-processor recorded; a method whose metadata Micronaut does not keep values for finds its chains there as well.
+belong on the method that every object of the context is called through. The chains of a construction and of the
+lifecycle events, and the interceptor classes created with an object, are kept by its bean definition through
+`BeanDefinition.getCachedUnevaluatedValue`, which Micronaut hands the advice as the bean it is created for and
+through the context of a construction or of a lifecycle event; the method object Micronaut runs a lifecycle event
+through is created for the event and keeps nothing itself. The interceptor methods of an interceptor class are kept
+by its definition the same way. The module keeps no map of its own: where Micronaut keeps no value - a method or a
+definition whose metadata it does not keep values for, or the context of a construction that carries no
+definition - the chain is built again for that invocation.
 
 == Languages
 

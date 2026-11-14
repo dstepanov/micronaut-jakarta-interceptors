@@ -296,10 +296,8 @@ public final class InterceptorChainResolver {
         for (Class<?> interceptorClass : interceptors) {
             ordered.add(definitions.requireDescribing(interceptorClass));
         }
-        for (BeanDefinition<?> definition : definitions.boundInterceptors(bindings)) {
-            BeanDefinition<?> describing = definitions.describing(definition.getBeanType());
-            ordered.add(describing == null ? definition : describing);
-        }
+        // the definitions a binding selects are the ones describing the interceptor classes already
+        ordered.addAll(definitions.boundInterceptors(bindings));
         return ordered;
     }
 

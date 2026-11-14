@@ -176,7 +176,7 @@ final class InterceptorDefinitions {
      * <p>It is looked up every time a chain is built rather than remembered: the chains are kept, so this runs once
      * for each of them.</p>
      */
-    @Nullable BeanDefinition<?> describing(Class<?> interceptorClass) {
+    private @Nullable BeanDefinition<?> describing(Class<?> interceptorClass) {
         BeanDefinition<?> fallback = null;
         for (BeanDefinition<?> definition : beanContext.getBeanDefinitions(interceptorClass)) {
             // a subclass that is an interceptor class too is a bean of this type as well, and describes itself:

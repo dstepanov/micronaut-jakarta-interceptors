@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -32,6 +33,24 @@ class TypedBindingTest {
                         "full=[Cached, Labelled(one), Labelled(two), TypedRead]",
                         "users region"),
                 List.copyOf(Calls.RECORDED));
+        }
+    }
+
+    /**
+     * The binding of one type a business method reports is built once and kept by the method, as the whole set is:
+     * an interceptor asking for its binding on every invocation is handed the same annotation each time.
+     */
+    @Test
+    void keepsTheBindingOfOneTypeAcrossInvocations() {
+        try (ApplicationContext context = ApplicationContext.run()) {
+            TypedBindingInterceptor.HANDED.clear();
+            TypedBindingService service = context.getBean(TypedBindingService.class);
+
+            service.work();
+            service.work();
+
+            assertEquals(2, TypedBindingInterceptor.HANDED.size());
+            assertSame(TypedBindingInterceptor.HANDED.get(0), TypedBindingInterceptor.HANDED.get(1));
         }
     }
 

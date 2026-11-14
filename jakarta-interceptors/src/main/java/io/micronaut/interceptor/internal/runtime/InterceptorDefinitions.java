@@ -78,19 +78,19 @@ final class InterceptorDefinitions {
      * applies: an interceptor is bound when every binding it declares matches one of the element, member by member
      * through {@code AnnotationValue.matches}. That qualifier reads the bindings of a candidate from the
      * {@code io.micronaut.aop.InterceptorBinding} values of its metadata, which an interceptor class of this module
-     * does not carry, so the candidates are filtered with {@link BoundInterceptorQualifier}, which hands the rule the
-     * bindings the processor recorded on each of them instead.</p>
+     * does not carry, so each candidate is handed to the rule with the bindings the processor recorded on it
+     * instead, by {@link InterceptorBindings#binds}.</p>
      *
      * <p>They are asked for by the type the processor indexed them under rather than by reading every bean
      * definition of the context and keeping the ones that are interceptor classes. An index is what the context
      * keeps for exactly this question, and it answers it without the size of the application being the cost of
      * resolving one chain.</p>
      *
-     * <p>They are looked for again for every chain that is resolved, rather than once and remembered. The first
-     * chain of an application is resolved while a bean of it is being created, and the definitions the context
-     * knows of at that moment are not yet all of them; a list taken then and kept would leave every interceptor
-     * that had not been reached yet out of every chain resolved afterwards. What is remembered is the chain of
-     * each intercepted element, so this runs once for each of them rather than once for each invocation.</p>
+     * <p>They are looked for when a chain is built rather than once for the resolver: the context indexes them, so
+     * the lookup costs no more than the interceptor classes there are. The chain built from them is then kept, by
+     * the method or the definition it belongs to, so this runs once for each intercepted element rather than once
+     * for each invocation, and an interceptor class registered with the context after a chain was built is not in
+     * that chain, as the limitations guide says.</p>
      *
      * <p>It is the selection {@link InterceptorBindings#boundInterceptors(BeanContext, InterceptorBindings)} makes
      * for another module, which asks it of this resolver so that the two cannot differ.</p>
@@ -106,8 +106,10 @@ final class InterceptorDefinitions {
         // a class a factory produces as well is indexed by the definition of the factory too, which carries what the
         // processor recorded on the class; both are described by the one definition, and the class is bound once
         Set<BeanDefinition<?>> matching = new LinkedHashSet<>();
-        for (BeanDefinition<JakartaInterceptorIndex> bound : beanContext.getBeanDefinitions(
-            JakartaInterceptorIndex.class, new BoundInterceptorQualifier<>(bindingsOfElement))) {
+        for (BeanDefinition<JakartaInterceptorIndex> bound : beanContext.getBeanDefinitions(JakartaInterceptorIndex.class)) {
+            if (!bindingsOfElement.binds(bound)) {
+                continue;
+            }
             BeanDefinition<?> definition = describing(bound.getBeanType());
             // a class that declares an interceptor method without declaring itself an interceptor class is one
             // only where it is named directly, and takes no part in what a binding annotation binds
@@ -171,11 +173,10 @@ final class InterceptorDefinitions {
      * through, and it is the one read here; which of them provides the instance is a separate question, answered
      * by the bean context.</p>
      *
-     * <p>It is looked up every time a chain is built rather than remembered: the chains are kept, by the method and
-     * by the resolver, so this runs once for each of them, and a class looked up before its definition was known is
-     * found once it is.</p>
+     * <p>It is looked up every time a chain is built rather than remembered: the chains are kept, so this runs once
+     * for each of them.</p>
      */
-    @Nullable BeanDefinition<?> describing(Class<?> interceptorClass) {
+    private @Nullable BeanDefinition<?> describing(Class<?> interceptorClass) {
         BeanDefinition<?> fallback = null;
         for (BeanDefinition<?> definition : beanContext.getBeanDefinitions(interceptorClass)) {
             // a subclass that is an interceptor class too is a bean of this type as well, and describes itself:

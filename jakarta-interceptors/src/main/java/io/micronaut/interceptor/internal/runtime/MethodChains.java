@@ -30,7 +30,7 @@ import java.util.List;
  * method another annotation of which holds one keeps them as well.</p>
  *
  * <p>A lifecycle event is run through a method object Micronaut creates for the event, which keeps nothing, so
- * the chains of the lifecycle events are not kept here: the resolver finds them in its map.</p>
+ * the chains of the lifecycle events are kept by the definition of the bean instead, see {@link ObjectChains}.</p>
  *
  * @param business  The chain of a business method invocation of the method
  * @param scheduled The chain of an invocation the scheduler makes, which is the business chain unless the method is

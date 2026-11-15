@@ -47,4 +47,18 @@ dependencies {
     testImplementation sourceSets.external.output
 }
 
+// A visitor that rewrites the @Order of the classes of the tests asking for it into their priority negated, after
+// Micronaut mapped the one onto the other, as Micronaut CDI does for a selected alternative. It is compiled on its own
+// so that it can be on the annotation processor path of the tests
+sourceSets {
+    negation
+}
+
+dependencies {
+    negationImplementation platform(libs.micronaut.core)
+    negationImplementation mn.micronaut.core.processor
+
+    testAnnotationProcessor sourceSets.negation.output
+}
+
 apply from: 'benchmark.gradle'

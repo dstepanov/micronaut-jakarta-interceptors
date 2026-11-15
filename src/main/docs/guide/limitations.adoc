@@ -177,8 +177,8 @@ candidate from Micronaut's own `@InterceptorBinding`, with the occurrences on a 
 Binding types are not meta-annotated with it, since that would have Micronaut proxy every class carrying a binding,
 interceptor classes included, so the processor records the bindings, a method's replacing its class's, and each
 indexed interceptor class is handed to the rule with the bindings recorded on it;
-* the interceptor classes are ordered by `@Priority`, and one that declares none at
-`Interceptor.Priority.APPLICATION`, where Micronaut orders it at 0, and a `BoundInterceptorEnablement` decides which
+* the interceptor classes are ordered by `@Priority`, by `@Order` where they declare no `@Priority`, and one that
+declares neither at `Interceptor.Priority.APPLICATION`, where Micronaut orders it at 0, and a `BoundInterceptorEnablement` decides which
 are enabled, which Micronaut has nothing of. An interceptor class must declare `@Interceptor` to be bound, which
 Micronaut's rule, comparing bindings alone, leaves to the caller; and Micronaut has no kind of interception for an
 `@AroundTimeout` method.

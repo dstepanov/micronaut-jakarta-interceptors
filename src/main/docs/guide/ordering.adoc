@@ -26,7 +26,9 @@ public class FirstInterceptor {
 `Interceptor.Priority.APPLICATION`.
 
 An interceptor class may be ordered with Micronaut's own api:core.annotation.Order[] instead: Micronaut maps
-`@Priority` onto `@Order` with the same value, and `@Order` is what the priority is read from.
+`@Priority` onto `@Order` with the same value, and `@Order` is read where a class declares no `@Priority`. Where it
+declares one, the priority is what orders it, whatever `@Order` holds: a module may give `@Order` a meaning of its own
+on the same class, as Micronaut CDI does for a selected alternative, whose priority it negates into `@Order`.
 
 On its own this module enables every interceptor class of the context, so an interceptor class bound by an
 annotation intercepts whether or not it declares a priority. A module with rules of enablement of its own provides a

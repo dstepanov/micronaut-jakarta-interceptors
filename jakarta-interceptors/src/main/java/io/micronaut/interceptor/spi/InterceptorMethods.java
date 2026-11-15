@@ -19,6 +19,7 @@ import io.micronaut.aop.ConstructorInvocationContext;
 import io.micronaut.aop.MethodInvocationContext;
 import io.micronaut.interceptor.MicronautConstructorInvocationContext;
 import io.micronaut.interceptor.MicronautMethodInvocationContext;
+import io.micronaut.interceptor.internal.metadata.JakartaInterceptorSupport;
 import io.micronaut.core.annotation.AnnotationClassValue;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
@@ -39,6 +40,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 
 /**
@@ -117,15 +119,24 @@ public final class InterceptorMethods {
 
     /**
      * The priority an interceptor class is ordered by, which the specification takes from
-     * {@code jakarta.annotation.Priority}. Micronaut maps that annotation onto its own {@code @Order}, with the same
-     * value and the same direction, so {@code @Order} is what is read, and an interceptor ordered the Micronaut way
-     * is ordered the same.
+     * {@code jakarta.annotation.Priority}, and which is read from it first.
+     *
+     * <p>Micronaut maps that annotation onto its own {@code @Order} with the same value, and {@code @Order} is read
+     * where the class declares no priority, so that an interceptor ordered the Micronaut way is ordered the same. It
+     * is not read in place of the priority: a module may give {@code @Order} a meaning of its own on the same class
+     * - Micronaut CDI negates the priority of a selected alternative into it, since an alternative of a higher
+     * priority wins - and the priority as the class declares it is what orders an interceptor.</p>
      *
      * @param definition The definition of the interceptor class
      * @return The priority, lowest first in a chain
      */
     public static int priorityOf(BeanDefinition<?> definition) {
-        return definition.getAnnotationMetadata().intValue(Order.class).orElse(Interceptor.Priority.APPLICATION);
+        AnnotationMetadata metadata = definition.getAnnotationMetadata();
+        OptionalInt priority = metadata.intValue(JakartaInterceptorSupport.PRIORITY, AnnotationMetadata.VALUE_MEMBER);
+        if (priority.isPresent()) {
+            return priority.getAsInt();
+        }
+        return metadata.intValue(Order.class).orElse(Interceptor.Priority.APPLICATION);
     }
 
     /**

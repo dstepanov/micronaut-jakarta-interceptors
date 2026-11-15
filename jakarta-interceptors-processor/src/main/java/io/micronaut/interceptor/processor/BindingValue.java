@@ -41,7 +41,8 @@ import java.util.TreeSet;
  *     {@code @Logged(level = "INFO")} are the same binding where {@code "INFO"} is the default, and what is recorded
  *     reads the same whatever defaults Micronaut registers for the annotation later;</li>
  *     <li>the members excluded from the binding, which is what {@code jakarta.enterprise.util.Nonbinding} does, are
- *     left out and listed under {@value AnnotationUtil#NON_BINDING_ATTRIBUTE};</li>
+ *     listed under {@value AnnotationUtil#NON_BINDING_ATTRIBUTE}, and kept with the others, defaults included, as
+ *     what an invocation reports: Micronaut leaves a listed member out of every comparison;</li>
  *     <li>an empty string the processor finds no default for is left out of what it records, as Micronaut records
  *     no default of an empty string for an annotation compiled from Java or Kotlin, so that {@code @Region("")} and
  *     {@code @Region} are recorded alike;</li>
@@ -71,19 +72,16 @@ public final class BindingValue {
 
     private final String name;
     private final Set<String> nonBinding;
+    // the members, the ones excluded from the binding included: recorded so that the bindings an invocation reports
+    // are the declaration, and left out of every comparison by the list of excluded members
     private final Map<String, Object> members;
-    // the members excluded from the binding, as the declaration gives them: recorded so that the bindings an
-    // invocation reports are the declaration, and left out of every comparison by the list of excluded members
-    private final Map<String, Object> excludedMembers;
     // the binding as Micronaut compares and hashes two annotations, see matches
     private final AnnotationValue<?> matched;
 
-    private BindingValue(String name, Set<String> nonBinding, Map<String, Object> members,
-                         Map<String, Object> excludedMembers) {
+    private BindingValue(String name, Set<String> nonBinding, Map<String, Object> members) {
         this.name = name;
         this.nonBinding = nonBinding;
         this.members = members;
-        this.excludedMembers = excludedMembers;
         Map<CharSequence, Object> matchedMembers = CollectionUtils.newLinkedHashMap(members.size() + 1);
         matchedMembers.putAll(members);
         if (!nonBinding.isEmpty()) {
@@ -129,17 +127,11 @@ public final class BindingValue {
         nonBinding.remove(AnnotationUtil.NON_BINDING_ATTRIBUTE);
         members.remove(AnnotationUtil.NON_BINDING_ATTRIBUTE);
         members.remove(AnnotationUtil.STEREOTYPES_MEMBER);
-        Map<String, Object> excludedMembers = new LinkedHashMap<>();
-        annotation.getValues().forEach((member, value) -> {
-            if (nonBinding.contains(member.toString())) {
-                excludedMembers.put(member.toString(), writable(value));
-            }
-        });
-        members.keySet().removeAll(nonBinding);
+        // the members excluded from the binding are kept with the others: Micronaut leaves out the members listed as
+        // excluded whenever it compares or hashes two bindings, so the list is all that sets them apart
         Map<String, Object> written = CollectionUtils.newLinkedHashMap(members.size());
         members.forEach((member, value) -> written.put(member, writable(value)));
-        return new BindingValue(name, Collections.unmodifiableSet(nonBinding), Collections.unmodifiableMap(written),
-            Collections.unmodifiableMap(excludedMembers));
+        return new BindingValue(name, Collections.unmodifiableSet(nonBinding), Collections.unmodifiableMap(written));
     }
 
     /**
@@ -150,9 +142,9 @@ public final class BindingValue {
     }
 
     /**
-     * The binding as a value of its annotation, as the processor records it: the members that bind, spelt as
-     * Micronaut records them, the members excluded from it as the declaration gives them, and the excluded members
-     * listed under {@value AnnotationUtil#NON_BINDING_ATTRIBUTE}, which leaves them out of every comparison.
+     * The binding as a value of its annotation, as the processor records it: its members, spelt as Micronaut records
+     * them, and the members excluded from it listed under {@value AnnotationUtil#NON_BINDING_ATTRIBUTE}, which leaves
+     * them out of every comparison.
      *
      * <p>Every call builds a value of its own, whose arrays are copies: what is done to them changes nothing of the
      * binding.</p>
@@ -160,9 +152,8 @@ public final class BindingValue {
      * @return The value
      */
     public AnnotationValue<?> toAnnotationValue() {
-        Map<CharSequence, Object> written = CollectionUtils.newLinkedHashMap(members.size() + excludedMembers.size() + 1);
+        Map<CharSequence, Object> written = CollectionUtils.newLinkedHashMap(members.size() + 1);
         members.forEach((member, value) -> written.put(member, copyOf(value)));
-        excludedMembers.forEach((member, value) -> written.put(member, copyOf(value)));
         // the excluded members are listed for whatever the binding is compared with, which may be the value of an
         // annotation instance that carries all of its members and says nothing of which bind
         if (!nonBinding.isEmpty()) {

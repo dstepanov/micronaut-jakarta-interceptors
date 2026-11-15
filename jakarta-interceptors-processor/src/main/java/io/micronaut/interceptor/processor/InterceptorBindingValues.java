@@ -44,7 +44,7 @@ import java.util.Set;
  *
  * <p>Which members take part in a binding does not depend on the running application, so it is worked out here: each
  * binding is written out on the element as the value of its annotation with the defaults filled in, the excluded
- * members left out and listed under {@value AnnotationUtil#NON_BINDING_ATTRIBUTE}, and an enum constant or a class
+ * members listed under {@value AnnotationUtil#NON_BINDING_ATTRIBUTE}, and an enum constant or a class
  * spelt as Micronaut records it, by its name. A binding is reduced by {@link BindingValue}, which compares two
  * bindings with {@code AnnotationValue.matches} as the runtime compares the recorded values, so that a conflict
  * between two declarations of a binding is decided at compilation time by exactly what decides at runtime whether an

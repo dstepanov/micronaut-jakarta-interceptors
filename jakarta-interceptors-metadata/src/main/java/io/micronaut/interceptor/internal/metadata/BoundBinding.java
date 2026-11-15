@@ -28,7 +28,8 @@ import java.lang.annotation.Target;
  *
  * <p>Nothing is recorded as this annotation. Each element of those members is the value of a binding annotation
  * itself, named by the binding annotation, as the processor reduced it to what it binds by: the members it defaults
- * to filled in, the members excluded from the binding left out and listed under {@code $nonBinding}, an enum
+ * to filled in, the members excluded from the binding listed under {@code $nonBinding}, which leaves them out of
+ * every comparison, an enum
  * constant recorded by its name and a class as a class value. An annotation member has to declare some annotation
  * type as its element type, and the binding annotations are not known until an application is compiled, so this
  * one stands in for them. The values are read as annotation values, and nothing builds an instance of this.</p>

@@ -138,7 +138,8 @@ public @interface JakartaInterception {
      *
      * <p>An interceptor class is bound to the element when every binding it declares is one of these. Each is
      * recorded as the value of its binding annotation, reduced by the processor to what it binds by - the members it
-     * declares and the ones it defaults to, less the ones excluded from the binding, which it lists - as
+     * declares and the ones it defaults to, with the ones excluded from the binding listed, which leaves them out of
+     * every comparison - as
      * {@link BoundBinding} describes, and the two are compared by
      * {@code io.micronaut.interceptor.spi.InterceptorBindings}.</p>
      *

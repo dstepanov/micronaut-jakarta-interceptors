@@ -41,7 +41,7 @@ import java.util.Set;
  * <p>The specification binds an interceptor to an element when every binding annotation the interceptor declares
  * is declared by the element as well, with the same member values, the members excluded from the binding with
  * {@code jakarta.enterprise.util.Nonbinding} left out. The processor records the bindings of both on them as the
- * values of the binding annotations, with the members they default to filled in and the excluded ones left out, and
+ * values of the binding annotations, with the members they default to filled in and the excluded ones listed, and
  * this is where the two are compared - by the chains of this module, and by any other module that has to answer the
  * same question, as Contexts and Dependency Injection does when its bean manager is asked for the interceptors of a
  * set of bindings. Comparing them here rather than again there is what keeps the two answers the same.</p>

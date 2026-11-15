@@ -16,6 +16,7 @@
 package io.micronaut.interceptor.internal.runtime;
 
 import io.micronaut.context.BeanContext;
+import io.micronaut.core.annotation.AnnotationClassValue;
 import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.inject.AdvisedBeanType;
@@ -29,7 +30,6 @@ import io.micronaut.interceptor.metadata.InterceptionKind;
 import io.micronaut.interceptor.spi.BoundInterceptorEnablement;
 import io.micronaut.interceptor.spi.InterceptorBindings;
 import io.micronaut.interceptor.spi.InterceptorMethods;
-import jakarta.interceptor.InvocationContext;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -175,20 +175,26 @@ final class InterceptorDefinitions {
      *
      * <p>It is looked up every time a chain is built rather than remembered: the chains are kept, so this runs once
      * for each of them.</p>
+     *
+     * @param interceptorClass The class
+     * @return The definition, or {@code null} where no definition of the class records its interceptor methods
      */
-    private @Nullable BeanDefinition<?> describing(Class<?> interceptorClass) {
+    @Nullable BeanDefinition<?> describing(Class<?> interceptorClass) {
         BeanDefinition<?> fallback = null;
         for (BeanDefinition<?> definition : beanContext.getBeanDefinitions(interceptorClass)) {
             // a subclass that is an interceptor class too is a bean of this type as well, and describes itself:
             // its bindings and its interceptor methods are not those of the class asked about
-            if (!isOfClass(definition, interceptorClass)
-                || definition.getAnnotation(JakartaInterceptorMethods.class) == null) {
+            if (!isOfClass(definition, interceptorClass)) {
+                continue;
+            }
+            AnnotationValue<JakartaInterceptorMethods> recorded = definition.getAnnotation(JakartaInterceptorMethods.class);
+            if (recorded == null || !isRecordOf(recorded, interceptorClass)) {
                 continue;
             }
             // a bean a factory produces carries what its class records as well, but a proxy of it exposes the
             // methods it advises rather than the interceptor methods, so the definition kept is the one that has
             // an executable method for each of them
-            if (hasRecordedMethods(definition)) {
+            if (InterceptorMethods.hasEveryMethod(definition)) {
                 return definition;
             }
             fallback = definition;
@@ -240,25 +246,31 @@ final class InterceptorDefinitions {
     }
 
     /**
-     * Whether a definition has an executable method for every interceptor method recorded on it, which the
-     * definition Micronaut generated from the class does and another definition of the class need not.
+     * Whether what a definition records is the record of the class: every interceptor method it records is declared
+     * by the class or by one of its superclasses.
+     *
+     * <p>A bean a factory produces reads the metadata of the factory member over the metadata of the factory, and
+     * a factory that declares interceptor methods on itself records them on itself, so the definition of a produced
+     * class that records nothing carries the record of the factory instead. That record describes the factory, and
+     * the produced class is not described by that definition.</p>
      */
-    private static boolean hasRecordedMethods(BeanDefinition<?> definition) {
-        AnnotationValue<JakartaInterceptorMethods> recorded = definition.getAnnotation(JakartaInterceptorMethods.class);
-        if (recorded == null || definition.getExecutableMethods().isEmpty()) {
-            return false;
-        }
+    private static boolean isRecordOf(AnnotationValue<JakartaInterceptorMethods> recorded, Class<?> type) {
         for (InterceptionKind kind : InterceptionKind.values()) {
-            for (String name : recorded.stringValues(kind.member())) {
-                boolean found = definition.findPossibleMethods(name).anyMatch(method -> {
-                    Class<?>[] argumentTypes = method.getArgumentTypes();
-                    return argumentTypes.length == 1 && argumentTypes[0] == InvocationContext.class;
-                });
-                if (!found) {
+            for (AnnotationClassValue<?> declaringType : recorded.annotationClassValues(kind.declaringTypesMember())) {
+                if (!isInHierarchyOf(declaringType.getName(), type)) {
                     return false;
                 }
             }
         }
         return true;
+    }
+
+    private static boolean isInHierarchyOf(String name, Class<?> type) {
+        for (Class<?> current = type; current != null; current = current.getSuperclass()) {
+            if (current.getName().equals(name)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

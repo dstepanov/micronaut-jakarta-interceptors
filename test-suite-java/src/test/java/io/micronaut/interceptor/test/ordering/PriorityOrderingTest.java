@@ -16,6 +16,7 @@
 package io.micronaut.interceptor.test.ordering;
 
 import io.micronaut.context.ApplicationContext;
+import io.micronaut.core.annotation.Order;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -52,6 +53,25 @@ class PriorityOrderingTest {
             // alphabetically Alpha precedes Zulu, and the order reverses them; the priority of the third beats
             // the order that would have put it last
             assertEquals(List.of("prioritised", "zulu", "alpha", "work"), List.copyOf(Calls.RECORDED));
+        }
+    }
+
+    /**
+     * A module may give {@code @Order} a meaning of its own on an interceptor class after Micronaut mapped the
+     * priority onto it: Micronaut CDI negates the priority of a selected alternative into it. The priority as the
+     * class declares it is still what orders the interceptor.
+     */
+    @Test
+    void ordersByThePriorityWhereTheOrderWasRewritten() {
+        try (ApplicationContext context = ApplicationContext.run()) {
+            Calls.clear();
+
+            assertEquals(-3000, context.getBeanDefinition(NegatedLaterInterceptor.class)
+                .intValue(Order.class).orElseThrow(), "the visitor of the tests rewrote the order");
+
+            context.getBean(NegatedService.class).work();
+
+            assertEquals(List.of("earlier", "later", "work"), List.copyOf(Calls.RECORDED));
         }
     }
 }

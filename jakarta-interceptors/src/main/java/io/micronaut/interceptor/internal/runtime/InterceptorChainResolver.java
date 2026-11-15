@@ -136,10 +136,13 @@ public final class InterceptorChainResolver {
         List<InterceptorReference> construction = construction(definition.getConstructor().getAnnotationMetadata());
         AnnotationValue<JakartaInterception> classInterception =
             recordedInterception(definition.getAnnotationMetadata());
+        // the interceptor classes of the class are selected once, for both lifecycle chains and for those created
+        // with the object
+        Collection<BeanDefinition<?>> classSelected = selected(classInterception);
         return new ObjectChains(construction,
-            build(InterceptionKind.POST_CONSTRUCT, classInterception),
-            build(InterceptionKind.PRE_DESTROY, classInterception),
-            interceptorClasses(definition, construction, classInterception));
+            build(InterceptionKind.POST_CONSTRUCT, classInterception, classSelected),
+            build(InterceptionKind.PRE_DESTROY, classInterception, classSelected),
+            interceptorClasses(definition, construction, classSelected));
     }
 
     private List<InterceptorReference> construction(AnnotationMetadata constructorMetadata) {
@@ -149,10 +152,13 @@ public final class InterceptorChainResolver {
     private MethodChains readChains(ExecutableMethod<?, ?> method) {
         AnnotationValue<JakartaInterception> interception = recordedInterception(method.getAnnotationMetadata());
         boolean timeout = interception != null && interception.booleanValue(JakartaInterception.TIMEOUT).orElse(false);
-        List<InterceptorReference> business = build(InterceptionKind.AROUND_INVOKE, interception);
+        // selected once for the chain of a business method invocation and for the chain of a timeout
+        Collection<BeanDefinition<?>> selected = selected(interception);
+        List<InterceptorReference> business = build(InterceptionKind.AROUND_INVOKE, interception, selected);
         return new MethodChains(business,
-            timeout ? build(InterceptionKind.AROUND_TIMEOUT, interception) : business,
-            timeout);
+            timeout ? build(InterceptionKind.AROUND_TIMEOUT, interception, selected) : business,
+            timeout,
+            AbstractInvocationContext.bindingValuesOf(interception));
     }
 
     /**
@@ -200,10 +206,10 @@ public final class InterceptorChainResolver {
 
     private List<Class<?>> interceptorClasses(BeanDefinition<?> definition,
                                               List<InterceptorReference> construction,
-                                              @Nullable AnnotationValue<JakartaInterception> classInterception) {
+                                              Collection<BeanDefinition<?>> classSelected) {
         Set<Class<?>> classes = new LinkedHashSet<>();
         addInterceptorClasses(construction, classes);
-        for (BeanDefinition<?> interceptor : selected(classInterception)) {
+        for (BeanDefinition<?> interceptor : classSelected) {
             classes.add(interceptor.getBeanType());
         }
         for (ExecutableMethod<?, ?> method : definition.getExecutableMethods()) {
@@ -236,10 +242,19 @@ public final class InterceptorChainResolver {
      */
     private List<InterceptorReference> build(InterceptionKind kind,
                                              @Nullable AnnotationValue<JakartaInterception> interception) {
+        return build(kind, interception, selected(interception));
+    }
+
+    /**
+     * Builds a chain from the interception the processor recorded on an element and the interceptor classes already
+     * selected for it, which an element with more than one chain selects once for all of them.
+     */
+    private List<InterceptorReference> build(InterceptionKind kind,
+                                             @Nullable AnnotationValue<JakartaInterception> interception,
+                                             Collection<BeanDefinition<?>> ordered) {
         if (interception == null || interception.booleanValue(JakartaInterception.EXCLUDED).orElse(false)) {
             return List.of();
         }
-        Collection<BeanDefinition<?>> ordered = selected(interception);
         // the interceptor methods a class declares on itself are invoked after every interceptor class
         Class<?> self = interception.classValue(JakartaInterception.SELF).filter(type -> type != void.class).orElse(null);
         List<InterceptorReference> chain = new ArrayList<>(ordered.size() + 1);
@@ -247,7 +262,14 @@ public final class InterceptorChainResolver {
             chain.addAll(references(definition, kind, false));
         }
         if (self != null) {
-            chain.addAll(references(definitions.requireDescribing(self), kind, true));
+            BeanDefinition<?> describingSelf = interception.booleanValue(JakartaInterception.PRODUCED).orElse(false)
+                // the type a factory produces is named whether or not it declares interceptor methods on itself,
+                // which is read from what it records, and it may record nothing
+                ? definitions.describing(self)
+                : definitions.requireDescribing(self);
+            if (describingSelf != null) {
+                chain.addAll(references(describingSelf, kind, true));
+            }
         }
         return List.copyOf(chain);
     }

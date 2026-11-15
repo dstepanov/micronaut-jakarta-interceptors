@@ -19,6 +19,7 @@ import io.micronaut.aop.ConstructorInvocationContext;
 import io.micronaut.aop.MethodInvocationContext;
 import io.micronaut.interceptor.MicronautConstructorInvocationContext;
 import io.micronaut.interceptor.MicronautMethodInvocationContext;
+import io.micronaut.interceptor.internal.metadata.JakartaInterceptorSupport;
 import io.micronaut.core.annotation.AnnotationClassValue;
 import io.micronaut.core.annotation.AnnotationMetadata;
 import io.micronaut.core.annotation.AnnotationValue;
@@ -39,6 +40,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 
 /**
@@ -73,16 +75,39 @@ public final class InterceptorMethods {
      *
      * <p>The interceptor methods of every kind are read once and kept by the definition, through
      * {@link BeanDefinition#getCachedUnevaluatedValue}: they depend on nothing but what the processor recorded on
-     * it.</p>
+     * it. A definition that lacks the executable method of any recorded interceptor method therefore fails for every
+     * kind, a kind the class declares nothing of included, and it fails the first time any kind is asked for - for
+     * a chain resolver, as the object is created rather than on the first call of a business method.</p>
      *
      * @param definition The definition of the interceptor class, which has to be the one Micronaut generated from
      *                   the class for it to carry the executable methods
      * @param kind       The kind of interception
      * @return The interceptor methods, which are none where the class declares none of the kind
-     * @throws IllegalStateException if a recorded interceptor method has no executable method
+     * @throws IllegalStateException if any interceptor method recorded on the definition, of whatever kind, has no
+     *                               executable method
      */
     public static InterceptorMethods of(BeanDefinition<?> definition, InterceptionKind kind) {
-        return definition.getCachedUnevaluatedValue(ByKind.class, InterceptorMethods::read).of(kind);
+        return byKind(definition).of(kind);
+    }
+
+    /**
+     * Whether the definition has an executable method for every interceptor method recorded on it, which the
+     * definition Micronaut generated from the class does, and another definition of the class - a bean a factory
+     * produces, which a proxy may stand for - need not. It is what tells the definition that describes an
+     * interceptor class among the definitions of the class, and is answered from the methods {@link #of} keeps,
+     * without throwing.
+     *
+     * @param definition The definition of the interceptor class
+     * @return Whether every recorded interceptor method has an executable method, which a definition that records
+     * none has
+     */
+    @Internal
+    public static boolean hasEveryMethod(BeanDefinition<?> definition) {
+        return byKind(definition).missing() == null;
+    }
+
+    private static ByKind byKind(BeanDefinition<?> definition) {
+        return definition.getCachedUnevaluatedValue(ByKind.class, InterceptorMethods::read);
     }
 
     private static ByKind read(BeanDefinition<?> definition) {
@@ -94,38 +119,49 @@ public final class InterceptorMethods {
         InterceptionKind[] kinds = InterceptionKind.values();
         List<InterceptorMethods> byKind = new ArrayList<>(kinds.length);
         for (InterceptionKind kind : kinds) {
-            byKind.add(read(definition, recorded, kind));
+            String[] names = recorded.stringValues(kind.member());
+            if (names.length == 0) {
+                byKind.add(NONE);
+                continue;
+            }
+            AnnotationClassValue<?>[] declaringTypes = recorded.annotationClassValues(kind.declaringTypesMember());
+            List<ExecutableMethod<Object, Object>> methods = new ArrayList<>(names.length);
+            for (int i = 0; i < names.length; i++) {
+                String declaringType = i < declaringTypes.length ? declaringTypes[i].getName() : null;
+                ExecutableMethod<Object, Object> method = interceptorMethod(definition, names[i], declaringType);
+                if (method == null) {
+                    return new ByKind(List.of(), "The interceptor method [" + names[i] + "] of ["
+                        + (declaringType == null ? definition.getBeanType().getName() : declaringType)
+                        + "] has no executable method. The interceptor class has to be compiled with "
+                        + "micronaut-jakarta-interceptors-processor on the annotation processor path");
+                }
+                methods.add(method);
+            }
+            byKind.add(new InterceptorMethods(List.copyOf(methods)));
         }
-        return new ByKind(List.copyOf(byKind));
-    }
-
-    private static InterceptorMethods read(BeanDefinition<?> definition,
-                                           AnnotationValue<JakartaInterceptorMethods> recorded,
-                                           InterceptionKind kind) {
-        String[] names = recorded.stringValues(kind.member());
-        if (names.length == 0) {
-            return NONE;
-        }
-        AnnotationClassValue<?>[] declaringTypes = recorded.annotationClassValues(kind.declaringTypesMember());
-        List<ExecutableMethod<Object, Object>> methods = new ArrayList<>(names.length);
-        for (int i = 0; i < names.length; i++) {
-            String declaringType = i < declaringTypes.length ? declaringTypes[i].getName() : null;
-            methods.add(interceptorMethod(definition, names[i], declaringType));
-        }
-        return new InterceptorMethods(List.copyOf(methods));
+        return new ByKind(List.copyOf(byKind), null);
     }
 
     /**
      * The priority an interceptor class is ordered by, which the specification takes from
-     * {@code jakarta.annotation.Priority}. Micronaut maps that annotation onto its own {@code @Order}, with the same
-     * value and the same direction, so {@code @Order} is what is read, and an interceptor ordered the Micronaut way
-     * is ordered the same.
+     * {@code jakarta.annotation.Priority}, and which is read from it first.
+     *
+     * <p>Micronaut maps that annotation onto its own {@code @Order} with the same value, and {@code @Order} is read
+     * where the class declares no priority, so that an interceptor ordered the Micronaut way is ordered the same. It
+     * is not read in place of the priority: a module may give {@code @Order} a meaning of its own on the same class
+     * - Micronaut CDI negates the priority of a selected alternative into it, since an alternative of a higher
+     * priority wins - and the priority as the class declares it is what orders an interceptor.</p>
      *
      * @param definition The definition of the interceptor class
      * @return The priority, lowest first in a chain
      */
     public static int priorityOf(BeanDefinition<?> definition) {
-        return definition.getAnnotationMetadata().intValue(Order.class).orElse(Interceptor.Priority.APPLICATION);
+        AnnotationMetadata metadata = definition.getAnnotationMetadata();
+        OptionalInt priority = metadata.intValue(JakartaInterceptorSupport.PRIORITY, AnnotationMetadata.VALUE_MEMBER);
+        if (priority.isPresent()) {
+            return priority.getAsInt();
+        }
+        return metadata.intValue(Order.class).orElse(Interceptor.Priority.APPLICATION);
     }
 
     /**
@@ -197,9 +233,9 @@ public final class InterceptorMethods {
      * @param declaringType The name of the class that declares it, or {@code null} where it was not recorded
      */
     @SuppressWarnings("unchecked")
-    private static ExecutableMethod<Object, Object> interceptorMethod(BeanDefinition<?> definition,
-                                                                     String name,
-                                                                     @Nullable String declaringType) {
+    private static @Nullable ExecutableMethod<Object, Object> interceptorMethod(BeanDefinition<?> definition,
+                                                                               String name,
+                                                                               @Nullable String declaringType) {
         Optional<? extends ExecutableMethod<?, ?>> found = definition.findPossibleMethods(name)
             .filter(method -> {
                 Class<?>[] argumentTypes = method.getArgumentTypes();
@@ -208,26 +244,29 @@ public final class InterceptorMethods {
                     && (declaringType == null || method.getDeclaringType().getName().equals(declaringType));
             })
             .findFirst();
-        if (found.isPresent()) {
-            return (ExecutableMethod<Object, Object>) found.get();
-        }
-        throw new IllegalStateException("The interceptor method [" + name + "] of ["
-            + (declaringType == null ? definition.getBeanType().getName() : declaringType)
-            + "] has no executable method. The interceptor class has to be compiled with "
-            + "micronaut-jakarta-interceptors-processor on the annotation processor path");
+        return found.isPresent() ? (ExecutableMethod<Object, Object>) found.get() : null;
     }
 
     /**
      * The interceptor methods of a class, of every kind, as its definition keeps them. Listed by the ordinal of the
      * kind rather than in an {@code EnumMap}, which finds the constants of the enum by reflection.
      *
-     * @param byKind The methods, at the ordinal of their kind, or none for a class that records no interceptor method
+     * <p>A recorded interceptor method the definition has no executable method for is kept as the message it is
+     * reported with, rather than thrown while the value is read, so that whether a definition has every method can be
+     * asked of it without the read failing.</p>
+     *
+     * @param byKind  The methods, at the ordinal of their kind, or none for a class that records no interceptor method
+     * @param missing How a recorded interceptor method without an executable method is reported, or {@code null}
+     *                where every one has one
      */
-    private record ByKind(List<InterceptorMethods> byKind) {
+    private record ByKind(List<InterceptorMethods> byKind, @Nullable String missing) {
 
-        static final ByKind NONE = new ByKind(List.of());
+        static final ByKind NONE = new ByKind(List.of(), null);
 
         InterceptorMethods of(InterceptionKind kind) {
+            if (missing != null) {
+                throw new IllegalStateException(missing);
+            }
             return byKind.isEmpty() ? InterceptorMethods.NONE : byKind.get(kind.ordinal());
         }
     }

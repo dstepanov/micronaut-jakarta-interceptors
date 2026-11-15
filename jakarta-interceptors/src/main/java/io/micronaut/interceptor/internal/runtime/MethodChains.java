@@ -15,6 +15,7 @@
  */
 package io.micronaut.interceptor.internal.runtime;
 
+import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
 
 import java.util.List;
@@ -36,11 +37,14 @@ import java.util.List;
  * @param scheduled The chain of an invocation the scheduler makes, which is the business chain unless the method is
  *                  a timeout method
  * @param timeout   Whether the method is a timeout method when the scheduler invokes it
+ * @param bindings  The bindings the invocations of the method report, read from the same recorded interception as
+ *                  the chains, and kept with them rather than as a value of their own beside them
  * @author Denis Stepanov
  * @since 1.0
  */
 @Internal
 record MethodChains(List<InterceptorReference> business,
                     List<InterceptorReference> scheduled,
-                    boolean timeout) {
+                    boolean timeout,
+                    List<AnnotationValue<?>> bindings) {
 }

@@ -143,21 +143,22 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         // the application is a business method invocation, and so is a call the method makes to itself
         ScheduledInvocation.Entry entry = chains.timeout() ? ScheduledInvocation.enter(context) : null;
         if (entry == null) {
-            return proceed(context, chains.business(), null);
+            return proceed(context, chains.business(), chains, null);
         }
         try (entry) {
-            return proceed(context, chains.scheduled(), entry.schedule());
+            return proceed(context, chains.scheduled(), chains, entry.schedule());
         }
     }
 
     private @Nullable Object proceed(MethodInvocationContext<Object, Object> context,
                                      List<InterceptorReference> chain,
+                                     MethodChains chains,
                                      @Nullable AnnotationValue<?> schedule) {
         if (chain.isEmpty()) {
             return context.proceed();
         }
         try {
-            return new BusinessMethodInvocationContext(context, chain, this, schedule).proceed();
+            return new BusinessMethodInvocationContext(context, chain, chains.bindings(), this, schedule).proceed();
         } catch (Exception e) {
             throw sneakyThrow(e);
         }

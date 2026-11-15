@@ -244,8 +244,11 @@ final class BeanInterceptionWriter {
             // bindings, or the interceptor method it declares on itself, which would be invoked on the produced
             // object rather than on the factory - reaches the bean it produces. The interceptor methods the
             // produced class declares on itself are another matter: they are the ones of the object intercepted,
-            // which interpose on its business methods as they do where the class is a bean of its own
-            builder.member(JakartaInterception.SELF, selfOf(producedModel));
+            // which interpose on its business methods as they do where the class is a bean of its own. Whether it
+            // declares any is a question of its methods, which are not this class's to read, so the produced type
+            // is named and what it records on itself is read when the chain is built
+            builder.member(JakartaInterception.SELF, new AnnotationClassValue<>(producedType.getName()));
+            builder.member(JakartaInterception.PRODUCED, true);
             builder.member(JakartaInterception.BINDINGS, InterceptorBindingValues.written(bindings));
         });
         interceptEachTarget(member, true);
@@ -436,16 +439,6 @@ final class BeanInterceptionWriter {
         if (interceptsItself(model)) {
             builder.member(JakartaInterception.SELF, new AnnotationClassValue<>(model.interceptorClass().getName()));
         }
-    }
-
-    /**
-     * The class whose interceptor methods interpose on the business methods of its own instances, written as the
-     * member of a declaration that has to replace whatever another declaration says of it.
-     */
-    private static AnnotationClassValue<?> selfOf(InterceptorClassModel model) {
-        return interceptsItself(model)
-            ? new AnnotationClassValue<>(model.interceptorClass().getName())
-            : new AnnotationClassValue<>(void.class);
     }
 
     private static boolean interceptsItself(InterceptorClassModel model) {

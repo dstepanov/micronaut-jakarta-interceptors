@@ -67,6 +67,11 @@ public @interface JakartaInterception {
     String SELF = "self";
 
     /**
+     * The name of {@link #produced()}.
+     */
+    String PRODUCED = "produced";
+
+    /**
      * The name of {@link #excluded()}.
      */
     String EXCLUDED = "excluded";
@@ -99,6 +104,19 @@ public @interface JakartaInterception {
     Class<?> self() default void.class;
 
     /**
+     * Tells that the element is the member of a factory that produces the intercepted bean, and that {@link #self()}
+     * names the type it produces whether or not that type declares interceptor methods on itself.
+     *
+     * <p>The processor of the factory does not read the methods of the produced type, which belong to another class
+     * and may be private: what that type declares on itself is read when the chain is built, from what the processor
+     * recorded on the type itself. A produced type that records nothing - one without a definition of its own, or
+     * whose definition records no interceptor method - interposes on nothing itself.</p>
+     *
+     * @return Whether {@link #self()} is the produced type, to be read at runtime
+     */
+    boolean produced() default false;
+
+    /**
      * Tells that the element is not intercepted at all, which shadows what the class it belongs to declares. An
      * interceptor method a class declares on itself is such an element: it is not a business method.
      *
@@ -120,7 +138,8 @@ public @interface JakartaInterception {
      *
      * <p>An interceptor class is bound to the element when every binding it declares is one of these. Each is
      * recorded as the value of its binding annotation, reduced by the processor to what it binds by - the members it
-     * declares and the ones it defaults to, less the ones excluded from the binding, which it lists - as
+     * declares and the ones it defaults to, with the ones excluded from the binding listed, which leaves them out of
+     * every comparison - as
      * {@link BoundBinding} describes, and the two are compared by
      * {@code io.micronaut.interceptor.spi.InterceptorBindings}.</p>
      *

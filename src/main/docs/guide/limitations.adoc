@@ -98,7 +98,11 @@ same class is then as ambiguous with it as with any other bean declared twice, u
 
 A method of a `@Factory` class that declares another bean is not a business method of the factory but the
 declaration of that bean, so what it binds, and the interceptor classes it names, belong to the bean it produces and
-are combined with whatever the produced type declares on itself. A static factory method produces a bean the same
+are combined with whatever the produced type declares on itself. The interceptor methods the produced type declares
+on itself are read when its chains are resolved, from what the processor recorded on that type, rather than from
+its methods while the factory is compiled: they may be private, and the type may be compiled on its own. A produced
+type that records none - one compiled without this processor among them - interposes on nothing itself. A static
+factory method produces a bean the same
 way and binds it the same way. The factory is a bean of its own besides, and is intercepted in its own right when it
 carries a binding or declares an `@AroundInvoke` method: an interceptor method the factory declares on itself
 interposes on the business methods of the factory and is never invoked on the object it produced, which is another
@@ -177,11 +181,18 @@ candidate from Micronaut's own `@InterceptorBinding`, with the occurrences on a 
 Binding types are not meta-annotated with it, since that would have Micronaut proxy every class carrying a binding,
 interceptor classes included, so the processor records the bindings, a method's replacing its class's, and each
 indexed interceptor class is handed to the rule with the bindings recorded on it;
-* the interceptor classes are ordered by `@Priority`, and one that declares none at
-`Interceptor.Priority.APPLICATION`, where Micronaut orders it at 0, and a `BoundInterceptorEnablement` decides which
+* the interceptor classes are ordered by `@Priority`, by `@Order` where they declare no `@Priority`, and one that
+declares neither at `Interceptor.Priority.APPLICATION`, where Micronaut orders it at 0, and a `BoundInterceptorEnablement` decides which
 are enabled, which Micronaut has nothing of. An interceptor class must declare `@Interceptor` to be bound, which
 Micronaut's rule, comparing bindings alone, leaves to the caller; and Micronaut has no kind of interception for an
 `@AroundTimeout` method.
+
+The binding annotations an interceptor asks for with `InvocationContext.getInterceptorBindings` are built by the
+builder Micronaut generates for a binding annotation with `@RegisterAnnotations`, which is looked for with
+`AnnotationBuilder.find`, among the builders of the class loader that loaded Micronaut. An application loaded by a
+class loader beneath that one - by a container, or a launcher of development mode or of tests - may have its builders
+missed there, and a binding then needs the reflection module to be built, although a builder exists. Micronaut looks
+for the builders of the application's class loader as well only internally, so far.
 
 A method keeps its chains - for a business method invocation and for the scheduler - and the bindings its
 invocations report, through Micronaut's experimental

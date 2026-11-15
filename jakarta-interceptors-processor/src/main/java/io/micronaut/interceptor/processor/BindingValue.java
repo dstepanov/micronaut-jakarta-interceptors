@@ -27,7 +27,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -58,8 +57,8 @@ import java.util.TreeSet;
  * primitive array with its boxed elements, and an annotation a member holds as a binding, leaving out the members
  * either side excludes.</p>
  *
- * <p>{@link AnnotationValue#equals(Object)} compares none of this. It passes over a member the other value does
- * not have, so two values that declare different members of the same count compare equal.</p>
+ * <p>{@link AnnotationValue#equals(Object)} compares none of this: it compares the members two values declare as
+ * they are, which is what tells two declarations of one binding apart, see {@link #isSameDeclaration}.</p>
  *
  * <p>The array types are listed out rather than read through {@code java.lang.reflect.Array}, so that copying
  * bindings stays as free of the reflection of the platform as the rest of the interception.</p>
@@ -189,43 +188,14 @@ public final class BindingValue {
      * at any depth. An element declaring a binding that differs from the one of its class only in a member excluded
      * from it is bound alike, but reports its own declaration.
      *
+     * <p>It is {@link AnnotationValue#equals(Object)} of the two values, which compares the members each declares,
+     * an array element by element and an annotation an array holds by its own members, and no defaults.</p>
+     *
      * @param other The other binding
      * @return Whether the two are the same declaration
      */
     public boolean isSameDeclaration(BindingValue other) {
-        return sameValue(toAnnotationValue(), other.toAnnotationValue());
-    }
-
-    private static boolean sameValue(@Nullable Object value, @Nullable Object other) {
-        if (value instanceof AnnotationValue<?> annotation) {
-            return other instanceof AnnotationValue<?> otherAnnotation
-                && annotation.getAnnotationName().equals(otherAnnotation.getAnnotationName())
-                && sameMembers(annotation.getValues(), otherAnnotation.getValues());
-        }
-        if (value instanceof Object[] values) {
-            if (!(other instanceof Object[] others) || values.length != others.length) {
-                return false;
-            }
-            for (int i = 0; i < values.length; i++) {
-                if (!sameValue(values[i], others[i])) {
-                    return false;
-                }
-            }
-            return true;
-        }
-        return Objects.deepEquals(value, other);
-    }
-
-    private static boolean sameMembers(Map<CharSequence, Object> members, Map<CharSequence, Object> others) {
-        if (members.size() != others.size()) {
-            return false;
-        }
-        for (Map.Entry<CharSequence, Object> member : members.entrySet()) {
-            if (!others.containsKey(member.getKey()) || !sameValue(member.getValue(), others.get(member.getKey()))) {
-                return false;
-            }
-        }
-        return true;
+        return toAnnotationValue().equals(other.toAnnotationValue());
     }
 
     /**

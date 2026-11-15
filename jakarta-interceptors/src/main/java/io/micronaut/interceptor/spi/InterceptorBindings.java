@@ -55,7 +55,9 @@ import java.util.Set;
  * compare alike. The processor records every member that binds, so the defaults Micronaut registers for an
  * annotation while the application runs change nothing of what a recorded binding is.</p>
  *
- * <p>{@link AnnotationValue#equals(Object)} is not used: it passes over a member the other value does not have.</p>
+ * <p>{@link AnnotationValue#equals(Object)} is not used: it compares the members two values declare as they are,
+ * with no defaults, no excluded members and no spelling of an enum constant or a class set aside, which is what two
+ * declarations of a binding differ by rather than what binds.</p>
  *
  * @author Denis Stepanov
  * @since 1.0

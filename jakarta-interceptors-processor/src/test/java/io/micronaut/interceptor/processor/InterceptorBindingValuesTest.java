@@ -83,6 +83,39 @@ class InterceptorBindingValuesTest {
             written(binding(Map.of("value", new AnnotationValue<?>[]{two, three}))));
     }
 
+    /**
+     * Two declarations of one binding are the same declaration when every member they declare is equal, the members
+     * excluded from the binding included, and the annotations an array holds compare by their own members.
+     */
+    @Test
+    void theSameDeclarationComparesEveryMemberAtAnyDepth() {
+        AnnotationValue<?> held = AnnotationValue.builder("test.Held")
+            .member("value", "a")
+            .member("note", "y")
+            .member(AnnotationUtil.NON_BINDING_ATTRIBUTE, new String[]{"note"})
+            .build();
+        AnnotationValue<?> heldAgain = AnnotationValue.builder("test.Held")
+            .member("value", "a")
+            .member("note", "y")
+            .member(AnnotationUtil.NON_BINDING_ATTRIBUTE, new String[]{"note"})
+            .build();
+        AnnotationValue<?> heldWithAnotherNote = AnnotationValue.builder("test.Held")
+            .member("value", "a")
+            .member("note", "z")
+            .member(AnnotationUtil.NON_BINDING_ATTRIBUTE, new String[]{"note"})
+            .build();
+
+        BindingValue binding = binding(Map.of("value", new AnnotationValue<?>[]{held}));
+
+        assertTrue(binding.isSameDeclaration(binding(Map.of("value", new AnnotationValue<?>[]{heldAgain}))));
+        // the same binding, as the note does not bind, but another declaration of it
+        BindingValue anotherNote = binding(Map.of("value", new AnnotationValue<?>[]{heldWithAnotherNote}));
+        assertEquals(binding, anotherNote);
+        assertFalse(binding.isSameDeclaration(anotherNote));
+        // as many members, under other names
+        assertFalse(binding(Map.of("value", "a", "one", "b")).isSameDeclaration(binding(Map.of("value", "a", "two", "b"))));
+    }
+
     @Test
     void theOrderOfTheMembersSaysNothing() {
         AnnotationClassValue<?> type = new AnnotationClassValue<>("java.lang.String");

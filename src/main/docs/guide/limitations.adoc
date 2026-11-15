@@ -187,6 +187,13 @@ are enabled, which Micronaut has nothing of. An interceptor class must declare `
 Micronaut's rule, comparing bindings alone, leaves to the caller; and Micronaut has no kind of interception for an
 `@AroundTimeout` method.
 
+The binding annotations an interceptor asks for with `InvocationContext.getInterceptorBindings` are built by the
+builder Micronaut generates for a binding annotation with `@RegisterAnnotations`, which is looked for with
+`AnnotationBuilder.find`, among the builders of the class loader that loaded Micronaut. An application loaded by a
+class loader beneath that one - by a container, or a launcher of development mode or of tests - may have its builders
+missed there, and a binding then needs the reflection module to be built, although a builder exists. Micronaut looks
+for the builders of the application's class loader as well only internally, so far.
+
 A method keeps its chains - for a business method invocation and for the scheduler - and the bindings its
 invocations report, through Micronaut's experimental
 `ExecutableMethod.getCachedUnevaluatedValue`, which keeps them for a method an annotation of which holds an evaluated

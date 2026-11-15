@@ -16,7 +16,6 @@
 package io.micronaut.interceptor.internal.runtime;
 
 import io.micronaut.context.BeanContext;
-import io.micronaut.core.annotation.AnnotationValue;
 import io.micronaut.core.annotation.Internal;
 import io.micronaut.inject.AdvisedBeanType;
 import io.micronaut.inject.BeanDefinition;
@@ -25,11 +24,9 @@ import io.micronaut.inject.ProxyBeanDefinition;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorIndex;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorMethods;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorSupport;
-import io.micronaut.interceptor.metadata.InterceptionKind;
 import io.micronaut.interceptor.spi.BoundInterceptorEnablement;
 import io.micronaut.interceptor.spi.InterceptorBindings;
 import io.micronaut.interceptor.spi.InterceptorMethods;
-import jakarta.interceptor.InvocationContext;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -188,7 +185,7 @@ final class InterceptorDefinitions {
             // a bean a factory produces carries what its class records as well, but a proxy of it exposes the
             // methods it advises rather than the interceptor methods, so the definition kept is the one that has
             // an executable method for each of them
-            if (hasRecordedMethods(definition)) {
+            if (InterceptorMethods.hasEveryMethod(definition)) {
                 return definition;
             }
             fallback = definition;
@@ -237,28 +234,5 @@ final class InterceptorDefinitions {
         return bean.getBeanType() == type
             || bean instanceof AdvisedBeanType<?> advised && advised.getInterceptedType() == type
             || bean instanceof ProxyBeanDefinition<?> proxy && proxy.getTargetType() == type;
-    }
-
-    /**
-     * Whether a definition has an executable method for every interceptor method recorded on it, which the
-     * definition Micronaut generated from the class does and another definition of the class need not.
-     */
-    private static boolean hasRecordedMethods(BeanDefinition<?> definition) {
-        AnnotationValue<JakartaInterceptorMethods> recorded = definition.getAnnotation(JakartaInterceptorMethods.class);
-        if (recorded == null || definition.getExecutableMethods().isEmpty()) {
-            return false;
-        }
-        for (InterceptionKind kind : InterceptionKind.values()) {
-            for (String name : recorded.stringValues(kind.member())) {
-                boolean found = definition.findPossibleMethods(name).anyMatch(method -> {
-                    Class<?>[] argumentTypes = method.getArgumentTypes();
-                    return argumentTypes.length == 1 && argumentTypes[0] == InvocationContext.class;
-                });
-                if (!found) {
-                    return false;
-                }
-            }
-        }
-        return true;
     }
 }

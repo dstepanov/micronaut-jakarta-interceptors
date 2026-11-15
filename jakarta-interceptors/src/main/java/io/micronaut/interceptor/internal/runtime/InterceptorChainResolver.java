@@ -261,7 +261,14 @@ public final class InterceptorChainResolver {
             chain.addAll(references(definition, kind, false));
         }
         if (self != null) {
-            chain.addAll(references(definitions.requireDescribing(self), kind, true));
+            BeanDefinition<?> describingSelf = interception.booleanValue(JakartaInterception.PRODUCED).orElse(false)
+                // the type a factory produces is named whether or not it declares interceptor methods on itself,
+                // which is read from what it records, and it may record nothing
+                ? definitions.describing(self)
+                : definitions.requireDescribing(self);
+            if (describingSelf != null) {
+                chain.addAll(references(describingSelf, kind, true));
+            }
         }
         return List.copyOf(chain);
     }

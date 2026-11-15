@@ -98,7 +98,11 @@ same class is then as ambiguous with it as with any other bean declared twice, u
 
 A method of a `@Factory` class that declares another bean is not a business method of the factory but the
 declaration of that bean, so what it binds, and the interceptor classes it names, belong to the bean it produces and
-are combined with whatever the produced type declares on itself. A static factory method produces a bean the same
+are combined with whatever the produced type declares on itself. The interceptor methods the produced type declares
+on itself are read when its chains are resolved, from what the processor recorded on that type, rather than from
+its methods while the factory is compiled: they may be private, and the type may be compiled on its own. A produced
+type that records none - one compiled without this processor among them - interposes on nothing itself. A static
+factory method produces a bean the same
 way and binds it the same way. The factory is a bean of its own besides, and is intercepted in its own right when it
 carries a binding or declares an `@AroundInvoke` method: an interceptor method the factory declares on itself
 interposes on the business methods of the factory and is never invoked on the object it produced, which is another

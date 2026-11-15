@@ -67,6 +67,11 @@ public @interface JakartaInterception {
     String SELF = "self";
 
     /**
+     * The name of {@link #produced()}.
+     */
+    String PRODUCED = "produced";
+
+    /**
      * The name of {@link #excluded()}.
      */
     String EXCLUDED = "excluded";
@@ -97,6 +102,19 @@ public @interface JakartaInterception {
      * @return The class, or {@code void} when the intercepted class declares no interceptor method
      */
     Class<?> self() default void.class;
+
+    /**
+     * Tells that the element is the member of a factory that produces the intercepted bean, and that {@link #self()}
+     * names the type it produces whether or not that type declares interceptor methods on itself.
+     *
+     * <p>The processor of the factory does not read the methods of the produced type, which belong to another class
+     * and may be private: what that type declares on itself is read when the chain is built, from what the processor
+     * recorded on the type itself. A produced type that records nothing - one without a definition of its own, or
+     * whose definition records no interceptor method - interposes on nothing itself.</p>
+     *
+     * @return Whether {@link #self()} is the produced type, to be read at runtime
+     */
+    boolean produced() default false;
 
     /**
      * Tells that the element is not intercepted at all, which shadows what the class it belongs to declares. An

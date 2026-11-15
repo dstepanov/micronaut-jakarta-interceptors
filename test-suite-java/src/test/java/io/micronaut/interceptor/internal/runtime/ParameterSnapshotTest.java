@@ -45,8 +45,8 @@ class ParameterSnapshotTest {
                     default -> throw new UnsupportedOperationException(method.getName());
                 };
             });
-        // The advice and chain are not used by parameter accessors.
-        BusinessMethodInvocationContext invocation = new BusinessMethodInvocationContext(micronaut, List.of(), null, null);
+        // The advice, chain and bindings are not used by parameter accessors.
+        BusinessMethodInvocationContext invocation = new BusinessMethodInvocationContext(micronaut, List.of(), List.of(), null, null);
 
         invocation.setParameters(supplied);
 

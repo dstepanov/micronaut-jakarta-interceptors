@@ -157,7 +157,8 @@ public final class InterceptorChainResolver {
         List<InterceptorReference> business = build(InterceptionKind.AROUND_INVOKE, interception, selected);
         return new MethodChains(business,
             timeout ? build(InterceptionKind.AROUND_TIMEOUT, interception, selected) : business,
-            timeout);
+            timeout,
+            AbstractInvocationContext.bindingValuesOf(interception));
     }
 
     /**

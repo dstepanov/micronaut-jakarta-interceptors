@@ -338,7 +338,16 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
      * @return The values of the bindings
      */
     static List<AnnotationValue<?>> bindingValuesOf(AnnotationMetadata metadata) {
-        AnnotationValue<JakartaInterception> interception = metadata.getAnnotation(JakartaInterception.class);
+        return bindingValuesOf(metadata.getAnnotation(JakartaInterception.class));
+    }
+
+    /**
+     * The bindings recorded in the interception the processor recorded on an element.
+     *
+     * @param interception The interception, or {@code null} where the element records none
+     * @return The values of the bindings
+     */
+    static List<AnnotationValue<?>> bindingValuesOf(@Nullable AnnotationValue<JakartaInterception> interception) {
         if (interception == null) {
             return List.of();
         }

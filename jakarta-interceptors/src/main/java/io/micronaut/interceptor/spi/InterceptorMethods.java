@@ -75,13 +75,16 @@ public final class InterceptorMethods {
      *
      * <p>The interceptor methods of every kind are read once and kept by the definition, through
      * {@link BeanDefinition#getCachedUnevaluatedValue}: they depend on nothing but what the processor recorded on
-     * it.</p>
+     * it. A definition that lacks the executable method of any recorded interceptor method therefore fails for every
+     * kind, a kind the class declares nothing of included, and it fails the first time any kind is asked for - for
+     * a chain resolver, as the object is created rather than on the first call of a business method.</p>
      *
      * @param definition The definition of the interceptor class, which has to be the one Micronaut generated from
      *                   the class for it to carry the executable methods
      * @param kind       The kind of interception
      * @return The interceptor methods, which are none where the class declares none of the kind
-     * @throws IllegalStateException if a recorded interceptor method has no executable method
+     * @throws IllegalStateException if any interceptor method recorded on the definition, of whatever kind, has no
+     *                               executable method
      */
     public static InterceptorMethods of(BeanDefinition<?> definition, InterceptionKind kind) {
         return byKind(definition).of(kind);

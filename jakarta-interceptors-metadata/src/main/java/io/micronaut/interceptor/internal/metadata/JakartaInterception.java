@@ -112,10 +112,12 @@ public @interface JakartaInterception {
      * Tells that the element is the member of a factory that produces the intercepted bean, and that {@link #self()}
      * names the type it produces whether or not that type declares interceptor methods on itself.
      *
-     * <p>The processor of the factory does not read the methods of the produced type, which belong to another class
-     * and may be private: what that type declares on itself is read when the chain is built, from what the processor
-     * recorded on the type itself. A produced type that records nothing - one without a definition of its own, or
-     * whose definition records no interceptor method - interposes on nothing itself.</p>
+     * <p>The processor of the factory does not read the interceptor methods of the produced type, which belong to
+     * another class and may be private; it reads only what the public methods Micronaut advises declare, for
+     * {@link #methods()}. The interceptor methods the type declares on itself are read when the chain is built, from
+     * what the processor recorded on the type itself. A produced type that records nothing - one without a
+     * definition of its own, or whose definition records no interceptor method - interposes on nothing itself, and
+     * one whose record makes it an interceptor class is not intercepted at all.</p>
      *
      * @return Whether {@link #self()} is the produced type, to be read at runtime
      */

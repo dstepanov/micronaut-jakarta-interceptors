@@ -374,8 +374,9 @@ public final class InterceptorClassScanner {
      * taken off it once it has been recorded, and the metadata of a method is the same metadata wherever it is read
      * from, so a class already visited in this compilation reads as declaring nothing. What it declared is recorded
      * on it as {@code @JakartaInterceptorMethods} before that happens, which is what is read here: the descriptor
-     * of the class and of its superclasses, whether it was written while they were visited or while they were
-     * compiled before.</p>
+     * of the class and of its superclasses written while they were visited in this compilation. A class compiled
+     * before carries no annotation a visitor added, and has its source annotations instead, which the scan of the
+     * class answers from first.</p>
      *
      * <p>A recorded method counts only while the class still has it. An interceptor method overridden by a method
      * that is not one is no longer a method of the class - that is what the descriptor of its superclass records

@@ -200,6 +200,16 @@ type, then of the class loader of the bean context, so that the builders of an a
 beneath the one of Micronaut - by a container, or a launcher of development mode or of tests - are found as well. A
 binding without a builder is built by the reflection module.
 
+`InvocationContext.getConstructor()` answers the constructor through Micronaut's `BeanConstructor`, which looks it
+up with Micronaut's own reflection utilities rather than through the reflection module: the module has no counterpart
+for a constructor of the one it has for a method, `ReflectionExecutables.targetMethod`. It is the one reflective
+accessor not gated on the module, and moves behind it once the module offers one.
+
+Where the builder of a binding annotation is registered only with the class loader of the bean context, and the
+binding type sits in a class loader above it, `AnnotationBuilder.find(Class, ClassLoader)` reads the builders that
+class loader registers again on every call, and the module keeps no builder of its own. Micronaut is to keep that
+result per type and class loader.
+
 A method keeps its chains - for a business method invocation and for the scheduler - and the bindings its
 invocations report, through Micronaut's experimental
 `ExecutableMethod.getCachedUnevaluatedValue`, which keeps them for a method an annotation of which holds an evaluated

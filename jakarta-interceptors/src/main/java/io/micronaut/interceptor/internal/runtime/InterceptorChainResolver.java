@@ -305,6 +305,15 @@ public final class InterceptorChainResolver {
     }
 
     /**
+     * The class loader of the application, see {@link InterceptorDefinitions#classLoader()}.
+     *
+     * @return The class loader of the bean context
+     */
+    ClassLoader classLoader() {
+        return definitions.classLoader();
+    }
+
+    /**
      * The definitions of the interceptor classes named directly and of those the bindings bind, in the order their
      * interceptor methods are invoked in.
      *

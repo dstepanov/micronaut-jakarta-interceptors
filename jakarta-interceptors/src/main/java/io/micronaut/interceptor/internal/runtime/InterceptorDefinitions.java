@@ -69,6 +69,16 @@ final class InterceptorDefinitions {
     }
 
     /**
+     * The class loader of the application the interceptor classes belong to, which the builders of its binding
+     * annotations are looked for in, after those of Micronaut and of the binding type.
+     *
+     * @return The class loader of the bean context
+     */
+    ClassLoader classLoader() {
+        return beanContext.getClassLoader();
+    }
+
+    /**
      * Finds the interceptor classes whose binding annotations the element declares as well. The specification binds
      * an interceptor to an element when every binding of the interceptor is a binding of the element.
      *

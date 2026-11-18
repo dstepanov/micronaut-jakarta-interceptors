@@ -245,7 +245,7 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
         if (built != null) {
             return BindingAnnotationAccess.first(built, annotationType);
         }
-        return BindingAnnotationAccess.first(getInterceptorBindingValues(), annotationType);
+        return BindingAnnotationAccess.first(getInterceptorBindingValues(), annotationType, classLoader());
     }
 
     /**
@@ -263,7 +263,7 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
         if (built != null) {
             return BindingAnnotationAccess.all(built, annotationType);
         }
-        return BindingAnnotationAccess.all(getInterceptorBindingValues(), annotationType);
+        return BindingAnnotationAccess.all(getInterceptorBindingValues(), annotationType, classLoader());
     }
 
     /**
@@ -328,7 +328,17 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     }
 
     final Set<Annotation> resolveBindings() {
-        return bindingsOf(bindingMetadata(), getInterceptorBindingValues());
+        return bindingsOf(bindingMetadata(), getInterceptorBindingValues(), classLoader());
+    }
+
+    /**
+     * The class loader of the application, which the builders of the binding annotations are looked for in after
+     * those of Micronaut and of the binding type.
+     *
+     * @return The class loader of the bean context the advice belongs to
+     */
+    final ClassLoader classLoader() {
+        return advice.classLoader();
     }
 
     /**
@@ -357,15 +367,18 @@ abstract sealed class AbstractInvocationContext implements MicronautInvocationCo
     /**
      * The binding annotations built from the bindings of an element.
      *
-     * @param metadata The metadata Micronaut compiled for the element, beneath any wrapper of an evaluation context
-     * @param values   The values of its bindings
+     * @param metadata    The metadata Micronaut compiled for the element, beneath any wrapper of an evaluation context
+     * @param values      The values of its bindings
+     * @param classLoader The class loader of the application
      * @return The binding annotations
      */
-    static Set<Annotation> bindingsOf(AnnotationMetadata metadata, List<AnnotationValue<?>> values) {
+    static Set<Annotation> bindingsOf(AnnotationMetadata metadata,
+                                      List<AnnotationValue<?>> values,
+                                      ClassLoader classLoader) {
         if (values.isEmpty()) {
             return Collections.emptySet();
         }
-        return BindingAnnotationAccess.build(metadata, values);
+        return BindingAnnotationAccess.build(metadata, values, classLoader);
     }
 
     /**

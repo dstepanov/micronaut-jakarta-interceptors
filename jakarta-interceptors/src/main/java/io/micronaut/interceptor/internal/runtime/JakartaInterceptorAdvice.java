@@ -247,6 +247,16 @@ public final class JakartaInterceptorAdvice implements MethodInterceptor<Object,
         return interceptorInstance(reference.interceptorClass());
     }
 
+    /**
+     * The class loader of the application the advice intercepts for, see
+     * {@link InterceptorChainResolver#classLoader()}.
+     *
+     * @return The class loader of the bean context
+     */
+    ClassLoader classLoader() {
+        return resolver.classLoader();
+    }
+
     private Object interceptorInstance(Class<?> interceptorClass) {
         Object instance = instances.get(interceptorClass);
         return instance == null ? createInterceptorInstance(interceptorClass) : instance;

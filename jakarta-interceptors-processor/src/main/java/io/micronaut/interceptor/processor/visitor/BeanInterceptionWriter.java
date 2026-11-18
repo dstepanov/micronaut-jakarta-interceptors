@@ -36,15 +36,18 @@ import io.micronaut.inject.visitor.VisitorContext;
 import io.micronaut.interceptor.processor.BindingValue;
 import io.micronaut.interceptor.internal.metadata.JakartaInterception;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorSupport;
+import io.micronaut.interceptor.internal.metadata.ProducedMethodInterception;
 import io.micronaut.interceptor.metadata.InterceptionKind;
 import io.micronaut.interceptor.processor.BindingConflicts;
 import io.micronaut.interceptor.processor.InterceptorBindingValues;
 import io.micronaut.interceptor.processor.InterceptorClassModel;
 import io.micronaut.interceptor.processor.InterceptorClassScanner;
 import io.micronaut.interceptor.processor.JakartaInterceptors;
+import org.jspecify.annotations.Nullable;
 
 import java.lang.annotation.Annotation;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -203,7 +206,10 @@ final class BeanInterceptionWriter {
      *
      * <p>The whole of the effective interception is written even where the produced type declares part of it,
      * because Micronaut merges the metadata of the member over the metadata of the type member by member: a member
-     * the producer declares replaces the one of the type rather than adding to it.</p>
+     * the producer declares replaces the one of the type rather than adding to it. So is the interception of each
+     * method of the produced type that declares something of its own, see {@link ProducedMethodInterception}: what
+     * the processor writes on the type and its methods while compiling the type is the interception of the type as
+     * a bean of its own, it is not in a type compiled before, and the factory's output does not depend on it.</p>
      */
     private static void interceptProduced(Producer producer,
                                           VisitorContext context) {
@@ -225,19 +231,31 @@ final class BeanInterceptionWriter {
             }
             return;
         }
-        if (!declaresInterception(member)) {
-            // the produced type carries whatever it declares on itself, as any other bean does
-            if (typeDeclaresInterception(producer.producedType())) {
-                interceptEachTarget(member, true);
-            }
+        // the methods Micronaut advises on a bean a factory produces: the public instance methods of the type
+        List<MethodElement> advised = InterceptorClassScanner.methodsOf(producedType).stream()
+            .filter(method -> method.isPublic() && !method.isFinal())
+            .toList();
+        if (!declaresInterception(member) && !typeDeclaresInterception(producedType, advised)) {
             return;
         }
-        List<String> interceptors = new ArrayList<>(namedInterceptors(producedType, context));
-        interceptors.addAll(namedInterceptors(member, context));
-        List<BindingValue> bindings = InterceptorBindingValues.ofMember(
+        List<String> classInterceptors = new ArrayList<>(namedInterceptors(producedType, context));
+        classInterceptors.addAll(namedInterceptors(member, context));
+        List<BindingValue> classBindings = InterceptorBindingValues.ofMember(
             member, InterceptorBindingValues.ofClass(producedType));
+        List<AnnotationValue<ProducedMethodInterception>> methods = new ArrayList<>();
+        for (MethodElement method : advised) {
+            AnnotationValue<ProducedMethodInterception> interception =
+                producedMethod(producedModel, method, classInterceptors, classBindings, context);
+            if (interception != null) {
+                methods.add(interception);
+            }
+        }
+        // the whole of the interception is written here, whatever part of it the produced type declares: what the
+        // processor writes on that type while compiling it is not in a type compiled before, nor in one compiled
+        // again on its own while the factory is not, and it is the interception of that type as a bean of its own
+        // rather than the one of the bean this member produces
         member.annotate(JakartaInterception.class, builder -> {
-            interceptorMembers(builder, interceptors);
+            interceptorMembers(builder, classInterceptors);
             // Micronaut reads the metadata of a produced bean together with the metadata of the factory that
             // produced it, and the member the producer declares is the one that wins. Every member is therefore
             // written out, the empty ones included, so that nothing the factory declares for itself - its own
@@ -249,9 +267,85 @@ final class BeanInterceptionWriter {
             // is named and what it records on itself is read when the chain is built
             builder.member(JakartaInterception.SELF, new AnnotationClassValue<>(producedType.getName()));
             builder.member(JakartaInterception.PRODUCED, true);
-            builder.member(JakartaInterception.BINDINGS, InterceptorBindingValues.written(bindings));
+            builder.member(JakartaInterception.BINDINGS, InterceptorBindingValues.written(classBindings));
+            if (!methods.isEmpty()) {
+                builder.member(JakartaInterception.METHODS, methods.toArray(AnnotationValue[]::new));
+            }
         });
         interceptEachTarget(member, true);
+    }
+
+    /**
+     * The interception of one method of a bean a factory produces, which it declares beyond what its class level
+     * interception gives it, or {@code null} where it declares nothing of the kind.
+     *
+     * <p>It is what {@link #interceptMethod} writes on a method of an intercepted class, with the class level
+     * interception of the bean produced - the one of the produced type with the member's over it - in place of the
+     * one of the class: a binding the method declares replaces a binding of the same type of the member as it does
+     * one of the class, the others are combined, and the interceptor classes the method names come after the ones
+     * of the class and of the member.</p>
+     */
+    private static @Nullable AnnotationValue<ProducedMethodInterception> producedMethod(InterceptorClassModel producedModel,
+                                                                                      MethodElement method,
+                                                                                      List<String> classInterceptors,
+                                                                                      List<BindingValue> classBindings,
+                                                                                      VisitorContext context) {
+        AnnotationValueBuilder<ProducedMethodInterception> builder =
+            AnnotationValue.builder(ProducedMethodInterception.class)
+                .member(ProducedMethodInterception.NAME, method.getName())
+                .member(ProducedMethodInterception.PARAMETERS, Arrays.stream(method.getParameters())
+                    .map(parameter -> typeName(parameter.getType()))
+                    .toArray(String[]::new));
+        if (producedModel.isInterceptorMethod(method) || overridesObjectMethod(method)) {
+            // neither is a business method of the produced bean, as neither is one of an intercepted class
+            return builder.member(JakartaInterception.EXCLUDED, true).build();
+        }
+        if (!isBusinessMethod(method) || !declaresOwnInterception(method)) {
+            return null;
+        }
+        List<String> interceptors = new ArrayList<>();
+        if (!method.hasDeclaredAnnotation(JakartaInterceptors.EXCLUDE_CLASS_INTERCEPTORS)) {
+            interceptors.addAll(classInterceptors);
+        }
+        interceptors.addAll(namedInterceptors(method, context));
+        builder.member(JakartaInterception.INTERCEPTORS, interceptors.stream()
+            .map(name -> new AnnotationClassValue<>(name))
+            .toArray(AnnotationClassValue<?>[]::new));
+        List<BindingValue> methodBindings = InterceptorBindingValues.ofMember(method, classBindings);
+        if (!methodBindings.isEmpty()) {
+            builder.member(JakartaInterception.BINDINGS, InterceptorBindingValues.written(methodBindings));
+        }
+        if (isTimeout(method)) {
+            builder.member(JakartaInterception.TIMEOUT, true);
+        }
+        return builder.build();
+    }
+
+    /**
+     * Whether a method declares something of its own that the interception of its class does not give it: bindings,
+     * interceptor classes, the exclusion of those of its class, or a schedule.
+     */
+    private static boolean declaresOwnInterception(MethodElement method) {
+        return declaresInterception(method)
+            || method.hasDeclaredAnnotation(JakartaInterceptors.EXCLUDE_CLASS_INTERCEPTORS)
+            || isTimeout(method);
+    }
+
+    /**
+     * Whether the scheduler invokes a method, which is recorded through its repeatable container even when a method
+     * declares only one schedule.
+     */
+    private static boolean isTimeout(MethodElement method) {
+        return method.hasDeclaredAnnotation(JakartaInterceptorSupport.SCHEDULED)
+            || method.hasDeclaredAnnotation(JakartaInterceptors.SCHEDULES);
+    }
+
+    /**
+     * The name of a type as {@link Class#getTypeName()} names its erasure: Micronaut names an array by the class of
+     * its components, and keeps how many dimensions it has apart from that name.
+     */
+    private static String typeName(ClassElement type) {
+        return type.getName() + "[]".repeat(type.getArrayDimensions());
     }
 
     /**
@@ -283,13 +377,13 @@ final class BeanInterceptionWriter {
     }
 
     /**
-     * Whether a type declares an interception of its own that makes a bean of it advised: interceptor classes or
-     * bindings on the class, or on one of its methods.
+     * Whether a type a factory produces declares an interception of its own that makes a bean of it advised:
+     * interceptor classes or bindings on the class, or on one of the methods Micronaut advises on such a bean.
      */
-    private static boolean typeDeclaresInterception(ClassElement type) {
+    private static boolean typeDeclaresInterception(ClassElement type, List<MethodElement> advised) {
         return InterceptorClassScanner.ownMetadataOf(type).hasDeclaredAnnotation(JakartaInterceptors.INTERCEPTORS)
             || !InterceptorClassScanner.bindingsOf(type).isEmpty()
-            || InterceptorClassScanner.methodsOf(type).stream().anyMatch(BeanInterceptionWriter::declaresInterception);
+            || advised.stream().anyMatch(BeanInterceptionWriter::declaresInterception);
     }
 
     /**
@@ -378,9 +472,7 @@ final class BeanInterceptionWriter {
             interceptors.addAll(classInterceptors);
         }
         interceptors.addAll(methodInterceptors);
-        // a schedule is recorded through its repeatable container even when a method declares only one
-        boolean timeout = method.hasDeclaredAnnotation(JakartaInterceptorSupport.SCHEDULED)
-            || method.hasDeclaredAnnotation(JakartaInterceptors.SCHEDULES);
+        boolean timeout = isTimeout(method);
         List<BindingValue> methodBindings = InterceptorBindingValues.ofMember(method, classBindings);
         // a binding the method declares replaces the one of the class, so the method carries a declaration of its
         // own as soon as what it is bound by, or the declaration of it, differs from what its class declares

@@ -87,6 +87,11 @@ public @interface JakartaInterception {
     String BINDINGS = "bindings";
 
     /**
+     * The name of {@link #methods()}.
+     */
+    String METHODS = "methods";
+
+    /**
      * The interceptor classes the intercepted element names with {@code jakarta.interceptor.Interceptors}, in the
      * order the specification invokes them in: the ones the class names first, then the ones the member names.
      *
@@ -146,4 +151,15 @@ public @interface JakartaInterception {
      * @return The bindings of the element
      */
     BoundBinding[] bindings() default {};
+
+    /**
+     * The interception of each method of a produced bean that declares something of its own, on the member of the
+     * factory that produces it, see {@link ProducedMethodInterception}.
+     *
+     * <p>A method of the produced bean recorded here is intercepted as recorded, whatever the method itself carries;
+     * one that is not is intercepted as the class level interception of the member says.</p>
+     *
+     * @return The methods, only where {@link #produced()} is {@code true}
+     */
+    ProducedMethodInterception[] methods() default {};
 }

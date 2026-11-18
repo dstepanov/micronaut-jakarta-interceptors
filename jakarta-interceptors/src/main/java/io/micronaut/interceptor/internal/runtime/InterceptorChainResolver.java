@@ -29,13 +29,16 @@ import io.micronaut.inject.BeanDefinition;
 import io.micronaut.inject.ExecutableMethod;
 import io.micronaut.interceptor.metadata.InterceptionKind;
 import io.micronaut.interceptor.internal.metadata.JakartaInterception;
+import io.micronaut.interceptor.internal.metadata.ProducedMethodInterception;
 import jakarta.inject.Singleton;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -150,7 +153,7 @@ public final class InterceptorChainResolver {
     }
 
     private MethodChains readChains(ExecutableMethod<?, ?> method) {
-        AnnotationValue<JakartaInterception> interception = recordedInterception(method.getAnnotationMetadata());
+        AnnotationValue<JakartaInterception> interception = methodInterception(method);
         boolean timeout = interception != null && interception.booleanValue(JakartaInterception.TIMEOUT).orElse(false);
         // selected once for the chain of a business method invocation and for the chain of a timeout
         Collection<BeanDefinition<?>> selected = selected(interception);
@@ -159,6 +162,63 @@ public final class InterceptorChainResolver {
             timeout ? build(InterceptionKind.AROUND_TIMEOUT, interception, selected) : business,
             timeout,
             AbstractInvocationContext.bindingValuesOf(interception));
+    }
+
+    /**
+     * The interception the processor recorded for a method.
+     *
+     * <p>That is what the method carries, read together with its class, except for a method of a bean a factory
+     * produces that declares something of its own: the processor of the factory recorded the interception of each
+     * of those on the member producing the bean, see {@link ProducedMethodInterception}, and that one is read in
+     * place of what the method carries. The method itself belongs to the produced type, and carries what was written
+     * on it when that type was compiled, if anything, which is the interception of the type as a bean of its own.</p>
+     *
+     * <p>The record is looked for only on a method of the produced type: the producer method of a factory carries
+     * the metadata of the member too, where the factory itself is intercepted, and is a method of another class.</p>
+     */
+    private static @Nullable AnnotationValue<JakartaInterception> methodInterception(ExecutableMethod<?, ?> method) {
+        AnnotationValue<JakartaInterception> interception = recordedInterception(method.getAnnotationMetadata());
+        if (interception == null || !interception.booleanValue(JakartaInterception.PRODUCED).orElse(false)) {
+            return interception;
+        }
+        Class<?> produced = interception.classValue(JakartaInterception.SELF).orElse(null);
+        if (produced == null || !method.getDeclaringType().isAssignableFrom(produced)) {
+            return interception;
+        }
+        for (AnnotationValue<ProducedMethodInterception> recorded
+            : interception.getAnnotations(JakartaInterception.METHODS, ProducedMethodInterception.class)) {
+            if (isRecordOf(recorded, method)) {
+                Map<CharSequence, Object> members = new LinkedHashMap<>(recorded.getValues());
+                members.remove(ProducedMethodInterception.NAME);
+                members.remove(ProducedMethodInterception.PARAMETERS);
+                members.put(JakartaInterception.SELF, interception.getValues().get(JakartaInterception.SELF));
+                members.put(JakartaInterception.PRODUCED, true);
+                return AnnotationValue.builder(JakartaInterception.class).members(members).build();
+            }
+        }
+        return interception;
+    }
+
+    /**
+     * Whether the interception of a method of a produced bean is the one of this method, which it is when the two
+     * have the same name and the same parameter types.
+     */
+    private static boolean isRecordOf(AnnotationValue<ProducedMethodInterception> recorded,
+                                      ExecutableMethod<?, ?> method) {
+        if (!recorded.stringValue(ProducedMethodInterception.NAME).orElse("").equals(method.getMethodName())) {
+            return false;
+        }
+        String[] parameters = recorded.stringValues(ProducedMethodInterception.PARAMETERS);
+        Class<?>[] argumentTypes = method.getArgumentTypes();
+        if (parameters.length != argumentTypes.length) {
+            return false;
+        }
+        for (int i = 0; i < parameters.length; i++) {
+            if (!parameters[i].equals(argumentTypes[i].getTypeName())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -213,7 +273,7 @@ public final class InterceptorChainResolver {
             classes.add(interceptor.getBeanType());
         }
         for (ExecutableMethod<?, ?> method : definition.getExecutableMethods()) {
-            AnnotationValue<JakartaInterception> interception = recordedInterception(method.getAnnotationMetadata());
+            AnnotationValue<JakartaInterception> interception = methodInterception(method);
             boolean timeout = interception != null
                 && interception.booleanValue(JakartaInterception.TIMEOUT).orElse(false);
             for (BeanDefinition<?> interceptor : selected(interception)) {

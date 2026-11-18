@@ -423,6 +423,26 @@ public final class InterceptorClassScanner {
     }
 
     /**
+     * Tells whether a method declares itself an interceptor method, from its own declaration alone: an annotation of
+     * an interceptor method and a single {@code InvocationContext} parameter. Nothing else of its class is read, nor
+     * is the method validated, which is what {@link #scan(ClassElement)} does for the class being compiled.
+     *
+     * @param method The method
+     * @return Whether it declares an interceptor method
+     */
+    public static boolean declaresInterceptorMethod(MethodElement method) {
+        if (!acceptsInvocationContext(method)) {
+            return false;
+        }
+        for (String annotation : INTERCEPTOR_METHODS.keySet()) {
+            if (method.hasDeclaredAnnotation(annotation)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Tells whether a method accepts a single {@code InvocationContext}, which is what an interceptor method accepts.
      *
      * @param method The method

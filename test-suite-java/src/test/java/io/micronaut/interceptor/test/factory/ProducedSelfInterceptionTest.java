@@ -175,6 +175,41 @@ class ProducedSelfInterceptionTest {
         }
     }
 
+    /**
+     * Interposes on the construction of another object, which makes it an interceptor class, named by
+     * {@code @Interceptors} somewhere, although it does not declare {@code @Interceptor}.
+     */
+    public static class LifecycleInterposing {
+        public String work() {
+            CALLS.add("work");
+            return "work";
+        }
+
+        @jakarta.annotation.PostConstruct
+        private void constructed(InvocationContext context) throws Exception {
+            CALLS.add("constructed");
+            context.proceed();
+        }
+    }
+
+    @Factory
+    public static class LifecycleInterposingFactory {
+        @Singleton
+        @OfTheMember
+        LifecycleInterposing lifecycleInterposing() {
+            return new LifecycleInterposing();
+        }
+    }
+
+    @Test
+    void aProducedInterceptorClassThatDoesNotSaySoIsNotIntercepted() {
+        // the factory reads @Interceptor from the type alone, not its private interceptor methods; what the type
+        // records of them is what leaves the bean it produces unintercepted
+        assertEquals("work", context.getBean(LifecycleInterposing.class).work());
+
+        assertEquals(List.of("work"), CALLS);
+    }
+
     @Test
     void theProducerMethodOfAnInterceptedFactoryDoesNotRunTheInterceptorMethodOfTheProduct() {
         // the factory interposes on itself, so Micronaut intercepts producing the bean as well, by what the member

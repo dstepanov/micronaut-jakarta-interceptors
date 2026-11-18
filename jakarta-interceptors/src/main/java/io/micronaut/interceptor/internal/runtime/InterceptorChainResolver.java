@@ -29,6 +29,7 @@ import io.micronaut.inject.BeanDefinition;
 import io.micronaut.inject.ExecutableMethod;
 import io.micronaut.interceptor.metadata.InterceptionKind;
 import io.micronaut.interceptor.internal.metadata.JakartaInterception;
+import io.micronaut.interceptor.internal.metadata.JakartaInterceptorSupport;
 import io.micronaut.interceptor.internal.metadata.ProducedMethodInterception;
 import jakarta.inject.Singleton;
 import org.jspecify.annotations.Nullable;
@@ -138,7 +139,7 @@ public final class InterceptorChainResolver {
     private ObjectChains readObjectChains(BeanDefinition<?> definition) {
         List<InterceptorReference> construction = construction(definition.getConstructor().getAnnotationMetadata());
         AnnotationValue<JakartaInterception> classInterception =
-            recordedInterception(definition.getAnnotationMetadata());
+            unlessAnInterceptorClassIsProduced(recordedInterception(definition.getAnnotationMetadata()));
         // the interceptor classes of the class are selected once, for both lifecycle chains and for those created
         // with the object
         Collection<BeanDefinition<?>> classSelected = selected(classInterception);
@@ -177,8 +178,9 @@ public final class InterceptorChainResolver {
      * the metadata of the member too, where the factory itself is intercepted, and is a method of another class, on
      * which the interceptor methods of the produced type are not invoked either.</p>
      */
-    private static @Nullable AnnotationValue<JakartaInterception> methodInterception(ExecutableMethod<?, ?> method) {
-        AnnotationValue<JakartaInterception> interception = recordedInterception(method.getAnnotationMetadata());
+    private @Nullable AnnotationValue<JakartaInterception> methodInterception(ExecutableMethod<?, ?> method) {
+        AnnotationValue<JakartaInterception> interception =
+            unlessAnInterceptorClassIsProduced(recordedInterception(method.getAnnotationMetadata()));
         if (interception == null || !interception.booleanValue(JakartaInterception.PRODUCED).orElse(false)) {
             return interception;
         }
@@ -205,6 +207,31 @@ public final class InterceptorChainResolver {
                 members.put(JakartaInterception.PRODUCED, true);
                 return AnnotationValue.builder(JakartaInterception.class).members(members).build();
             }
+        }
+        return interception;
+    }
+
+    /**
+     * The interception, unless it is the one of a bean a factory produces whose type is an interceptor class.
+     *
+     * <p>The processor of the factory tells an interceptor class from what the produced type declares on itself,
+     * {@code @Interceptor}, and does not read its interceptor methods: they may be private, and the type may be
+     * compiled apart from the factory. A type that interposes on the construction or the lifecycle of another object
+     * is an interceptor class too, whether or not it declares {@code @Interceptor}, and is not intercepted, as it is
+     * not where it is a bean of its own. That is read here, from what the type records on itself.</p>
+     */
+    private @Nullable AnnotationValue<JakartaInterception> unlessAnInterceptorClassIsProduced(
+        @Nullable AnnotationValue<JakartaInterception> interception) {
+        if (interception == null || !interception.booleanValue(JakartaInterception.PRODUCED).orElse(false)) {
+            return interception;
+        }
+        Class<?> produced = interception.classValue(JakartaInterception.SELF).orElse(null);
+        BeanDefinition<?> describing = produced == null ? null : definitions.describing(produced);
+        if (describing != null && (describing.hasAnnotation(JakartaInterceptorSupport.INTERCEPTOR)
+            || !InterceptorMethods.of(describing, InterceptionKind.AROUND_CONSTRUCT).isEmpty()
+            || !InterceptorMethods.of(describing, InterceptionKind.POST_CONSTRUCT).isEmpty()
+            || !InterceptorMethods.of(describing, InterceptionKind.PRE_DESTROY).isEmpty())) {
+            return null;
         }
         return interception;
     }

@@ -215,8 +215,11 @@ final class BeanInterceptionWriter {
                                           VisitorContext context) {
         MethodElement member = producer.element();
         ClassElement producedType = producer.producedType();
-        InterceptorClassModel producedModel = InterceptorClassScanner.scan(producedType);
-        if (InterceptorClassScanner.isInterceptorClass(producedType, producedModel)) {
+        // only what the type declares on itself is read here, not its interceptor methods: those may be private,
+        // and belong to a class this one may be compiled apart from. A type interposing on the construction or the
+        // lifecycle of another object without declaring @Interceptor is an interceptor class all the same, which
+        // the runtime tells from what the type records on itself, and leaves the bean it produces unintercepted
+        if (producedType.hasDeclaredAnnotation(JakartaInterceptorSupport.INTERCEPTOR)) {
             // an interceptor class is not intercepted, as it is not where it is a bean of its own: its bindings
             // are the ones it binds to others, and a proxy of it would be a second bean the interceptor class is
             // looked up by, invoking its own interceptor methods on every call made to it
@@ -245,7 +248,7 @@ final class BeanInterceptionWriter {
         List<AnnotationValue<ProducedMethodInterception>> methods = new ArrayList<>();
         for (MethodElement method : advised) {
             AnnotationValue<ProducedMethodInterception> interception =
-                producedMethod(producedModel, method, classInterceptors, classBindings, context);
+                producedMethod(method, classInterceptors, classBindings, context);
             if (interception != null) {
                 methods.add(interception);
             }
@@ -285,8 +288,7 @@ final class BeanInterceptionWriter {
      * one of the class, the others are combined, and the interceptor classes the method names come after the ones
      * of the class and of the member.</p>
      */
-    private static @Nullable AnnotationValue<ProducedMethodInterception> producedMethod(InterceptorClassModel producedModel,
-                                                                                      MethodElement method,
+    private static @Nullable AnnotationValue<ProducedMethodInterception> producedMethod(MethodElement method,
                                                                                       List<String> classInterceptors,
                                                                                       List<BindingValue> classBindings,
                                                                                       VisitorContext context) {
@@ -296,7 +298,7 @@ final class BeanInterceptionWriter {
                 .member(ProducedMethodInterception.PARAMETERS, Arrays.stream(method.getParameters())
                     .map(parameter -> typeName(parameter.getType()))
                     .toArray(String[]::new));
-        if (producedModel.isInterceptorMethod(method) || overridesObjectMethod(method)) {
+        if (InterceptorClassScanner.declaresInterceptorMethod(method) || overridesObjectMethod(method)) {
             // neither is a business method of the produced bean, as neither is one of an intercepted class
             return builder.member(JakartaInterception.EXCLUDED, true).build();
         }

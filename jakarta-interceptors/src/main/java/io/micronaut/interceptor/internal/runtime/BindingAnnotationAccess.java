@@ -36,7 +36,9 @@ import java.util.Set;
  * <p>It holds nothing: what is built is kept by the invocation context, or by the method that is invoked again and
  * again, as before. An annotation is built only when an interceptor asks for the bindings - by the builder Micronaut
  * generated for it with {@code @RegisterAnnotations} where there is one, by the reflection module otherwise, whose
- * absence {@link ReflectionModule} reports.</p>
+ * absence {@link ReflectionModule} reports. A builder is looked for with {@link AnnotationBuilder#find(Class,
+ * ClassLoader)}, among those of Micronaut, of the class loader of the binding type, and of the application's class
+ * loader.</p>
  *
  * @author Denis Stepanov
  * @since 1.0
@@ -87,15 +89,18 @@ final class BindingAnnotationAccess {
      *
      * @param values         The binding values
      * @param annotationType The binding annotation type
+     * @param classLoader    The class loader of the application
      * @param <T>            The binding annotation type
      * @return The binding, or {@code null} where there is none of that type
      */
-    static <T extends Annotation> @Nullable T first(List<AnnotationValue<?>> values, Class<T> annotationType) {
+    static <T extends Annotation> @Nullable T first(List<AnnotationValue<?>> values,
+                                                    Class<T> annotationType,
+                                                    ClassLoader classLoader) {
         String name = annotationType.getName();
         for (AnnotationValue<?> value : values) {
             if (value.getAnnotationName().equals(name)) {
                 // getInterceptorBinding returns the annotation itself, so one has to be built
-                return instanceOf(annotationType, value, "getInterceptorBinding(Class)");
+                return instanceOf(annotationType, value, "getInterceptorBinding(Class)", classLoader);
             }
         }
         return null;
@@ -106,16 +111,19 @@ final class BindingAnnotationAccess {
      *
      * @param values         The binding values
      * @param annotationType The binding annotation type
+     * @param classLoader    The class loader of the application
      * @param <T>            The binding annotation type
      * @return The bindings of that type
      */
-    static <T extends Annotation> Set<T> all(List<AnnotationValue<?>> values, Class<T> annotationType) {
+    static <T extends Annotation> Set<T> all(List<AnnotationValue<?>> values,
+                                             Class<T> annotationType,
+                                             ClassLoader classLoader) {
         String name = annotationType.getName();
         Set<T> matching = new LinkedHashSet<>(1);
         for (AnnotationValue<?> value : values) {
             if (value.getAnnotationName().equals(name)) {
                 // the bindings are the annotations themselves, so they have to be built
-                matching.add(instanceOf(annotationType, value, "getInterceptorBindings(Class)"));
+                matching.add(instanceOf(annotationType, value, "getInterceptorBindings(Class)", classLoader));
             }
         }
         return Collections.unmodifiableSet(matching);
@@ -124,16 +132,19 @@ final class BindingAnnotationAccess {
     /**
      * Builds every binding annotation from the binding values.
      *
-     * @param metadata The metadata the bindings were read from, which finds the type of a binding by its name
-     * @param values   The binding values, of which there is at least one
+     * @param metadata    The metadata the bindings were read from, which finds the type of a binding by its name
+     * @param values      The binding values, of which there is at least one
+     * @param classLoader The class loader of the application
      * @return The binding annotations
      */
-    static Set<Annotation> build(AnnotationMetadata metadata, List<AnnotationValue<?>> values) {
+    static Set<Annotation> build(AnnotationMetadata metadata,
+                                 List<AnnotationValue<?>> values,
+                                 ClassLoader classLoader) {
         String accessor = "getInterceptorBindings()";
         Set<Annotation> resolved = CollectionUtils.newLinkedHashSet(values.size());
         for (AnnotationValue<?> value : values) {
             bindingType(metadata, value.getAnnotationName(), accessor)
-                .ifPresent(type -> resolved.add(instanceOf(type, value, accessor)));
+                .ifPresent(type -> resolved.add(instanceOf(type, value, accessor, classLoader)));
         }
         return Collections.unmodifiableSet(resolved);
     }
@@ -141,9 +152,10 @@ final class BindingAnnotationAccess {
     /**
      * The type of a binding annotation the element carries, found by its name.
      *
-     * <p>A binding whose builder Micronaut generated with {@code @RegisterAnnotations} is found through the builder,
-     * which knows its type. Any other is a class found by its name, whose instances are left to the reflection
-     * module to build.</p>
+     * <p>A binding whose builder Micronaut generated with {@code @RegisterAnnotations} among its own builders is
+     * found through the builder, which knows its type. Any other is a class found by its name, whose builder is
+     * looked for by its type when its instance is built. A binding whose class is not found is not built, and
+     * without the reflection module its absence is reported rather than the binding left out.</p>
      */
     private static Optional<? extends Class<? extends Annotation>> bindingType(AnnotationMetadata metadata,
                                                                                String name,
@@ -152,27 +164,30 @@ final class BindingAnnotationAccess {
         if (builder.isPresent()) {
             return Optional.of(builder.get().annotationType());
         }
-        // finding the class asks nothing of the reflection module, but building its instance does, so its absence
-        // is reported here, before the type is looked for
-        ReflectionModule.require(accessor);
-        return metadata.getAnnotationType(name);
+        Optional<Class<? extends Annotation>> type = metadata.getAnnotationType(name);
+        if (type.isEmpty()) {
+            ReflectionModule.require(accessor);
+        }
+        return type;
     }
 
     /**
      * Builds an instance of a binding annotation from the value Micronaut recorded for it.
      *
      * <p>A builder Micronaut generated for the annotation with {@code @RegisterAnnotations} builds it without the
-     * reflection module, and without a proxy class. An annotation without one is synthesized by the reflection
-     * module.</p>
+     * reflection module, and without a proxy class, whether it is registered with Micronaut, with the binding type
+     * or with the application's class loader. An annotation without one is synthesized by the reflection module.</p>
      *
-     * @param value A value of the annotation of the given type, which is what it is read as
+     * @param value       A value of the annotation of the given type, which is what it is read as
+     * @param classLoader The class loader of the application
      */
     @SuppressWarnings("unchecked")
     private static <T extends Annotation> T instanceOf(Class<T> annotationType,
                                                        AnnotationValue<?> value,
-                                                       String accessor) {
+                                                       String accessor,
+                                                       ClassLoader classLoader) {
         AnnotationValue<T> typed = (AnnotationValue<T>) value;
-        Optional<AnnotationBuilder<T>> builder = AnnotationBuilder.find(annotationType);
+        Optional<AnnotationBuilder<T>> builder = AnnotationBuilder.find(annotationType, classLoader);
         if (builder.isPresent()) {
             return builder.get().build(typed);
         }

@@ -78,7 +78,7 @@ final class BusinessMethodInvocationContext extends AbstractInvocationContext
     Set<Annotation> elementBindings() {
         return context.getExecutableMethod()
             .getCachedUnevaluatedValue(BindingAnnotations.class,
-                method -> new BindingAnnotations(bindingsOf(compiledMetadataOf(method), methodBindings)))
+                method -> new BindingAnnotations(bindingsOf(compiledMetadataOf(method), methodBindings, classLoader())))
             .annotations();
     }
 

@@ -147,6 +147,78 @@ class ProducedSelfInterceptionTest {
         }
     }
 
+    public static class SelfInterceptingProduct {
+        public String work() {
+            CALLS.add("work");
+            return "work";
+        }
+
+        @AroundInvoke
+        Object self(InvocationContext context) throws Exception {
+            CALLS.add("product self");
+            return context.proceed();
+        }
+    }
+
+    @Factory
+    public static class SelfInterceptingProductFactory {
+        @Singleton
+        @OfTheMember
+        SelfInterceptingProduct product() {
+            return new SelfInterceptingProduct();
+        }
+
+        @AroundInvoke
+        Object self(InvocationContext context) throws Exception {
+            CALLS.add("factory self");
+            return context.proceed();
+        }
+    }
+
+    /**
+     * Interposes on the construction of another object, which makes it an interceptor class, named by
+     * {@code @Interceptors} somewhere, although it does not declare {@code @Interceptor}.
+     */
+    public static class LifecycleInterposing {
+        public String work() {
+            CALLS.add("work");
+            return "work";
+        }
+
+        @jakarta.annotation.PostConstruct
+        private void constructed(InvocationContext context) throws Exception {
+            CALLS.add("constructed");
+            context.proceed();
+        }
+    }
+
+    @Factory
+    public static class LifecycleInterposingFactory {
+        @Singleton
+        @OfTheMember
+        LifecycleInterposing lifecycleInterposing() {
+            return new LifecycleInterposing();
+        }
+    }
+
+    @Test
+    void aProducedInterceptorClassThatDoesNotSaySoIsNotIntercepted() {
+        // the factory reads @Interceptor from the type alone, not its private interceptor methods; what the type
+        // records of them is what leaves the bean it produces unintercepted
+        assertEquals("work", context.getBean(LifecycleInterposing.class).work());
+
+        assertEquals(List.of("work"), CALLS);
+    }
+
+    @Test
+    void theProducerMethodOfAnInterceptedFactoryDoesNotRunTheInterceptorMethodOfTheProduct() {
+        // the factory interposes on itself, so Micronaut intercepts producing the bean as well, by what the member
+        // binds; the interceptor method of the product is a method of the product, and the target is the factory
+        context.getBean(SelfInterceptingProduct.class).work();
+
+        assertEquals(List.of("member binding", "member binding", "product self", "work"), CALLS);
+    }
+
     @Test
     void theClassInterceptsItselfWhereTheFactoryDeclaresNothing() {
         context.getBean(BoundSelfIntercepting.class, Qualifiers.byName("asTheClassDeclares")).work();

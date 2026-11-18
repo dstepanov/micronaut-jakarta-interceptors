@@ -143,7 +143,7 @@ final class BindingAnnotationAccess {
         String accessor = "getInterceptorBindings()";
         Set<Annotation> resolved = CollectionUtils.newLinkedHashSet(values.size());
         for (AnnotationValue<?> value : values) {
-            bindingType(metadata, value.getAnnotationName(), accessor)
+            bindingType(metadata, value.getAnnotationName(), classLoader, accessor)
                 .ifPresent(type -> resolved.add(instanceOf(type, value, accessor, classLoader)));
         }
         return Collections.unmodifiableSet(resolved);
@@ -156,15 +156,28 @@ final class BindingAnnotationAccess {
      * found through the builder, which knows its type. Any other is a class found by its name, whose builder is
      * looked for by its type when its instance is built. A binding whose class is not found is not built, and
      * without the reflection module its absence is reported rather than the binding left out.</p>
+     *
+     * <p>The class is looked for in the class loader of the application, as its builder is: Micronaut keeps the
+     * first type registered under a name, and otherwise asks the class loader of the thread, and either may be
+     * another application's copy of the type where two are loaded beneath one Micronaut. Its builder is not looked
+     * for by name in that class loader as well: that reads the builders the class loader registers again on every
+     * call, to answer the class found here, whose builder {@link #instanceOf} looks for in the same class loader.</p>
+     *
+     * @param metadata    The metadata the bindings were read from
+     * @param name        The name of the binding annotation
+     * @param classLoader The class loader of the application
+     * @param accessor    The accessor the binding is built for, named where the reflection module is missing
+     * @return The type, empty where it is not found
      */
-    private static Optional<? extends Class<? extends Annotation>> bindingType(AnnotationMetadata metadata,
-                                                                               String name,
-                                                                               String accessor) {
+    static Optional<? extends Class<? extends Annotation>> bindingType(AnnotationMetadata metadata,
+                                                                       String name,
+                                                                       ClassLoader classLoader,
+                                                                       String accessor) {
         Optional<AnnotationBuilder<?>> builder = AnnotationBuilder.find(name);
         if (builder.isPresent()) {
             return Optional.of(builder.get().annotationType());
         }
-        Optional<Class<? extends Annotation>> type = metadata.getAnnotationType(name);
+        Optional<Class<? extends Annotation>> type = metadata.getAnnotationType(name, classLoader);
         if (type.isEmpty()) {
             ReflectionModule.require(accessor);
         }

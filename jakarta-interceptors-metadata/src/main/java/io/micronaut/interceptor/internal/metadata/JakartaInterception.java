@@ -87,6 +87,11 @@ public @interface JakartaInterception {
     String BINDINGS = "bindings";
 
     /**
+     * The name of {@link #methods()}.
+     */
+    String METHODS = "methods";
+
+    /**
      * The interceptor classes the intercepted element names with {@code jakarta.interceptor.Interceptors}, in the
      * order the specification invokes them in: the ones the class names first, then the ones the member names.
      *
@@ -107,10 +112,12 @@ public @interface JakartaInterception {
      * Tells that the element is the member of a factory that produces the intercepted bean, and that {@link #self()}
      * names the type it produces whether or not that type declares interceptor methods on itself.
      *
-     * <p>The processor of the factory does not read the methods of the produced type, which belong to another class
-     * and may be private: what that type declares on itself is read when the chain is built, from what the processor
-     * recorded on the type itself. A produced type that records nothing - one without a definition of its own, or
-     * whose definition records no interceptor method - interposes on nothing itself.</p>
+     * <p>The processor of the factory does not read the interceptor methods of the produced type, which belong to
+     * another class and may be private; it reads only what the public methods Micronaut advises declare, for
+     * {@link #methods()}. The interceptor methods the type declares on itself are read when the chain is built, from
+     * what the processor recorded on the type itself. A produced type that records nothing - one without a
+     * definition of its own, or whose definition records no interceptor method - interposes on nothing itself, and
+     * one whose record makes it an interceptor class is not intercepted at all.</p>
      *
      * @return Whether {@link #self()} is the produced type, to be read at runtime
      */
@@ -146,4 +153,15 @@ public @interface JakartaInterception {
      * @return The bindings of the element
      */
     BoundBinding[] bindings() default {};
+
+    /**
+     * The interception of each method of a produced bean that declares something of its own, on the member of the
+     * factory that produces it, see {@link ProducedMethodInterception}.
+     *
+     * <p>A method of the produced bean recorded here is intercepted as recorded, whatever the method itself carries;
+     * one that is not is intercepted as the class level interception of the member says.</p>
+     *
+     * @return The methods, only where {@link #produced()} is {@code true}
+     */
+    ProducedMethodInterception[] methods() default {};
 }

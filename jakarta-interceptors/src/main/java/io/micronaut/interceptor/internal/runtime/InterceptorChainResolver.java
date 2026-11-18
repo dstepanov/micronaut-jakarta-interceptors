@@ -29,13 +29,18 @@ import io.micronaut.inject.BeanDefinition;
 import io.micronaut.inject.ExecutableMethod;
 import io.micronaut.interceptor.metadata.InterceptionKind;
 import io.micronaut.interceptor.internal.metadata.JakartaInterception;
+import io.micronaut.interceptor.internal.metadata.JakartaInterceptorSupport;
+import io.micronaut.interceptor.internal.metadata.ProducedMethodInterception;
 import jakarta.inject.Singleton;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -135,14 +140,14 @@ public final class InterceptorChainResolver {
     private ObjectChains readObjectChains(BeanDefinition<?> definition) {
         List<InterceptorReference> construction = construction(definition.getConstructor().getAnnotationMetadata());
         AnnotationValue<JakartaInterception> classInterception =
-            recordedInterception(definition.getAnnotationMetadata());
+            unlessAnInterceptorClassIsProduced(recordedInterception(definition.getAnnotationMetadata()));
         // the interceptor classes of the class are selected once, for both lifecycle chains and for those created
         // with the object
         Collection<BeanDefinition<?>> classSelected = selected(classInterception);
         return new ObjectChains(construction,
             build(InterceptionKind.POST_CONSTRUCT, classInterception, classSelected),
             build(InterceptionKind.PRE_DESTROY, classInterception, classSelected),
-            interceptorClasses(definition, construction, classSelected));
+            interceptorClasses(definition, construction, classInterception, classSelected));
     }
 
     private List<InterceptorReference> construction(AnnotationMetadata constructorMetadata) {
@@ -150,7 +155,7 @@ public final class InterceptorChainResolver {
     }
 
     private MethodChains readChains(ExecutableMethod<?, ?> method) {
-        AnnotationValue<JakartaInterception> interception = recordedInterception(method.getAnnotationMetadata());
+        AnnotationValue<JakartaInterception> interception = methodInterception(method);
         boolean timeout = interception != null && interception.booleanValue(JakartaInterception.TIMEOUT).orElse(false);
         // selected once for the chain of a business method invocation and for the chain of a timeout
         Collection<BeanDefinition<?>> selected = selected(interception);
@@ -159,6 +164,99 @@ public final class InterceptorChainResolver {
             timeout ? build(InterceptionKind.AROUND_TIMEOUT, interception, selected) : business,
             timeout,
             AbstractInvocationContext.bindingValuesOf(interception));
+    }
+
+    /**
+     * The interception the processor recorded for a method.
+     *
+     * <p>That is what the method carries, read together with its class, except for a method of a bean a factory
+     * produces that declares something of its own: the processor of the factory recorded the interception of each
+     * of those on the member producing the bean, see {@link ProducedMethodInterception}, and that one is read in
+     * place of what the method carries. The method itself belongs to the produced type, and carries what was written
+     * on it when that type was compiled, if anything, which is the interception of the type as a bean of its own.</p>
+     *
+     * <p>The record is looked for only on a method of the produced type: the producer method of a factory carries
+     * the metadata of the member too, where the factory itself is intercepted, and is a method of another class, on
+     * which the interceptor methods of the produced type are not invoked either.</p>
+     */
+    private @Nullable AnnotationValue<JakartaInterception> methodInterception(ExecutableMethod<?, ?> method) {
+        AnnotationValue<JakartaInterception> interception =
+            unlessAnInterceptorClassIsProduced(recordedInterception(method.getAnnotationMetadata()));
+        if (interception == null || !interception.booleanValue(JakartaInterception.PRODUCED).orElse(false)) {
+            return interception;
+        }
+        Class<?> produced = interception.classValue(JakartaInterception.SELF).orElse(null);
+        if (produced == null) {
+            return interception;
+        }
+        if (!method.getDeclaringType().isAssignableFrom(produced)) {
+            // the producer method of a factory that is intercepted in its own right: it is intercepted by what the
+            // member binds, but the interceptor methods the produced type declares on itself are methods of that
+            // type, and the target of this invocation is the factory
+            Map<CharSequence, Object> members = new LinkedHashMap<>(interception.getValues());
+            members.remove(JakartaInterception.SELF);
+            members.remove(JakartaInterception.METHODS);
+            return AnnotationValue.builder(JakartaInterception.class).members(members).build();
+        }
+        for (AnnotationValue<ProducedMethodInterception> recorded
+            : interception.getAnnotations(JakartaInterception.METHODS, ProducedMethodInterception.class)) {
+            if (isRecordOf(recorded, method)) {
+                Map<CharSequence, Object> members = new LinkedHashMap<>(recorded.getValues());
+                members.remove(ProducedMethodInterception.NAME);
+                members.remove(ProducedMethodInterception.PARAMETERS);
+                members.put(JakartaInterception.SELF, interception.getValues().get(JakartaInterception.SELF));
+                members.put(JakartaInterception.PRODUCED, true);
+                return AnnotationValue.builder(JakartaInterception.class).members(members).build();
+            }
+        }
+        return interception;
+    }
+
+    /**
+     * The interception, unless it is the one of a bean a factory produces whose type is an interceptor class.
+     *
+     * <p>The processor of the factory tells an interceptor class from what the produced type declares on itself,
+     * {@code @Interceptor}, and does not read its interceptor methods: they may be private, and the type may be
+     * compiled apart from the factory. A type that interposes on the construction or the lifecycle of another object
+     * is an interceptor class too, whether or not it declares {@code @Interceptor}, and is not intercepted, as it is
+     * not where it is a bean of its own. That is read here, from what the type records on itself.</p>
+     */
+    private @Nullable AnnotationValue<JakartaInterception> unlessAnInterceptorClassIsProduced(
+        @Nullable AnnotationValue<JakartaInterception> interception) {
+        if (interception == null || !interception.booleanValue(JakartaInterception.PRODUCED).orElse(false)) {
+            return interception;
+        }
+        Class<?> produced = interception.classValue(JakartaInterception.SELF).orElse(null);
+        BeanDefinition<?> describing = produced == null ? null : definitions.describing(produced);
+        if (describing != null && (describing.hasAnnotation(JakartaInterceptorSupport.INTERCEPTOR)
+            || !InterceptorMethods.of(describing, InterceptionKind.AROUND_CONSTRUCT).isEmpty()
+            || !InterceptorMethods.of(describing, InterceptionKind.POST_CONSTRUCT).isEmpty()
+            || !InterceptorMethods.of(describing, InterceptionKind.PRE_DESTROY).isEmpty())) {
+            return null;
+        }
+        return interception;
+    }
+
+    /**
+     * Whether the interception of a method of a produced bean is the one of this method, which it is when the two
+     * have the same name and the same parameter types.
+     */
+    private static boolean isRecordOf(AnnotationValue<ProducedMethodInterception> recorded,
+                                      ExecutableMethod<?, ?> method) {
+        if (!recorded.stringValue(ProducedMethodInterception.NAME).orElse("").equals(method.getMethodName())) {
+            return false;
+        }
+        String[] parameters = recorded.stringValues(ProducedMethodInterception.PARAMETERS);
+        Class<?>[] argumentTypes = method.getArgumentTypes();
+        if (parameters.length != argumentTypes.length) {
+            return false;
+        }
+        for (int i = 0; i < parameters.length; i++) {
+            if (!parameters[i].equals(argumentTypes[i].getTypeName())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -206,6 +304,7 @@ public final class InterceptorChainResolver {
 
     private List<Class<?>> interceptorClasses(BeanDefinition<?> definition,
                                               List<InterceptorReference> construction,
+                                              @Nullable AnnotationValue<JakartaInterception> classInterception,
                                               Collection<BeanDefinition<?>> classSelected) {
         Set<Class<?>> classes = new LinkedHashSet<>();
         addInterceptorClasses(construction, classes);
@@ -213,10 +312,15 @@ public final class InterceptorChainResolver {
             classes.add(interceptor.getBeanType());
         }
         for (ExecutableMethod<?, ?> method : definition.getExecutableMethods()) {
-            AnnotationValue<JakartaInterception> interception = recordedInterception(method.getAnnotationMetadata());
+            AnnotationValue<JakartaInterception> interception = methodInterception(method);
             boolean timeout = interception != null
                 && interception.booleanValue(JakartaInterception.TIMEOUT).orElse(false);
-            for (BeanDefinition<?> interceptor : selected(interception)) {
+            // a method that records nothing of its own reads the interception of its class, whose interceptor classes
+            // are selected already
+            Collection<BeanDefinition<?>> selected = Objects.equals(interception, classInterception)
+                ? classSelected
+                : selected(interception);
+            for (BeanDefinition<?> interceptor : selected) {
                 // the classes the chains of the method run: its business chain, of the @AroundInvoke methods, and
                 // the chain of a timeout, of the @AroundTimeout methods or, without any, the @AroundInvoke ones
                 if (!InterceptorMethods.of(interceptor, InterceptionKind.AROUND_INVOKE).isEmpty()

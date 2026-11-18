@@ -47,6 +47,25 @@ dependencies {
     testImplementation sourceSets.external.output
 }
 
+// Classes compiled with the Jakarta Interceptors processor, but apart from the tests, as a library the application
+// depends on would be. A factory of the tests produces beans of them, and what the processor wrote on them while
+// compiling them is not in their class files, which the tests read them from
+sourceSets {
+    library {
+        java.srcDir 'src/library/java'
+    }
+}
+
+dependencies {
+    libraryAnnotationProcessor platform(libs.micronaut.core)
+    libraryAnnotationProcessor projects.micronautJakartaInterceptorsProcessor
+    libraryAnnotationProcessor mn.micronaut.inject.java
+    libraryImplementation platform(libs.micronaut.core)
+    libraryImplementation projects.micronautJakartaInterceptors
+
+    testImplementation sourceSets.library.output
+}
+
 // A visitor that rewrites the @Order of the classes of the tests asking for it into their priority negated, after
 // Micronaut mapped the one onto the other, as Micronaut CDI does for a selected alternative. It is compiled on its own
 // so that it can be on the annotation processor path of the tests

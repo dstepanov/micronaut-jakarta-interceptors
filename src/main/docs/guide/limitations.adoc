@@ -98,11 +98,17 @@ same class is then as ambiguous with it as with any other bean declared twice, u
 
 A method of a `@Factory` class that declares another bean is not a business method of the factory but the
 declaration of that bean, so what it binds, and the interceptor classes it names, belong to the bean it produces and
-are combined with whatever the produced type declares on itself. The interceptor methods the produced type declares
-on itself are read when its chains are resolved, from what the processor recorded on that type, rather than from
-its methods while the factory is compiled: they may be private, and the type may be compiled on its own. A produced
-type that records none - one compiled without this processor among them - interposes on nothing itself. A static
-factory method produces a bean the same
+are combined with whatever the produced type declares on itself, at class level and on each of its public methods,
+as the bindings of a method are combined with those of its class. The processor of the factory reads those
+declarations from the type, which holds them whether it is compiled with the factory or apart from it, and writes
+the whole interception of the bean on the member; the type may be a bean of its own besides, intercepted as it
+declares. It does not read the interceptor methods the produced type declares on itself: they may be private, and
+belong to a type that may be compiled on its own. They are read when the chains are resolved, from what the processor
+recorded on that type, and a produced type that records none - one compiled without this processor among them -
+interposes on nothing itself. For the same reason the factory tells an interceptor class it produces, which is not
+intercepted, by `@Interceptor` on the type: a type that interposes on the construction or the lifecycle of another
+object without declaring `@Interceptor` is recognised from what it records, and the bean produced from it is left
+unintercepted rather than reported. A static factory method produces a bean the same
 way and binds it the same way. The factory is a bean of its own besides, and is intercepted in its own right when it
 carries a binding or declares an `@AroundInvoke` method: an interceptor method the factory declares on itself
 interposes on the business methods of the factory and is never invoked on the object it produced, which is another
@@ -193,6 +199,16 @@ builder Micronaut generates for a binding annotation with `@RegisterAnnotations`
 type, then of the class loader of the bean context, so that the builders of an application loaded by a class loader
 beneath the one of Micronaut - by a container, or a launcher of development mode or of tests - are found as well. A
 binding without a builder is built by the reflection module.
+
+`InvocationContext.getConstructor()` answers the constructor through Micronaut's `BeanConstructor`, which looks it
+up with Micronaut's own reflection utilities rather than through the reflection module: the module has no counterpart
+for a constructor of the one it has for a method, `ReflectionExecutables.targetMethod`. It is the one reflective
+accessor not gated on the module, and moves behind it once the module offers one.
+
+Where the builder of a binding annotation is registered only with the class loader of the bean context, and the
+binding type sits in a class loader above it, `AnnotationBuilder.find(Class, ClassLoader)` reads the builders that
+class loader registers again on every call, and the module keeps no builder of its own. Micronaut is to keep that
+result per type and class loader.
 
 A method keeps its chains - for a business method invocation and for the scheduler - and the bindings its
 invocations report, through Micronaut's experimental

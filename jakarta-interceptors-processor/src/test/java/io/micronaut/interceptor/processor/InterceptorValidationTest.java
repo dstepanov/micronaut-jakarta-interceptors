@@ -87,6 +87,35 @@ class InterceptorValidationTest {
         }
         """;
 
+    /**
+     * The specification has an interceptor method declared by an interceptor class, a target class or one of their
+     * superclasses, which an interface is not, and an interceptor class implementing one declaring a default
+     * interceptor method would otherwise be left out of every chain without a word.
+     */
+    @Test
+    void anInterceptorMethodDeclaredByAnInterfaceIsReported() {
+        String error = compile("""
+            interface Auditing {
+                @AroundInvoke
+                default Object audit(InvocationContext context) throws Exception {
+                    return context.proceed();
+                }
+            }
+
+            @InterceptorBinding
+            @Retention(RetentionPolicy.RUNTIME)
+            @Target({ElementType.TYPE, ElementType.METHOD})
+            @interface Audited {
+            }
+
+            @Interceptor
+            @Audited
+            public class Subject implements Auditing {
+            }
+            """);
+        assertTrue(error.contains("declared by the interface"), error);
+    }
+
     @Test
     void aBindingOnAFactoryMemberProducingAnInterceptorClassIsReported() {
         String error = compile(PRODUCED_INTERCEPTOR + """

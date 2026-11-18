@@ -35,6 +35,7 @@ import org.jspecify.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -114,13 +115,16 @@ final class InterceptorDefinitions {
             return List.of();
         }
         // a class a factory produces as well is indexed by the definition of the factory too, which carries what the
-        // processor recorded on the class; both are described by the one definition, and the class is bound once
+        // processor recorded on the class; both describe the one class, which is bound once, through the first
         Set<BeanDefinition<?>> matching = new LinkedHashSet<>();
+        Set<Class<?>> boundClasses = new HashSet<>();
         for (BeanDefinition<JakartaInterceptorIndex> bound : beanContext.getBeanDefinitions(JakartaInterceptorIndex.class)) {
-            if (!bindingsOfElement.binds(bound)) {
+            if (!bindingsOfElement.binds(bound) || !boundClasses.add(classOf(bound))) {
                 continue;
             }
-            BeanDefinition<?> definition = describing(bound.getBeanType());
+            // the definition indexed is the one describing the class in all but the case of a factory producing it,
+            // and the context is asked for the definitions of the class only then
+            BeanDefinition<?> definition = describesItself(bound) ? bound : describing(bound.getBeanType());
             // a class that declares an interceptor method without declaring itself an interceptor class is one
             // only where it is named directly, and takes no part in what a binding annotation binds
             if (definition != null && definition.hasAnnotation(JakartaInterceptorSupport.INTERCEPTOR)
@@ -213,6 +217,17 @@ final class InterceptorDefinitions {
     }
 
     /**
+     * Whether a definition is the one {@link #describing(Class)} answers for its own bean type: it records the
+     * interceptor methods of that class and has an executable method for each of them.
+     */
+    private static boolean describesItself(BeanDefinition<?> definition) {
+        AnnotationValue<JakartaInterceptorMethods> recorded = definition.getAnnotation(JakartaInterceptorMethods.class);
+        return recorded != null
+            && isRecordOf(recorded, definition.getBeanType())
+            && InterceptorMethods.hasEveryMethod(definition);
+    }
+
+    /**
      * The definition that describes an interceptor class the element names, which has to be there.
      *
      * <p>An interceptor class the processor never saw has no recorded interceptor methods, and so nothing the
@@ -253,6 +268,20 @@ final class InterceptorDefinitions {
         return bean.getBeanType() == type
             || bean instanceof AdvisedBeanType<?> advised && advised.getInterceptedType() == type
             || bean instanceof ProxyBeanDefinition<?> proxy && proxy.getTargetType() == type;
+    }
+
+    /**
+     * The class a bean is of, which is the class Micronaut proxies for a bean it proxies, see
+     * {@link #isOfClass(BeanType, Class)}.
+     */
+    private static Class<?> classOf(BeanType<?> bean) {
+        if (bean instanceof AdvisedBeanType<?> advised) {
+            return advised.getInterceptedType();
+        }
+        if (bean instanceof ProxyBeanDefinition<?> proxy) {
+            return proxy.getTargetType();
+        }
+        return bean.getBeanType();
     }
 
     /**

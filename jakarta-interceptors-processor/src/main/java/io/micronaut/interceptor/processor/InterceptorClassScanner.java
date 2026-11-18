@@ -92,6 +92,14 @@ public final class InterceptorClassScanner {
                 if (!method.hasDeclaredAnnotation(entry.getKey())) {
                     continue;
                 }
+                if (method.getDeclaringType().isInterface()) {
+                    // the specification, in the javadoc of @AroundInvoke for one, has an interceptor method declared
+                    // by an interceptor class, a target class or one of their superclasses: an interface is none
+                    throw new ProcessingException(method, "The @" + simpleName(entry.getKey()) + " method ["
+                        + method.getName() + "] of [" + element.getName() + "] is declared by the interface ["
+                        + method.getDeclaringType().getName() + "]. An interceptor method is declared by an "
+                        + "interceptor class, a target class or one of their superclasses, not by an interface");
+                }
                 if (!acceptsInvocationContext(method)) {
                     if (!isOwnLifecycleCallback(method, entry.getValue())) {
                         malformed.put(method, entry.getKey());
@@ -366,8 +374,9 @@ public final class InterceptorClassScanner {
      * taken off it once it has been recorded, and the metadata of a method is the same metadata wherever it is read
      * from, so a class already visited in this compilation reads as declaring nothing. What it declared is recorded
      * on it as {@code @JakartaInterceptorMethods} before that happens, which is what is read here: the descriptor
-     * of the class and of its superclasses, whether it was written while they were visited or while they were
-     * compiled before.</p>
+     * of the class and of its superclasses written while they were visited in this compilation. A class compiled
+     * before carries no annotation a visitor added, and has its source annotations instead, which the scan of the
+     * class answers from first.</p>
      *
      * <p>A recorded method counts only while the class still has it. An interceptor method overridden by a method
      * that is not one is no longer a method of the class - that is what the descriptor of its superclass records
@@ -412,6 +421,26 @@ public final class InterceptorClassScanner {
             .anyMatch(method -> method.getName().equals(name)
                 && acceptsInvocationContext(method)
                 && method.getDeclaringType().getName().equals(declaringType));
+    }
+
+    /**
+     * Tells whether a method declares itself an interceptor method, from its own declaration alone: an annotation of
+     * an interceptor method and a single {@code InvocationContext} parameter. Nothing else of its class is read, nor
+     * is the method validated, which is what {@link #scan(ClassElement)} does for the class being compiled.
+     *
+     * @param method The method
+     * @return Whether it declares an interceptor method
+     */
+    public static boolean declaresInterceptorMethod(MethodElement method) {
+        if (!acceptsInvocationContext(method)) {
+            return false;
+        }
+        for (String annotation : INTERCEPTOR_METHODS.keySet()) {
+            if (method.hasDeclaredAnnotation(annotation)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

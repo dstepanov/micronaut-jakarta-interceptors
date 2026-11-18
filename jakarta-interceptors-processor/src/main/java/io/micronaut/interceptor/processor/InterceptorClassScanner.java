@@ -92,6 +92,14 @@ public final class InterceptorClassScanner {
                 if (!method.hasDeclaredAnnotation(entry.getKey())) {
                     continue;
                 }
+                if (method.getDeclaringType().isInterface()) {
+                    // the specification, in the javadoc of @AroundInvoke for one, has an interceptor method declared
+                    // by an interceptor class, a target class or one of their superclasses: an interface is none
+                    throw new ProcessingException(method, "The @" + simpleName(entry.getKey()) + " method ["
+                        + method.getName() + "] of [" + element.getName() + "] is declared by the interface ["
+                        + method.getDeclaringType().getName() + "]. An interceptor method is declared by an "
+                        + "interceptor class, a target class or one of their superclasses, not by an interface");
+                }
                 if (!acceptsInvocationContext(method)) {
                     if (!isOwnLifecycleCallback(method, entry.getValue())) {
                         malformed.put(method, entry.getKey());

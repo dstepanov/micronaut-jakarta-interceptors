@@ -217,13 +217,13 @@ class InterceptorBindingValuesTest {
     }
 
     /**
-     * An empty string with no default recorded for it reads as the member left out, which is what a Java annotation
-     * defaulting to {@code ""} records.
+     * An empty string with no default recorded for it binds as the member left out, which is what a Java annotation
+     * defaulting to {@code ""} records: Micronaut compares and hashes the two alike.
      */
     @Test
     void anEmptyStringWithoutADefaultIsTheMemberLeftOut() {
         assertEquals(binding(Map.of()), binding(Map.of("value", "")));
-        assertFalse(binding(Map.of("value", "")).toAnnotationValue().contains("value"));
+        assertEquals(binding(Map.of()).hashCode(), binding(Map.of("value", "")).hashCode());
     }
 
     /**

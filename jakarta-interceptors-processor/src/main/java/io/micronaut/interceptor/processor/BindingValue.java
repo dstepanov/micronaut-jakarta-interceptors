@@ -99,9 +99,8 @@ public final class BindingValue {
      * the occurrence supplied a value for it, and on an annotation a member of another holds as well, and those are
      * the ones read.</p>
      *
-     * <p>An empty string the value carries no default for is left out of what is recorded, which reads the same
-     * whether it was declared or not. An empty string where a default was recorded is recorded, and differs from the
-     * default the other side has filled in.</p>
+     * <p>An empty string is recorded as declared: Micronaut compares and hashes an empty string the value carries no
+     * default for as the member left out, and one where a default was recorded as differing from that default.</p>
      *
      * @param annotation The binding annotation, as declared on an element
      * @return The binding
@@ -111,16 +110,11 @@ public final class BindingValue {
         // the keys are read as strings so that two bindings compare by the names of their members, which a
         // CharSequence does not promise to do
         Map<String, Object> members = new LinkedHashMap<>();
-        Set<String> defaulted = new TreeSet<>();
         Map<CharSequence, Object> defaults = annotation.getDefaultValues();
         if (defaults != null) {
-            defaults.forEach((member, value) -> {
-                members.put(member.toString(), value);
-                defaulted.add(member.toString());
-            });
+            defaults.forEach((member, value) -> members.put(member.toString(), value));
         }
         annotation.getValues().forEach((member, value) -> members.put(member.toString(), value));
-        members.entrySet().removeIf(entry -> !defaulted.contains(entry.getKey()) && isEmptyString(entry.getValue()));
         Set<String> nonBinding = new TreeSet<>(Arrays.asList(annotation.stringValues(AnnotationUtil.NON_BINDING_ATTRIBUTE)));
         // Micronaut lists the member it records them under among them, which is no member of the annotation; kept,
         // it would set a binding read from the metadata apart from the same binding as recorded
@@ -251,13 +245,6 @@ public final class BindingValue {
         Map<CharSequence, Object> copies = CollectionUtils.newLinkedHashMap(values.size());
         values.forEach((member, value) -> copies.put(member, copyOf(value)));
         return AnnotationValue.builder(annotation.getAnnotationName()).members(copies).build();
-    }
-
-    /**
-     * Tells whether a member value is the empty string, which the processor leaves out where no default is recorded.
-     */
-    private static boolean isEmptyString(@Nullable Object value) {
-        return value instanceof String string && string.isEmpty();
     }
 
     /**

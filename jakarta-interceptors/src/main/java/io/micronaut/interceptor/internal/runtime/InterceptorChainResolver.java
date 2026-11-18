@@ -40,6 +40,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -146,7 +147,7 @@ public final class InterceptorChainResolver {
         return new ObjectChains(construction,
             build(InterceptionKind.POST_CONSTRUCT, classInterception, classSelected),
             build(InterceptionKind.PRE_DESTROY, classInterception, classSelected),
-            interceptorClasses(definition, construction, classSelected));
+            interceptorClasses(definition, construction, classInterception, classSelected));
     }
 
     private List<InterceptorReference> construction(AnnotationMetadata constructorMetadata) {
@@ -303,6 +304,7 @@ public final class InterceptorChainResolver {
 
     private List<Class<?>> interceptorClasses(BeanDefinition<?> definition,
                                               List<InterceptorReference> construction,
+                                              @Nullable AnnotationValue<JakartaInterception> classInterception,
                                               Collection<BeanDefinition<?>> classSelected) {
         Set<Class<?>> classes = new LinkedHashSet<>();
         addInterceptorClasses(construction, classes);
@@ -313,7 +315,12 @@ public final class InterceptorChainResolver {
             AnnotationValue<JakartaInterception> interception = methodInterception(method);
             boolean timeout = interception != null
                 && interception.booleanValue(JakartaInterception.TIMEOUT).orElse(false);
-            for (BeanDefinition<?> interceptor : selected(interception)) {
+            // a method that records nothing of its own reads the interception of its class, whose interceptor classes
+            // are selected already
+            Collection<BeanDefinition<?>> selected = Objects.equals(interception, classInterception)
+                ? classSelected
+                : selected(interception);
+            for (BeanDefinition<?> interceptor : selected) {
                 // the classes the chains of the method run: its business chain, of the @AroundInvoke methods, and
                 // the chain of a timeout, of the @AroundTimeout methods or, without any, the @AroundInvoke ones
                 if (!InterceptorMethods.of(interceptor, InterceptionKind.AROUND_INVOKE).isEmpty()

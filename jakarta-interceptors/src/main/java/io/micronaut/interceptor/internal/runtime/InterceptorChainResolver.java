@@ -174,7 +174,8 @@ public final class InterceptorChainResolver {
      * on it when that type was compiled, if anything, which is the interception of the type as a bean of its own.</p>
      *
      * <p>The record is looked for only on a method of the produced type: the producer method of a factory carries
-     * the metadata of the member too, where the factory itself is intercepted, and is a method of another class.</p>
+     * the metadata of the member too, where the factory itself is intercepted, and is a method of another class, on
+     * which the interceptor methods of the produced type are not invoked either.</p>
      */
     private static @Nullable AnnotationValue<JakartaInterception> methodInterception(ExecutableMethod<?, ?> method) {
         AnnotationValue<JakartaInterception> interception = recordedInterception(method.getAnnotationMetadata());
@@ -182,8 +183,17 @@ public final class InterceptorChainResolver {
             return interception;
         }
         Class<?> produced = interception.classValue(JakartaInterception.SELF).orElse(null);
-        if (produced == null || !method.getDeclaringType().isAssignableFrom(produced)) {
+        if (produced == null) {
             return interception;
+        }
+        if (!method.getDeclaringType().isAssignableFrom(produced)) {
+            // the producer method of a factory that is intercepted in its own right: it is intercepted by what the
+            // member binds, but the interceptor methods the produced type declares on itself are methods of that
+            // type, and the target of this invocation is the factory
+            Map<CharSequence, Object> members = new LinkedHashMap<>(interception.getValues());
+            members.remove(JakartaInterception.SELF);
+            members.remove(JakartaInterception.METHODS);
+            return AnnotationValue.builder(JakartaInterception.class).members(members).build();
         }
         for (AnnotationValue<ProducedMethodInterception> recorded
             : interception.getAnnotations(JakartaInterception.METHODS, ProducedMethodInterception.class)) {

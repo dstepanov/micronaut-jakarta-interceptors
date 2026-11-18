@@ -147,6 +147,43 @@ class ProducedSelfInterceptionTest {
         }
     }
 
+    public static class SelfInterceptingProduct {
+        public String work() {
+            CALLS.add("work");
+            return "work";
+        }
+
+        @AroundInvoke
+        Object self(InvocationContext context) throws Exception {
+            CALLS.add("product self");
+            return context.proceed();
+        }
+    }
+
+    @Factory
+    public static class SelfInterceptingProductFactory {
+        @Singleton
+        @OfTheMember
+        SelfInterceptingProduct product() {
+            return new SelfInterceptingProduct();
+        }
+
+        @AroundInvoke
+        Object self(InvocationContext context) throws Exception {
+            CALLS.add("factory self");
+            return context.proceed();
+        }
+    }
+
+    @Test
+    void theProducerMethodOfAnInterceptedFactoryDoesNotRunTheInterceptorMethodOfTheProduct() {
+        // the factory interposes on itself, so Micronaut intercepts producing the bean as well, by what the member
+        // binds; the interceptor method of the product is a method of the product, and the target is the factory
+        context.getBean(SelfInterceptingProduct.class).work();
+
+        assertEquals(List.of("member binding", "member binding", "product self", "work"), CALLS);
+    }
+
     @Test
     void theClassInterceptsItselfWhereTheFactoryDeclaresNothing() {
         context.getBean(BoundSelfIntercepting.class, Qualifiers.byName("asTheClassDeclares")).work();

@@ -99,6 +99,37 @@ class ProducedMethodInterceptionTest {
         }
     }
 
+    @InterceptorBinding
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target({ElementType.TYPE, ElementType.METHOD})
+    @interface OfAMethodAlone {
+    }
+
+    @Interceptor
+    @OfAMethodAlone
+    public static class MethodAloneInterceptor {
+        public MethodAloneInterceptor() {
+            CALLS.add("method alone interceptor created");
+        }
+
+        @AroundInvoke
+        public Object around(InvocationContext context) throws Exception {
+            CALLS.add("method alone");
+            return context.proceed();
+        }
+    }
+
+    /**
+     * Bound by one of its methods alone: neither the class nor the member producing it declares anything.
+     */
+    public static class MethodBoundProduct {
+        @OfAMethodAlone
+        public String run() {
+            CALLS.add("run");
+            return "run";
+        }
+    }
+
     public static class NamedByTheMember {
         @AroundInvoke
         public Object around(InvocationContext context) throws Exception {
@@ -197,6 +228,11 @@ class ProducedMethodInterceptionTest {
         Box<Book> box() {
             return new Box<>();
         }
+
+        @Singleton
+        MethodBoundProduct methodBound() {
+            return new MethodBoundProduct();
+        }
     }
 
     @Test
@@ -248,5 +284,20 @@ class ProducedMethodInterceptionTest {
         context.getBean(Box.class).put(new Book("Dune"));
 
         assertEquals(List.of("member binding", "method binding", "put"), CALLS);
+    }
+
+    /**
+     * Section 2.3: the instances of the interceptor classes associated with a method are created with the object,
+     * not when the method is first invoked.
+     */
+    @Test
+    void anInterceptorClassBoundByAMethodAloneIsCreatedWithTheObject() {
+        MethodBoundProduct product = context.getBean(MethodBoundProduct.class);
+
+        assertEquals(List.of("method alone interceptor created"), CALLS);
+
+        product.run();
+
+        assertEquals(List.of("method alone interceptor created", "method alone", "run"), CALLS);
     }
 }

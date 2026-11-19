@@ -108,7 +108,11 @@ recorded on that type, and a produced type that records none - one compiled with
 interposes on nothing itself. For the same reason the factory tells an interceptor class it produces, which is not
 intercepted, by `@Interceptor` on the type: a type that interposes on the construction or the lifecycle of another
 object without declaring `@Interceptor` is recognised from what it records, and the bean produced from it is left
-unintercepted rather than reported. A static factory method produces a bean the same
+unintercepted rather than reported. The interceptor methods of the produced type interpose only on a bean that is
+intercepted anyway: the bean is proxied when the member or the produced type declares a binding or `@Interceptors`,
+at class level or on one of the public methods of the type, and not for an interceptor method alone. A class that
+declares an `@AroundInvoke` method and nothing else intercepts itself where it is a bean of its own, but not where a
+factory method declaring nothing produces it. A static factory method produces a bean the same
 way and binds it the same way. The factory is a bean of its own besides, and is intercepted in its own right when it
 carries a binding or declares an `@AroundInvoke` method: an interceptor method the factory declares on itself
 interposes on the business methods of the factory and is never invoked on the object it produced, which is another

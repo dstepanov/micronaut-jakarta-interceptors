@@ -78,6 +78,22 @@ class ProducedSelfInterceptionTest {
     @interface OfTheMember {
     }
 
+    @InterceptorBinding
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target({ElementType.TYPE, ElementType.METHOD})
+    @interface OfTheConstruction {
+    }
+
+    @Interceptor
+    @OfTheConstruction
+    public static class ConstructionInterceptor {
+        @jakarta.interceptor.AroundConstruct
+        public Object around(InvocationContext context) throws Exception {
+            CALLS.add("around construct");
+            return context.proceed();
+        }
+    }
+
     @Interceptor
     @OfTheClass
     public static class ClassBindingInterceptor {
@@ -196,6 +212,7 @@ class ProducedSelfInterceptionTest {
     public static class LifecycleInterposingFactory {
         @Singleton
         @OfTheMember
+        @OfTheConstruction
         LifecycleInterposing lifecycleInterposing() {
             return new LifecycleInterposing();
         }
@@ -204,7 +221,7 @@ class ProducedSelfInterceptionTest {
     @Test
     void aProducedInterceptorClassThatDoesNotSaySoIsNotIntercepted() {
         // the factory reads @Interceptor from the type alone, not its private interceptor methods; what the type
-        // records of them is what leaves the bean it produces unintercepted
+        // records of them is what leaves the bean it produces unintercepted, its construction included
         assertEquals("work", context.getBean(LifecycleInterposing.class).work());
 
         assertEquals(List.of("work"), CALLS);

@@ -135,6 +135,47 @@ class ProducedMethodInterceptionTest {
         }
     }
 
+    public record Book(String title) {
+    }
+
+    /**
+     * A generic type whose methods Micronaut compiles with the parameter types of the produced type that extends it:
+     * {@code save(Book)} of a {@code BookRepository}, where this class declares {@code save(Object)}.
+     */
+    public static class Repository<T> {
+        @OfTheMethod
+        @Interceptors(NamedByTheMethod.class)
+        public T save(T item) {
+            CALLS.add("save");
+            return item;
+        }
+
+        public T find(T item) {
+            CALLS.add("find");
+            return item;
+        }
+
+        @ExcludeClassInterceptors
+        public T delete(T item) {
+            CALLS.add("delete");
+            return item;
+        }
+    }
+
+    public static class BookRepository extends Repository<Book> {
+    }
+
+    /**
+     * A generic type produced with a type argument, whose methods Micronaut compiles as this class declares them.
+     */
+    public static class Box<T> {
+        @OfTheMethod
+        public T put(T item) {
+            CALLS.add("put");
+            return item;
+        }
+    }
+
     @Factory
     public static class ProductFactory {
         @Singleton
@@ -142,6 +183,19 @@ class ProducedMethodInterceptionTest {
         @Interceptors(NamedByTheMember.class)
         Product product() {
             return new Product();
+        }
+
+        @Singleton
+        @OfTheMember
+        @Interceptors(NamedByTheMember.class)
+        BookRepository books() {
+            return new BookRepository();
+        }
+
+        @Singleton
+        @OfTheMember
+        Box<Book> box() {
+            return new Box<>();
         }
     }
 
@@ -165,5 +219,34 @@ class ProducedMethodInterceptionTest {
         context.getBean(Product.class).excluding();
 
         assertEquals(List.of("member binding", "excluding"), CALLS);
+    }
+
+    @Test
+    void aMethodOfAGenericSuperclassKeepsItsBindingAndInterceptorClasses() {
+        context.getBean(BookRepository.class).save(new Book("Dune"));
+
+        assertEquals(List.of("named by the member", "named by the method", "member binding", "method binding",
+            "save"), CALLS);
+    }
+
+    @Test
+    void aMethodOfAGenericSuperclassDeclaringNothingIsInterceptedByWhatTheMemberDeclares() {
+        context.getBean(BookRepository.class).find(new Book("Dune"));
+
+        assertEquals(List.of("named by the member", "member binding", "find"), CALLS);
+    }
+
+    @Test
+    void aMethodOfAGenericSuperclassExcludingTheClassInterceptorsExcludesTheOnesTheMemberNames() {
+        context.getBean(BookRepository.class).delete(new Book("Dune"));
+
+        assertEquals(List.of("member binding", "delete"), CALLS);
+    }
+
+    @Test
+    void aMethodOfAGenericTypeProducedWithATypeArgumentKeepsItsBinding() {
+        context.getBean(Box.class).put(new Book("Dune"));
+
+        assertEquals(List.of("member binding", "method binding", "put"), CALLS);
     }
 }

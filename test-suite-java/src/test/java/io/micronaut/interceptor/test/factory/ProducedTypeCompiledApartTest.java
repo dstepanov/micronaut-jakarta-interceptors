@@ -17,6 +17,8 @@ package io.micronaut.interceptor.test.factory;
 
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.context.annotation.Factory;
+import io.micronaut.core.annotation.ReflectionConfig;
+import io.micronaut.core.annotation.TypeHint;
 import io.micronaut.inject.qualifiers.Qualifiers;
 import io.micronaut.interceptor.test.library.BoundLibraryService;
 import io.micronaut.interceptor.test.library.LibraryBinding;
@@ -39,8 +41,11 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A bean a factory produces is intercepted by what its type declares although the type was compiled apart from the
@@ -110,7 +115,10 @@ class ProducedTypeCompiledApartTest {
         BoundLibraryService boundByTheMember() {
             return new BoundLibraryService();
         }
+    }
 
+    @Factory
+    public static class MethodBoundLibraryFactory {
         @Singleton
         MethodBoundLibraryService methodBound() {
             return new MethodBoundLibraryService();
@@ -148,5 +156,29 @@ class ProducedTypeCompiledApartTest {
         service.unbound(CALLS);
 
         assertEquals(List.of("library binding", "bound", "unbound"), CALLS);
+    }
+
+    /**
+     * The library was compiled without the reflection module, so it declares nothing for a native image to build its
+     * binding as an instance; the factory, which records that binding for the bean it produces, declares it.
+     */
+    @Test
+    void theFactoryPermitsBuildingTheBindingsOfTheProducedType() {
+        Set<String> classLevel = permittedProxies(LibraryFactory.class);
+        Set<String> methodLevel = permittedProxies(MethodBoundLibraryFactory.class);
+
+        assertTrue(classLevel.contains(LibraryBinding.class.getName()), classLevel::toString);
+        assertTrue(classLevel.contains(OfTheMember.class.getName()), classLevel::toString);
+        assertEquals(Set.of(LibraryBinding.class.getName()), methodLevel);
+    }
+
+    private static Set<String> permittedProxies(Class<?> factory) {
+        return context.getBeanDefinition(factory)
+            .getAnnotationValuesByType(ReflectionConfig.class)
+            .stream()
+            .filter(config -> config.enumValue("accessType", TypeHint.AccessType.class).orElse(null)
+                == TypeHint.AccessType.DYNAMIC_PROXY)
+            .map(config -> config.stringValue("type").orElse(null))
+            .collect(Collectors.toSet());
     }
 }

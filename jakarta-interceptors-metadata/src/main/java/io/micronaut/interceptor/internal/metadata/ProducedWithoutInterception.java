@@ -24,8 +24,8 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Marks a member of an intercepted factory whose product nothing binds: the construction and the lifecycle callbacks
- * of the bean it produces are not intercepted.
+ * Marks a member - a method or a field - of an intercepted factory whose product nothing binds: the construction and
+ * the lifecycle callbacks of the bean it produces are not intercepted.
  *
  * <p>Micronaut reads the metadata of a bean a factory produces, and of its construction, together with the metadata
  * of the factory class, so the {@link JakartaInterception} a factory declares for itself would otherwise reach the
@@ -40,7 +40,7 @@ import java.lang.annotation.Target;
  */
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.METHOD)
+@Target({ElementType.METHOD, ElementType.FIELD})
 @Internal
 public @interface ProducedWithoutInterception {
 }

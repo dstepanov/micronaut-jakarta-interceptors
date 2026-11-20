@@ -28,6 +28,7 @@ import io.micronaut.core.annotation.Internal;
 import io.micronaut.inject.ast.ClassElement;
 import io.micronaut.inject.ast.Element;
 import io.micronaut.inject.ast.ElementQuery;
+import io.micronaut.inject.ast.FieldElement;
 import io.micronaut.inject.ast.MemberElement;
 import io.micronaut.inject.ast.MethodElement;
 import io.micronaut.inject.ast.ParameterElement;
@@ -112,6 +113,16 @@ final class BeanInterceptionWriter {
         for (Producer producer : producers) {
             interceptProduced(producer, classDeclares, context);
         }
+        if (factory && classDeclares) {
+            // a field produces a bean that nothing can bind - a field is no business method, and the bindings of
+            // what it produces are not read - so the interception the factory declares for itself is all that would
+            // reach the product
+            for (FieldElement field : element.getEnclosedElements(ElementQuery.ALL_FIELDS)) {
+                if (declaresAnotherBean(field)) {
+                    shadowFactoryInterception(field);
+                }
+            }
+        }
         if (reflective) {
             // before the class is found to intercept nothing itself: the member of a factory may be the one place a
             // binding is declared
@@ -189,7 +200,7 @@ final class BeanInterceptionWriter {
      * Tells whether a method of a factory declares a bean of the type it returns, which Micronaut reads from a bean
      * annotation or a scope the method declares.
      */
-    private static boolean declaresAnotherBean(MethodElement method) {
+    private static boolean declaresAnotherBean(MemberElement method) {
         AnnotationMetadata own = InterceptorClassScanner.ownMetadataOf(method);
         return own.hasDeclaredStereotype(Bean.class.getName())
             || own.hasDeclaredStereotype(AnnotationUtil.SCOPE);
@@ -297,7 +308,7 @@ final class BeanInterceptionWriter {
      * the interception the factory declares for itself does not reach the bean it produces, see
      * {@link ProducedWithoutInterception}.
      */
-    private static void shadowFactoryInterception(MethodElement member) {
+    private static void shadowFactoryInterception(MemberElement member) {
         member.annotate(ProducedWithoutInterception.class);
     }
 

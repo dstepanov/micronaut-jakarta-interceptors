@@ -40,6 +40,12 @@ public class Watcher {
         if (target instanceof Assembly) {
             return "Assembly";
         }
+        if (target instanceof GearAssembly) {
+            return "GearAssembly";
+        }
+        if (target instanceof Gear) {
+            return "Gear";
+        }
         return target instanceof Part ? "Part" : String.valueOf(target);
     }
 }

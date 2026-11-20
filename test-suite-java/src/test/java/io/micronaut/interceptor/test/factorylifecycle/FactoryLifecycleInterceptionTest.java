@@ -25,4 +25,14 @@ class FactoryLifecycleInterceptionTest {
             Watcher.EVENTS.stream().filter(event -> event.endsWith(" Assembly")).toList(),
             "events: " + Watcher.EVENTS);
     }
+
+    @Test
+    void theLifecycleInterceptorsOfAFactoryDoNotRunOnTheProductOfAField() {
+        Watcher.EVENTS.clear();
+        try (ApplicationContext context = ApplicationContext.run()) {
+            assertEquals("gear", context.getBean(Gear.class).name());
+        }
+        assertEquals(List.of(), Watcher.EVENTS.stream().filter(event -> event.endsWith(" Gear")).toList(),
+            "events: " + Watcher.EVENTS);
+    }
 }

@@ -151,7 +151,10 @@ public final class InterceptorChainResolver {
     }
 
     private List<InterceptorReference> construction(AnnotationMetadata constructorMetadata) {
-        return build(InterceptionKind.AROUND_CONSTRUCT, recordedInterception(constructorMetadata));
+        // the "constructor" of a bean a factory produces is the member producing it, which carries the interception
+        // the member records: a produced type found to be an interceptor class has its construction left alone too
+        return build(InterceptionKind.AROUND_CONSTRUCT,
+            unlessAnInterceptorClassIsProduced(recordedInterception(constructorMetadata)));
     }
 
     private MethodChains readChains(ExecutableMethod<?, ?> method) {

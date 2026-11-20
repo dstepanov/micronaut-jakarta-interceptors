@@ -83,6 +83,10 @@ final class BindingReflectionHints {
      * well, built the same way, so the annotation types its members return are permitted too, and theirs in turn.
      * The members are those the type declares rather than those a binding carries: a nonbinding member is left out
      * of the binding, and the value it returns may be its default.</p>
+     *
+     * <p>The bindings a factory member records for the bean it produces - its own, those of the produced type and
+     * those of the public methods of that type - are permitted on the factory, which is the one class compiled with
+     * what it takes to declare them.</p>
      */
     static void permitBindingSynthesis(ClassElement element,
                                        @Nullable MethodElement constructor,
@@ -106,6 +110,19 @@ final class BindingReflectionHints {
         for (BeanInterceptionWriter.Producer producer : producers) {
             for (AnnotationValue<?> binding : InterceptorClassScanner.bindingsOf(producer.element())) {
                 bindings.add(binding.getAnnotationName());
+            }
+            // the member records the bindings of the produced type and of its advised methods as well, and the type
+            // may have been compiled without this processor or without the reflection module, declaring nothing
+            ClassElement producedType = producer.producedType();
+            for (AnnotationValue<?> binding : InterceptorClassScanner.bindingsOf(producedType)) {
+                bindings.add(binding.getAnnotationName());
+            }
+            for (MethodElement method : InterceptorClassScanner.methodsOf(producedType)) {
+                if (method.isPublic() && !method.isFinal()) {
+                    for (AnnotationValue<?> binding : InterceptorClassScanner.bindingsOf(method)) {
+                        bindings.add(binding.getAnnotationName());
+                    }
+                }
             }
         }
         List<String> pending = new ArrayList<>(bindings);

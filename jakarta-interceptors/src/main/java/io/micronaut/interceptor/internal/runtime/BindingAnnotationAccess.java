@@ -152,16 +152,15 @@ final class BindingAnnotationAccess {
     /**
      * The type of a binding annotation the element carries, found by its name.
      *
-     * <p>A binding whose builder Micronaut generated with {@code @RegisterAnnotations} among its own builders is
-     * found through the builder, which knows its type. Any other is a class found by its name, whose builder is
-     * looked for by its type when its instance is built. A binding whose class is not found is not built, and
-     * without the reflection module its absence is reported rather than the binding left out.</p>
+     * <p>The class is looked for in the class loader of the application first, as its builder is by
+     * {@link #instanceOf}: Micronaut's own builders, and the class loader of the thread, may answer another copy of
+     * the type where two are loaded beneath one Micronaut, as a child-first class loader over a parent that holds
+     * the same classes does. Only a class the class loader does not find - one a native image keeps no metadata
+     * of - is taken from the builder Micronaut generated for it with {@code @RegisterAnnotations}. That builder is
+     * not used when the class is found, so it never answers a type other than the one found.</p>
      *
-     * <p>The class is looked for in the class loader of the application, as its builder is: Micronaut keeps the
-     * first type registered under a name, and otherwise asks the class loader of the thread, and either may be
-     * another application's copy of the type where two are loaded beneath one Micronaut. Its builder is not looked
-     * for by name in that class loader as well: that reads the builders the class loader registers again on every
-     * call, to answer the class found here, whose builder {@link #instanceOf} looks for in the same class loader.</p>
+     * <p>A binding found neither way is not built. Without the reflection module that is reported; with it, the
+     * binding is left out of the bindings returned, as a class that is not there cannot be instantiated.</p>
      *
      * @param metadata    The metadata the bindings were read from
      * @param name        The name of the binding annotation
@@ -173,15 +172,16 @@ final class BindingAnnotationAccess {
                                                                        String name,
                                                                        ClassLoader classLoader,
                                                                        String accessor) {
+        Optional<Class<? extends Annotation>> type = metadata.getAnnotationType(name, classLoader);
+        if (type.isPresent()) {
+            return type;
+        }
         Optional<AnnotationBuilder<?>> builder = AnnotationBuilder.find(name);
         if (builder.isPresent()) {
             return Optional.of(builder.get().annotationType());
         }
-        Optional<Class<? extends Annotation>> type = metadata.getAnnotationType(name, classLoader);
-        if (type.isEmpty()) {
-            ReflectionModule.require(accessor);
-        }
-        return type;
+        ReflectionModule.require(accessor);
+        return Optional.empty();
     }
 
     /**

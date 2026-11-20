@@ -265,7 +265,8 @@ final class BeanInterceptionWriter {
             // bindings, or the interceptor method it declares on itself, which would be invoked on the produced
             // object rather than on the factory - reaches the bean it produces. The interceptor methods the
             // produced class declares on itself are another matter: they are the ones of the object intercepted,
-            // which interpose on its business methods as they do where the class is a bean of its own. Whether it
+            // which interpose on its business methods once a binding or @Interceptors has the bean intercepted: an
+            // interceptor method alone does not, although it does where the class is a bean of its own. Whether it
             // declares any is a question of its methods, which are not this class's to read, so the produced type
             // is named and what it records on itself is read when the chain is built
             builder.member(JakartaInterception.SELF, new AnnotationClassValue<>(producedType.getName()));

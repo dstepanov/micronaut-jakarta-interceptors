@@ -15,6 +15,7 @@
  */
 package io.micronaut.interceptor.internal.runtime;
 
+import io.micronaut.core.annotation.AnnotationBuilder;
 import io.micronaut.inject.annotation.MutableAnnotationMetadata;
 import org.junit.jupiter.api.Test;
 
@@ -37,6 +38,13 @@ class BindingAnnotationAccessTest {
     @interface Deployed {
     }
 
+    /**
+     * A binding with a builder registered with Micronaut, see {@link RegisteredBuilders}.
+     */
+    @Retention(RetentionPolicy.RUNTIME)
+    @interface Registered {
+    }
+
     @Test
     void theTypeOfABindingIsFoundInTheClassLoaderOfTheApplication() throws Exception {
         String name = Deployed.class.getName();
@@ -48,6 +56,60 @@ class BindingAnnotationAccessTest {
             new MutableAnnotationMetadata(), name, deployment, "getInterceptorBindings()").orElseThrow();
 
         assertSame(deployed, type);
+    }
+
+    /**
+     * A builder Micronaut has for a binding of the same name builds the type of Micronaut's class loader, which is
+     * not the application's.
+     */
+    @Test
+    void theTypeOfABindingIsFoundInTheClassLoaderOfTheApplicationBeforeTheBuildersOfMicronaut() throws Exception {
+        String name = Registered.class.getName();
+        assertSame(Registered.class, AnnotationBuilder.find(name).orElseThrow().annotationType());
+        ClassLoader deployment = new ChildFirst(name, BindingAnnotationAccessTest.class.getClassLoader());
+        Class<?> deployed = deployment.loadClass(name);
+        assertNotSame(Registered.class, deployed);
+
+        Class<? extends Annotation> type = BindingAnnotationAccess.bindingType(
+            new MutableAnnotationMetadata(), name, deployment, "getInterceptorBindings()").orElseThrow();
+
+        assertSame(deployed, type);
+    }
+
+    /**
+     * A type the class loader of the application does not find, as a class a native image keeps no metadata of, is
+     * still the one of the builder Micronaut has for it.
+     */
+    @Test
+    void theTypeOfABindingTheClassLoaderDoesNotFindIsTheOneOfTheBuilderOfMicronaut() {
+        String name = Registered.class.getName();
+        ClassLoader hiding = new Hiding(name, BindingAnnotationAccessTest.class.getClassLoader());
+
+        Class<? extends Annotation> type = BindingAnnotationAccess.bindingType(
+            new MutableAnnotationMetadata(), name, hiding, "getInterceptorBindings()").orElseThrow();
+
+        assertSame(Registered.class, type);
+    }
+
+    /**
+     * Finds every class but one.
+     */
+    private static final class Hiding extends ClassLoader {
+
+        private final String hidden;
+
+        Hiding(String hidden, ClassLoader parent) {
+            super(parent);
+            this.hidden = hidden;
+        }
+
+        @Override
+        protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+            if (name.equals(hidden)) {
+                throw new ClassNotFoundException(name);
+            }
+            return super.loadClass(name, resolve);
+        }
     }
 
     /**

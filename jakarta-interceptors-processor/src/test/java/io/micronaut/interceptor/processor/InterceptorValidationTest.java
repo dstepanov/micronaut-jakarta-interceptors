@@ -116,6 +116,60 @@ class InterceptorValidationTest {
         assertTrue(error.contains("declared by the interface"), error);
     }
 
+    private static final String STARTABLE = """
+        interface Startable {
+            @PostConstruct
+            default void start() {
+            }
+
+            @PreDestroy
+            default void stop() {
+            }
+        }
+
+        @InterceptorBinding
+        @Retention(RetentionPolicy.RUNTIME)
+        @Target({ElementType.TYPE, ElementType.METHOD})
+        @interface Audited {
+        }
+        """;
+
+    /**
+     * A lifecycle callback without an {@code InvocationContext} is the class's own callback, not an interceptor
+     * method, so an interface may declare it for the classes implementing it.
+     */
+    @Test
+    void anOwnLifecycleCallbackDeclaredByAnInterfaceIsAccepted() {
+        compileSuccessfully(STARTABLE + """
+            @Singleton
+            @Audited
+            public class Subject implements Startable {
+            }
+            """);
+    }
+
+    /**
+     * The same holds for a class named by {@code @Interceptors}, which is read while the class naming it compiles.
+     */
+    @Test
+    void anOwnLifecycleCallbackDeclaredByAnInterfaceOfANamedInterceptorIsAccepted() {
+        compileSuccessfully(STARTABLE + """
+            class AuditingInterceptor implements Startable {
+                @AroundInvoke
+                Object audit(InvocationContext context) throws Exception {
+                    return context.proceed();
+                }
+            }
+
+            @Singleton
+            @jakarta.interceptor.Interceptors(AuditingInterceptor.class)
+            public class Subject {
+                public void work() {
+                }
+            }
+            """);
+    }
+
     @Test
     void aBindingOnAFactoryMemberProducingAnInterceptorClassIsReported() {
         String error = compile(PRODUCED_INTERCEPTOR + """

@@ -28,6 +28,7 @@ import io.micronaut.core.annotation.Internal;
 import io.micronaut.inject.ast.ClassElement;
 import io.micronaut.inject.ast.Element;
 import io.micronaut.inject.ast.ElementQuery;
+import io.micronaut.inject.ast.FieldElement;
 import io.micronaut.inject.ast.MemberElement;
 import io.micronaut.inject.ast.MethodElement;
 import io.micronaut.inject.ast.ParameterElement;
@@ -37,6 +38,7 @@ import io.micronaut.interceptor.processor.BindingValue;
 import io.micronaut.interceptor.internal.metadata.JakartaInterception;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorSupport;
 import io.micronaut.interceptor.internal.metadata.ProducedMethodInterception;
+import io.micronaut.interceptor.internal.metadata.ProducedWithoutInterception;
 import io.micronaut.interceptor.metadata.InterceptionKind;
 import io.micronaut.interceptor.processor.BindingConflicts;
 import io.micronaut.interceptor.processor.InterceptorBindingValues;
@@ -109,7 +111,17 @@ final class BeanInterceptionWriter {
             rejectFinalMethods(element, methods);
         }
         for (Producer producer : producers) {
-            interceptProduced(producer, context);
+            interceptProduced(producer, classDeclares, context);
+        }
+        if (factory && classDeclares) {
+            // a field produces a bean that nothing can bind - a field is no business method, and the bindings of
+            // what it produces are not read - so the interception the factory declares for itself is all that would
+            // reach the product
+            for (FieldElement field : element.getEnclosedElements(ElementQuery.ALL_FIELDS)) {
+                if (declaresAnotherBean(field)) {
+                    shadowFactoryInterception(field);
+                }
+            }
         }
         if (reflective) {
             // before the class is found to intercept nothing itself: the member of a factory may be the one place a
@@ -188,7 +200,7 @@ final class BeanInterceptionWriter {
      * Tells whether a method of a factory declares a bean of the type it returns, which Micronaut reads from a bean
      * annotation or a scope the method declares.
      */
-    private static boolean declaresAnotherBean(MethodElement method) {
+    private static boolean declaresAnotherBean(MemberElement method) {
         AnnotationMetadata own = InterceptorClassScanner.ownMetadataOf(method);
         return own.hasDeclaredStereotype(Bean.class.getName())
             || own.hasDeclaredStereotype(AnnotationUtil.SCOPE);
@@ -210,8 +222,14 @@ final class BeanInterceptionWriter {
      * method of the produced type that declares something of its own, see {@link ProducedMethodInterception}: what
      * the processor writes on the type and its methods while compiling the type is the interception of the type as
      * a bean of its own, it is not in a type compiled before, and the factory's output does not depend on it.</p>
+     *
+     * <p>Where the factory declares interception for itself and nothing binds the produced bean, the member is marked
+     * as producing an unintercepted bean, because the produced bean would otherwise read the factory's interception:
+     * its class level bindings would run their lifecycle callback interceptors on the produced object, which is no
+     * instance of the factory (CDI 4.1 sections 7.2 and 9).</p>
      */
     private static void interceptProduced(Producer producer,
+                                          boolean factoryIntercepted,
                                           VisitorContext context) {
         MethodElement member = producer.element();
         ClassElement producedType = producer.producedType();
@@ -232,6 +250,9 @@ final class BeanInterceptionWriter {
                     + "intercepted, so they would bind nothing. Remove them from the member; the bindings the "
                     + "interceptor class declares on itself are the ones it binds to other beans");
             }
+            if (factoryIntercepted) {
+                shadowFactoryInterception(member);
+            }
             return;
         }
         // the methods Micronaut advises on a bean a factory produces: the public instance methods of the type
@@ -239,6 +260,9 @@ final class BeanInterceptionWriter {
             .filter(method -> method.isPublic() && !method.isFinal())
             .toList();
         if (!declaresInterception(member) && !typeDeclaresInterception(producedType, advised)) {
+            if (factoryIntercepted) {
+                shadowFactoryInterception(member);
+            }
             return;
         }
         List<String> classInterceptors = new ArrayList<>(namedInterceptors(producedType, context));
@@ -277,6 +301,15 @@ final class BeanInterceptionWriter {
             }
         });
         interceptEachTarget(member, true);
+    }
+
+    /**
+     * Marks a member of an intercepted factory whose product neither the member nor the produced type binds, so that
+     * the interception the factory declares for itself does not reach the bean it produces, see
+     * {@link ProducedWithoutInterception}.
+     */
+    private static void shadowFactoryInterception(MemberElement member) {
+        member.annotate(ProducedWithoutInterception.class);
     }
 
     /**

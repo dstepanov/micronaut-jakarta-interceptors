@@ -31,6 +31,7 @@ import io.micronaut.interceptor.metadata.InterceptionKind;
 import io.micronaut.interceptor.internal.metadata.JakartaInterception;
 import io.micronaut.interceptor.internal.metadata.JakartaInterceptorSupport;
 import io.micronaut.interceptor.internal.metadata.ProducedMethodInterception;
+import io.micronaut.interceptor.internal.metadata.ProducedWithoutInterception;
 import jakarta.inject.Singleton;
 import org.jspecify.annotations.Nullable;
 
@@ -125,7 +126,7 @@ public final class InterceptorChainResolver {
         InterceptionKind interceptionKind = kind == InterceptorKind.POST_CONSTRUCT
             ? InterceptionKind.POST_CONSTRUCT
             : InterceptionKind.PRE_DESTROY;
-        return build(interceptionKind, recordedInterception(context.getExecutableMethod().getAnnotationMetadata()));
+        return build(interceptionKind, objectInterception(context.getExecutableMethod().getAnnotationMetadata()));
     }
 
     private ObjectChains objectChains(BeanDefinition<?> definition) {
@@ -140,7 +141,7 @@ public final class InterceptorChainResolver {
     private ObjectChains readObjectChains(BeanDefinition<?> definition) {
         List<InterceptorReference> construction = construction(definition.getConstructor().getAnnotationMetadata());
         AnnotationValue<JakartaInterception> classInterception =
-            unlessAnInterceptorClassIsProduced(recordedInterception(definition.getAnnotationMetadata()));
+            unlessAnInterceptorClassIsProduced(objectInterception(definition.getAnnotationMetadata()));
         // the interceptor classes of the class are selected once, for both lifecycle chains and for those created
         // with the object
         Collection<BeanDefinition<?>> classSelected = selected(classInterception);
@@ -154,7 +155,19 @@ public final class InterceptorChainResolver {
         // the "constructor" of a bean a factory produces is the member producing it, which carries the interception
         // the member records: a produced type found to be an interceptor class has its construction left alone too
         return build(InterceptionKind.AROUND_CONSTRUCT,
-            unlessAnInterceptorClassIsProduced(recordedInterception(constructorMetadata)));
+            unlessAnInterceptorClassIsProduced(objectInterception(constructorMetadata)));
+    }
+
+    /**
+     * The interception recorded for the construction or the lifecycle of an object, which is none for a bean an
+     * intercepted factory produces where nothing binds it: what Micronaut reads together with the metadata of such a
+     * bean is the interception the factory declares for itself, see {@link ProducedWithoutInterception}.
+     */
+    private static @Nullable AnnotationValue<JakartaInterception> objectInterception(AnnotationMetadata metadata) {
+        if (metadata.hasAnnotation(ProducedWithoutInterception.class)) {
+            return null;
+        }
+        return recordedInterception(metadata);
     }
 
     private MethodChains readChains(ExecutableMethod<?, ?> method) {
